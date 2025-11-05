@@ -35,5 +35,5 @@ urlpatterns = [
     path('firstapp/token', TokenObtainPairView.as_view(), name='get_token'),
     path('firstapp/token/refresh', TokenRefreshView.as_view(), name='refresh'),
     path('firstapp-auth/', include('rest_framework.urls')),
-    path('firstapp/', include('firstapp.urls')),
+    # path('firstapp/', include('firstapp.urls')),
 ]

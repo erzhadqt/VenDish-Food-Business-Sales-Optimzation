@@ -1,10 +1,6 @@
 import React from 'react'
-import { FaHome } from "react-icons/fa";
-import { MdMenu } from "react-icons/md";
-import { MdShowChart } from "react-icons/md";
-import { MdFeedback } from "react-icons/md";
-import { FaUserCheck } from "react-icons/fa";
-import { FaFileInvoice } from "react-icons/fa";
+import { FaHome, FaUserCheck, FaFileInvoice } from "react-icons/fa";
+import { MdMenu, MdShowChart, MdFeedback } from "react-icons/md";
 import { BsBoxArrowRight } from "react-icons/bs";
 
 
@@ -56,13 +52,7 @@ const Sidebar = () => {
                 </NavLink>
             </div>
             
-            {/* <div className="flex justify-center mt-30 p-3">
-                <button onClick={() => navigate('/home')} className="flex gap-3 text-lg bg-red-600 font-bold rounded-2xl w-40 h-10 justify-center items-center">
-                <BsBoxArrowRight className="text-black" />
-                Logout
-                </button>
-            </div> */}
-            <div onClick={() => navigate('/home')} className='cursor-pointer rounded-full h-10 w-[80%] mx-auto bg-red-700 flex justify-center gap-3 items-center mt-30'>
+            <div onClick={() => navigate('/home')} className='cursor-pointer rounded-full h-10 w-[80%] mx-auto bg-red-700 flex justify-center gap-3 items-center mt-35'>
                 <BsBoxArrowRight size={22} color='black' />
                 <button onClick={() => navigate('/home')} className='cursor-pointer bg-transparent outline-0 text-white font-bold'>Logout</button>
             </div>

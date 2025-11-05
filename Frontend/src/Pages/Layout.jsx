@@ -14,7 +14,7 @@ const Layout = () => {
         <div className="flex">
             <Sidebar />
 
-            <main>
+            <main className="bg-zinc-200 w-screen">
                 <Outlet />
             </main>
         </div>

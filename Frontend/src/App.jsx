@@ -7,15 +7,29 @@ import SalesAndReports from "./Pages/admin-pages/SalesAndReports";
 import CustomerFeedback from "./Pages/admin-pages/CustomerFeedback";
 import UserManagement from "./Pages/admin-pages/UserManagement";
 import Invoices from "./Pages/admin-pages/Invoices";
+import Login from "./Pages/login-signup/Login";
+import Signup from "./Pages/login-signup/Signup";
+import ProtectedRoutes from "./Components/ProtectedRoutes";
 
 
 import LandingPage from "./Pages/LandingPage";
 
+function Logout() {
+  localStorage.clear()
+  return <Navigate to="/login" />
+}
+
+function RegisterAndLogout() {
+  localStorage.clear()
+  return <Signup />
+}
+
 function App() {
+  
 
   return (
     <Routes>
-      <Route path="/home" element={<LandingPage />} />
+      <Route path="/" element={<LandingPage />} />
       
       <Route element={<Layout></Layout>}>
         <Route path="/admin" element={<Dashboard />} />
@@ -25,6 +39,9 @@ function App() {
         <Route path="/userManagement" element={<UserManagement />} />
         <Route path="/invoices" element={<Invoices />} />
       </Route>
+
+      <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<Signup />} />
         
 
           
