@@ -52,9 +52,9 @@ const Sidebar = () => {
                 </NavLink>
             </div>
             
-            <div onClick={() => navigate('/home')} className='cursor-pointer rounded-full h-10 w-[80%] mx-auto bg-red-700 flex justify-center gap-3 items-center mt-35'>
+            <div onClick={() => navigate('/')} className='cursor-pointer rounded-full h-10 w-[80%] mx-auto bg-red-700 flex justify-center gap-3 items-center mt-35'>
                 <BsBoxArrowRight size={22} color='black' />
-                <button onClick={() => navigate('/home')} className='cursor-pointer bg-transparent outline-0 text-white font-bold'>Logout</button>
+                <button onClick={() => navigate('/')} className='cursor-pointer bg-transparent outline-0 text-white font-bold'>Logout</button>
             </div>
             
             

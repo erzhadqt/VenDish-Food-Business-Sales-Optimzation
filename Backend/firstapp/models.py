@@ -12,7 +12,9 @@ class Product(models.Model):
         ('combo_meal', 'Combo Meal'),
         ('value_meal', 'Value Meal'),
         ('add_on', 'Add-on'),
+        
     ]
+    
 
     product_name = models.CharField(max_length=100)
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)

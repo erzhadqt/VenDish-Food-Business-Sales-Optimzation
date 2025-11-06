@@ -47,10 +47,10 @@ function ProtectedRoute ({ children }) {
     }
 
     if (isAuthorized === null) {
-        return <div>Loading...</div>
+        return <div className="flex items-center justify-center min-h-screen text-2xl text-center">Loading...</div>
     }
 
-    return isAuthorized ? children : <Navigate to="/login" />
+    return isAuthorized ? children : <Navigate to="/" />
 }
 
 export default ProtectedRoute

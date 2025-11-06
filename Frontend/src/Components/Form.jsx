@@ -15,7 +15,7 @@ function Form({route, method}) {
 	const navigate = useNavigate()
 
 	const name = method === "login" ? "Log In" : "Sign Up"
-	const name2 = method === "login" ? "Welcome" : "Create an Account"
+	const name2 = method === "login" ? "Welcome!" : "Create an Account"
 
 	const handleSubmit =  async (e) => {
 		setLoading(true)
@@ -26,7 +26,7 @@ function Form({route, method}) {
 				const res = await api.post(route, {username, password})
 				localStorage.setItem(ACCESS_TOKEN, res.data.access);
 				localStorage.setItem(REFRESH_TOKEN, res.data.refresh);
-				navigate("/")
+				navigate("/admin")
 			} 
 			
 			else if (method === "signup") {

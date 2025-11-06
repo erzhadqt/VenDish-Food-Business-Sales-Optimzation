@@ -1,4 +1,5 @@
 import React from "react"
+import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./Pages/Layout";
 import Dashboard from "./Pages/admin-pages/Dashboard";
@@ -11,8 +12,12 @@ import Login from "./Pages/login-signup/Login";
 import Signup from "./Pages/login-signup/Signup";
 import ProtectedRoutes from "./Components/ProtectedRoutes";
 
+import HomePage from "./Pages/landing-pages/HomePage";
+import ServicesPage from "./Pages/landing-pages/ServicesPage";
+import AboutPage from "./Pages/landing-pages/AboutPage";
+import ContactPage from "./Pages/landing-pages/ContactPage";
+import Pos from "./Pages/POS/Pos";
 
-import LandingPage from "./Pages/LandingPage";
 
 function Logout() {
   localStorage.clear()
@@ -26,22 +31,29 @@ function RegisterAndLogout() {
 
 function App() {
   
+      
 
   return (
-    <Routes>
-      <Route path="/" element={<LandingPage />} />
+      <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/services" element={<ServicesPage />} />
+      <Route path="/contact" element={<ContactPage />} />
+      <Route path="/about" element={<AboutPage />} />
+
       
-      <Route element={<Layout></Layout>}>
-        <Route path="/admin" element={<Dashboard />} />
-        <Route path="/menu" element={<MenuAndProducts />} />
-        <Route path="/sales" element={<SalesAndReports />} />
-        <Route path="/customerFeedback" element={<CustomerFeedback />} />
-        <Route path="/userManagement" element={<UserManagement />} />
-        <Route path="/invoices" element={<Invoices />} />
+      <Route element={<ProtectedRoutes><Layout></Layout></ProtectedRoutes>}>
+        <Route path="/admin" element={<ProtectedRoutes><Dashboard /></ProtectedRoutes>} />
+        <Route path="/menu" element={<ProtectedRoutes><MenuAndProducts /></ProtectedRoutes>} />
+        <Route path="/sales" element={<ProtectedRoutes><SalesAndReports /></ProtectedRoutes>} />
+        <Route path="/customerFeedback" element={<ProtectedRoutes><CustomerFeedback /></ProtectedRoutes>} />
+        <Route path="/userManagement" element={<ProtectedRoutes><UserManagement /></ProtectedRoutes>} />
+        <Route path="/invoices" element={<ProtectedRoutes><Invoices /></ProtectedRoutes>} />
       </Route>
 
       <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
+      <Route path="/signup" element={<RegisterAndLogout />} />
+
+      <Route path="/pos" element={<ProtectedRoutes><Pos /></ProtectedRoutes>} />
         
 
           
