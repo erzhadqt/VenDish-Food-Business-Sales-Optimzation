@@ -1,4 +1,4 @@
-"""
+"""""
 URL configuration for project project.
 
 The `urlpatterns` list routes URLs to views. For more information please see:
@@ -17,22 +17,20 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 
-from rest_framework.routers import DefaultRouter
-from firstapp.views import ProductViewSet
-from firstapp.views import CreateUserView
+from firstapp.views import CreateUserView, HomePageViewSet, AboutPageViewSet, ContactPageViewSet
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-
-
-
-# router.register(r'costing', CostingViewSet)
 
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    # path('', include(router.urls)),
     path('firstapp/user/register', CreateUserView.as_view(), name='register'),
     path('firstapp/token', TokenObtainPairView.as_view(), name='get_token'),
     path('firstapp/token/refresh', TokenRefreshView.as_view(), name='refresh'),
     path('firstapp-auth/', include('rest_framework.urls')),
+
+    # path('home/', HomePageViewSet.as_view()),
+    # path('about/', AboutPageViewSet.as_view()),
+    # path('contact/', ContactPageViewSet.as_view()),
+
     path('firstapp/', include('firstapp.urls')),
 ]

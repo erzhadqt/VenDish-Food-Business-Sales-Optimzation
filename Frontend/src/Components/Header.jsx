@@ -2,13 +2,13 @@ import React from 'react'
 
 const Header = () => {
   return (
-    <header className="p-4 flex gap-3 bg-black">
+    <header className="p-1 flex gap-3 bg-black items-center">
         <div className="">
             <img src="/icon.jpeg" alt="" className="h-10 w-10 mr-1 rounded-2xl"></img>
         </div>
 
-        <h1 className="font-bold text-white mt-1.5">KUYA VINCE</h1>
-        <span className="font-bold text-red-700 mt-1 text-lg">KARINDERYA</span>
+        <span className="font-bold text-white text-sm">KUYA VINCE</span>
+        <span className="font-bold text-red-700 text-md">KARINDERYA</span>
         
     </header>
   )

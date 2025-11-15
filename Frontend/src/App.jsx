@@ -42,16 +42,18 @@ function App() {
 
       
       <Route element={<ProtectedRoutes><Layout></Layout></ProtectedRoutes>}>
-        <Route path="/admin" element={<ProtectedRoutes><Dashboard /></ProtectedRoutes>} />
-        <Route path="/menu" element={<ProtectedRoutes><MenuAndProducts /></ProtectedRoutes>} />
-        <Route path="/sales" element={<ProtectedRoutes><SalesAndReports /></ProtectedRoutes>} />
-        <Route path="/customerFeedback" element={<ProtectedRoutes><CustomerFeedback /></ProtectedRoutes>} />
-        <Route path="/userManagement" element={<ProtectedRoutes><UserManagement /></ProtectedRoutes>} />
-        <Route path="/invoices" element={<ProtectedRoutes><Invoices /></ProtectedRoutes>} />
+        <Route path="/admin" element={<Dashboard />} />
+        <Route path="/menu" element={<MenuAndProducts />} />
+        <Route path="/sales" element={<SalesAndReports />} />
+        <Route path="/customerFeedback" element={<CustomerFeedback />} />
+        <Route path="/userManagement" element={<UserManagement />} />
+        <Route path="/invoices" element={<Invoices />} />
       </Route>
 
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<RegisterAndLogout />} />
+      <Route path="/logout" element={<Logout />} />
+
 
       <Route path="/pos" element={<ProtectedRoutes><Pos /></ProtectedRoutes>} />
         

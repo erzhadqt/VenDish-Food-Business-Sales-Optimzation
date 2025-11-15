@@ -6,8 +6,8 @@ const Dashboard = () => {
     <div className="p-6 flex flex-col gap-6 min-h-screen">
 
       <div className="flex flex-wrap gap-6">
-        <div className="flex-1 min-w-[250px] bg-white shadow-md rounded-2xl flex flex-col justify-between">
-          <div className="p-6 flex flex-col justify-between flex-grow">
+        <div className="flex-1 min-w-[250px] bg-white shadow-lg border border-gray-300 rounded-2xl flex flex-col justify-between">
+          <div className="p-6 flex flex-col justify-between grow">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-800">Top Sale Today</h2>
               <FaChartLine className="text-blue-500 text-2xl" />
@@ -22,8 +22,8 @@ const Dashboard = () => {
         </div>
 
 
-        <div className="flex-1 min-w-[250px] bg-white shadow-md rounded-2xl flex flex-col justify-between">
-          <div className="p-6 flex flex-col justify-between flex-grow">
+        <div className="flex-1 min-w-[250px] bg-white shadow-lg border border-gray-300 rounded-2xl flex flex-col justify-between">
+          <div className="p-6 flex flex-col justify-between grow">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-800">Total Sales</h2>
               <FaMoneyBillWave className="text-green-500 text-2xl" />
@@ -41,8 +41,8 @@ const Dashboard = () => {
 
       <div className="flex flex-wrap gap-6">
 
-        <div className="flex-1 min-w-[250px] bg-white shadow-md rounded-2xl flex flex-col">
-          <div className="p-6 flex flex-col flex-grow">
+        <div className="flex-1 min-w-[250px] bg-white shadow-lg border border-gray-300 rounded-2xl flex flex-col">
+          <div className="p-6 flex flex-col grow">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-800">Problem Reports</h2>
               <FaBug className="text-red-500 text-2xl" />
@@ -58,7 +58,7 @@ const Dashboard = () => {
         </div>
 
 
-        <div className="flex-1 min-w-[250px] bg-white shadow-md rounded-2xl p-6 flex flex-col">
+        <div className="flex-1 min-w-[250px] bg-white shadow-lg border border-gray-300 rounded-2xl p-6 flex flex-col">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-800">Finance Section</h2>
             <FaWallet className="text-yellow-500 text-2xl" />
@@ -71,7 +71,7 @@ const Dashboard = () => {
         </div>
 
 
-        <div className="flex-1 min-w-[250px] bg-white shadow-md rounded-2xl p-6 flex flex-col">
+        <div className="flex-1 min-w-[250px] bg-white shadow-lg border border-gray-300 rounded-2xl p-6 flex flex-col">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-800">Customer Feedback</h2>
             <FaComments className="text-purple-500 text-2xl" />

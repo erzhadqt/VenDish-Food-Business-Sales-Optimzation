@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 
-from .models import Product, Costing, Order, OrderProduct, Sales, Feedback
+from .models import Product, Costing, Order, OrderProduct, Sales, Feedback, HomePage, AboutPage, ContactPage
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -67,3 +67,18 @@ class FeedbackSerializer(serializers.ModelSerializer):
         fields = '__all__'
         # extra_kwargs = {'message': {'read_only': True},
         #                 'date_submitted': {'read_only': True}}
+
+class HomePageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HomePage
+        fields = '__all__'
+
+class AboutPageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AboutPage
+        fields = '__all__'
+
+class ContactPageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContactPage
+        fields = '__all__'

@@ -93,3 +93,37 @@ class Feedback(models.Model):
 
     def __str__(self):
         return f"Feedback #{self.id}"
+
+
+# CMS
+class HomePage(models.Model):
+    dishes = models.CharField(max_length=50)
+    banner_image = models.ImageField(upload_to="homepage/")
+
+    def __str__(self):
+        return "Home Page Content"
+
+
+class AboutPage(models.Model):
+    story = models.TextField(blank=True)
+    subtitle = models.TextField(blank=True)
+    message = models.ForeignKey(
+        Feedback,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="about_messages",
+    )
+
+    def __str__(self):
+        return "About Page Content"
+
+
+class ContactPage(models.Model):
+    phone_number = models.CharField(max_length=20)
+    email = models.EmailField()
+    address = models.CharField(max_length=100)
+    fb_page = models.CharField(max_length=100)
+
+    def __str__(self):
+        return "Contact Page Content"

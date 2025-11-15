@@ -94,7 +94,7 @@ const HomePage = () => {
           <div className="flex-1 flex lg:justify-end">
             <div className="relative w-72 h-72 sm:w-80 sm:h-80 lg:w-96 lg:h-96 ">
               <div className="absolute inset-0 bg-red-200 rounded-full "></div>
-              <div className="relative w-full h-full bg-linear-to-r from-red-500 to-red-700 rounded-full items-center justify-center shadow-2xl border-8 border-white text-white bg-cover bg-center" style={{ backgroundImage: "url('/icon.jpeg')" }}>
+              <div className="animate-bounce relative w-full h-full bg-linear-to-r from-red-500 to-red-700 rounded-full items-center justify-center shadow-2xl border-8 border-white text-white bg-cover bg-center" style={{ backgroundImage: "url('/icon.jpeg')" }}>
                 {/* <ChefHat size={70} className="animate-bounce mb-3" />
                 <h2 className="text-2xl lg:text-3xl font-bold tracking-wide">KUYA VINCE</h2>
                 <h3 className="text-3xl lg:text-4xl font-bold tracking-wider">KARINDERYA</h3>
