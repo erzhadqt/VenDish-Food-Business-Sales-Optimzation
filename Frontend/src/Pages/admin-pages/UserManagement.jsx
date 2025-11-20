@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
 import api from "../../api";
-import { EditIcon, Trash2Icon } from "lucide-react";
+import { EditIcon, Trash2Icon, PlusSquare } from "lucide-react";
 
 import UpdateUserDialog from "../../Components/UpdateUserDialog";
 import ConfirmDeleteUserDialog from "../../Components/ConfirmDeleteUserDialog";
+import AddUserDialog from "../../Components/AddUserDialog";
 import SuccessAlert from "../../Components/SuccessAlert";
 
 export default function UserTable() {
@@ -47,7 +48,16 @@ export default function UserTable() {
 
   return (
     <div className="w-full p-6">
-      <h1 className="text-3xl font-bold mb-4">User Management</h1>
+      <div className="flex justify-between mb-5 items-center">
+        <h1 className="text-3xl font-bold mb-4">User Management</h1>
+
+        <AddUserDialog onSaved={fetchUsers}>
+          <button className="flex gap-1 bg-blue-900 items-center px-2 py-2 rounded-lg text-zinc-200 font-medium">
+          <PlusSquare /> Add User
+        </button>
+        </AddUserDialog>
+      </div>
+      
 
       {showSuccess && (
         <div className="mb-4">

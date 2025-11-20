@@ -28,7 +28,7 @@ urlpatterns = [
     path('firstapp/token/refresh', TokenRefreshView.as_view(), name='refresh'),
     path('firstapp-auth/', include('rest_framework.urls')),
 
-    path("firstapp/users", UserViewSet.as_view({'get': 'list'})),
+    # path("firstapp/users", UserViewSet.as_view({'get': 'list'})),
     path("firstapp/users/<int:pk>/", UserDetailView.as_view(), name="user-detail"),
     # path("firstapp/user/delete/<int:pk>/", UserDelete.as_view(), name="delete-user"),
     # path("firstapp/users/<int:pk>/", UserListView.as_view(), name="user-list"),

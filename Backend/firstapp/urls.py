@@ -1,5 +1,5 @@
 from django.urls import path, include
-from .views import ProductViewSet, CostingViewSet, FeedbackViewSet, HomePageViewSet, AboutPageViewSet, ContactPageViewSet
+from .views import ProductViewSet, CostingViewSet, FeedbackViewSet, HomePageViewSet, AboutPageViewSet, ContactPageViewSet, UserViewSet
 from rest_framework.routers import DefaultRouter
 
 router = DefaultRouter()
@@ -13,6 +13,10 @@ router.register(r'feedback', FeedbackViewSet)
 router.register(r'home', HomePageViewSet)
 router.register(r'about', AboutPageViewSet)
 router.register(r'contact', ContactPageViewSet)
+
+router.register(r'users', UserViewSet)
+
+
 
 urlpatterns = [
     # path('products/', views.ProductListCreate.as_view(), name='product-list'),
