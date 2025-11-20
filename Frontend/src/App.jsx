@@ -10,7 +10,10 @@ import UserManagement from "./Pages/admin-pages/UserManagement";
 import Invoices from "./Pages/admin-pages/Invoices";
 import Login from "./Pages/login-signup/Login";
 import Signup from "./Pages/login-signup/Signup";
-import ProtectedRoutes from "./Components/ProtectedRoutes";
+import ProtectedRoute from "./Components/ProtectedRoute";
+
+import NotFound from "./Pages/NotFound";
+import NotAdmin from "./Pages/NotAdmin";
 
 import HomePage from "./Pages/landing-pages/HomePage";
 import ServicesPage from "./Pages/landing-pages/ServicesPage";
@@ -19,9 +22,10 @@ import ContactPage from "./Pages/landing-pages/ContactPage";
 import Pos from "./Pages/POS/Pos";
 
 
+
 function Logout() {
   localStorage.clear()
-  return <Navigate to="/login" />
+  return <Navigate to="/" />
 }
 
 function RegisterAndLogout() {
@@ -35,29 +39,31 @@ function App() {
 
   return (
       <Routes>
-      <Route path="/" element={<HomePage />} />
-      <Route path="/services" element={<ServicesPage />} />
-      <Route path="/contact" element={<ContactPage />} />
-      <Route path="/about" element={<AboutPage />} />
+      	<Route path="/" element={<HomePage />} />
+      	<Route path="/services" element={<ServicesPage />} />
+      	<Route path="/contact" element={<ContactPage />} />
+      	<Route path="/about" element={<AboutPage />} />
 
       
-      <Route element={<ProtectedRoutes><Layout></Layout></ProtectedRoutes>}>
-        <Route path="/admin" element={<Dashboard />} />
-        <Route path="/menu" element={<MenuAndProducts />} />
-        <Route path="/sales" element={<SalesAndReports />} />
-        <Route path="/customerFeedback" element={<CustomerFeedback />} />
-        <Route path="/userManagement" element={<UserManagement />} />
-        <Route path="/invoices" element={<Invoices />} />
-      </Route>
+      	<Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+        	{/* <Route path="/admin" element={<Dashboard />} /> */}
+        	<Route path="/admin/menu" element={<MenuAndProducts />} />
+        	<Route path="/admin/sales" element={<SalesAndReports />} />
+        	<Route path="/admin/customerFeedback" element={<CustomerFeedback />} />
+        	<Route path="/admin/userManagement" element={<UserManagement />} />
+        	<Route path="/admin/invoices" element={<Invoices />} />
+      	</Route>
 
-      <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<RegisterAndLogout />} />
-      <Route path="/logout" element={<Logout />} />
+		<Route path="/admin/pos" element={<ProtectedRoute><Pos /></ProtectedRoute>} />
 
-
-      <Route path="/pos" element={<ProtectedRoutes><Pos /></ProtectedRoutes>} />
+      	<Route path="/kuyavincekarinderya" element={<Login />} />
+      	<Route path="/kuyavincekarinderya-signup" element={<RegisterAndLogout />} />
+      	<Route path="/logout" element={<Logout />} />
+      
+      	
         
-
+      	<Route path="/*" element={<NotFound />} />
+      	<Route path="/notadmin" element={<NotAdmin />} />
           
     </Routes>
   )

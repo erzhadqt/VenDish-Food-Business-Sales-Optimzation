@@ -43,47 +43,46 @@ class Costing(models.Model):
 
 
 # ORDER
-class Order(models.Model):
-    date_ordered = models.DateTimeField(default=timezone.now)
-    total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    discount = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
-    tax = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
-    status = models.CharField(
-        max_length=20,
-        choices=[
-            ('pending', 'Pending'),
-            ('completed', 'Completed'),
-            ('cancelled', 'Cancelled')
-        ],
-        default='pending'
-    )
+# class Order(models.Model):
+#     date_ordered = models.DateTimeField(default=timezone.now)
+#     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+#     discount = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+#     tax = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+#     status = models.CharField(
+#         max_length=20,
+#         choices=[
+#             ('pending', 'Pending'),
+#             ('completed', 'Completed'),
+#             ('cancelled', 'Cancelled')
+#         ],
+#         default='pending'
+#     )
 
-    def __str__(self):
-        return f"Order #{self.id} - {self.status}"
+#     def __str__(self):
+#         return f"Order #{self.id} - {self.status}"
 
 
 # ORDER PRODUCT (Order Items)
-class OrderProduct(models.Model):
-    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="order_items")
-    product = models.ForeignKey(Product, on_delete=models.CASCADE)
-    quantity = models.PositiveIntegerField()
-    subtotal = models.DecimalField(max_digits=10, decimal_places=2)
+# class OrderProduct(models.Model):
+#     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="order_items")
+#     product = models.ForeignKey(Product, on_delete=models.CASCADE)
+#     quantity = models.PositiveIntegerField()
+#     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
 
-    def __str__(self):
-        return f"{self.quantity} × {self.product.product_name}"
+#     def __str__(self):
+#         return f"{self.quantity} × {self.product.product_name}"
 
 
 
 # SALES
-class Sales(models.Model):
-    order = models.OneToOneField(Order, on_delete=models.CASCADE)
-    total_sales = models.DecimalField(max_digits=10, decimal_places=2)
-    profit = models.DecimalField(max_digits=10, decimal_places=2)
-    date_recorded = models.DateTimeField(default=timezone.now)
+# class Sales(models.Model):
+#     order = models.OneToOneField(Order, on_delete=models.CASCADE)
+#     total_sales = models.DecimalField(max_digits=10, decimal_places=2)
+#     profit = models.DecimalField(max_digits=10, decimal_places=2)
+#     date_recorded = models.DateTimeField(default=timezone.now)
 
-    def __str__(self):
-        return f"Sales Record for Order #{self.order.id}"
-
+#     def __str__(self):
+#         return f"Sales Record for Order #{self.order.id}"
 
 
 # FEEDBACK

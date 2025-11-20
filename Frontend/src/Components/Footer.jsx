@@ -2,7 +2,7 @@ import React from 'react';
 import { MapPin, User } from 'lucide-react';
 
 const Footer = () => (
-  <footer className="bg-white border-t border-gray-200 text-gray-700 mt-20 w-full">
+  <footer className="bg-white border-t border-gray-200 text-gray-700 mt-10 w-full">
     <div className="w-full px-10 py-10 flex flex-col md:flex-row justify-between items-start gap-10">
       
       {/* === Left Section: Products & Legal === */}

@@ -27,7 +27,7 @@ const AboutPage = () => {
   return (
     <div className="w-full min-h-screen bg-linear-to-b from-white via-red-50 to-white pt-40">
       <Navigation />
-      <div className="max-w-7xl mx-auto px-6">
+      <div className="max-w-7xl mx-auto px-6 animate-fade-in">
 
         {/* HEADER SECTION */}
         <div className="text-center space-y-4">

@@ -26,17 +26,17 @@ function Form({ route, method }) {
 				const res = await api.post(route, { username, password })
 				localStorage.setItem(ACCESS_TOKEN, res.data.access);
 				localStorage.setItem(REFRESH_TOKEN, res.data.refresh);
-				navigate("/admin")
+				navigate("/admin/menu")
 			}
 
 			else if (method === "signup") {
 				const res = await api.post(route, { username, email, password })
 				console.log(res)
-				navigate("/login")
+				navigate("/kuyavincekarinderya")
 			}
 
 			else {
-				navigate("/login")
+				navigate("/kuyavincekarinderya")
 			}
 		} catch (error) {
 			alert(error)
@@ -99,14 +99,14 @@ function Form({ route, method }) {
 						method === "login" ? (
 							<p className="text-center text-sm text-gray-700 mt-4">
 								Don’t have an account?{" "}
-								<button onClick={() => navigate("/signup")} type="button" className="text-blue-700 font-medium hover:underline">
+								<button onClick={() => navigate("/kuyavincekarinderya-signup")} type="button" className="text-blue-700 font-medium hover:underline cursor-pointer">
 									Sign Up
 								</button>
 							</p>
 						) : (
 							<p className="text-center text-sm text-gray-700 mt-4">
 								Already have an account?{" "}
-								<button onClick={() => navigate("/login")} type="button" className="text-blue-700 font-medium hover:underline">
+								<button onClick={() => navigate("/kuyavincekarinderya")} type="button" className="text-blue-700 font-medium hover:underline cursor-pointer">
 									Log In
 								</button>
 							</p>

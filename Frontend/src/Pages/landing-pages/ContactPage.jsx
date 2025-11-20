@@ -67,7 +67,7 @@ const ContactPage = () => {
     <div className="w-full min-h-screen bg-linear-to-br from-white via-red-50 to-white pt-35">
       <Navigation />
       
-      <div className="max-w-7xl mx-auto px-6">
+      <div className="max-w-7xl mx-auto px-6 animate-fade-in">
         
         {/* Header Section */}
         <div className="text-center mb-12">
@@ -80,7 +80,7 @@ const ContactPage = () => {
         </div>
 
         {/* Contact Info Grid */}
-        <div className="grid lg:grid-cols-2 gap-10 items-start mb-16">
+        <div className="grid lg:grid-row-2 gap-10 items-center justify-center mb-16">
           <div className="space-y-5">
             {contactInfo.map((item, idx) => {
               const Icon = item.icon;
@@ -93,7 +93,7 @@ const ContactPage = () => {
                   <div className={`${item.color} ${item.iconColor} p-4 rounded-xl border`}>
                     <Icon size={22} />
                   </div>
-                  <div className="flex-1 bg-white border border-gray-100 p-4 rounded-xl shadow-sm">
+                  <div className="w-100 bg-white border border-gray-100 p-4 rounded-xl shadow-sm">
                     <div className="font-semibold text-gray-900">{item.value}</div>
                     <div className="text-sm text-gray-600 mt-1">{item.label}</div>
                   </div>

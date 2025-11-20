@@ -1,8 +1,13 @@
 import React from "react";
 import { FaChartLine, FaMoneyBillWave, FaBug, FaWallet, FaComments } from "react-icons/fa";
+import { Outlet } from "react-router-dom";
 
 const Dashboard = () => {
   return (
+
+    // <div>
+    //   <Outlet />
+    // </div>
     <div className="p-6 flex flex-col gap-6 min-h-screen">
 
       <div className="flex flex-wrap gap-6">

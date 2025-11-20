@@ -11,7 +11,7 @@ const Navigation = () => {
     { name: 'services', path: '/services' },
     { name: 'about', path: '/about' },
     { name: 'contact', path: '/contact' },
-    { name: 'admin', path: '/login'},
+    // { name: 'admin', path: '/login'},
   ];
 
   return (
@@ -46,12 +46,12 @@ const Navigation = () => {
             ))}
 
           {/* Separate ADMIN Button */}
-          <NavLink
-            to="/login"
-            className="px-4 py-2 rounded-md font-semibold text-white bg-linear-to-r from-red-500 to-red-700 hover:from-red-700 hover:to-red-500 transition-all duration-300"
-          >
-            ADMIN
-          </NavLink>
+            {/* <NavLink
+              to="/login"
+              className="px-4 py-2 rounded-md font-semibold text-white bg-linear-to-r from-red-500 to-red-700 hover:from-red-700 hover:to-red-500 transition-all duration-300"
+            >
+              ADMIN
+            </NavLink> */}
         </div>
 
 

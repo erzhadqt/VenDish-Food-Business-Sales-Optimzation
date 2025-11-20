@@ -1,9 +1,27 @@
 import React from 'react';
-import { ChefHat, Facebook, MessageCircle, Twitter, Instagram, Utensils, Star, Users, Clock } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ChefHat, Facebook, MessageCircle, Twitter, Instagram, Utensils, Star, Users, Clock, Smartphone, ArrowDownIcon } from 'lucide-react';
 import Navigation from '../../Components/Navigation'; // adjust path if needed
 import Footer from '../../Components/Footer';
+import Carousel from '../../Components/Carousel';
+import TextAnimations from '../../Components/TextAnimations';
 
 const HomePage = () => {
+	const navigate = useNavigate()
+
+  const slides = [
+    "/pic1.jpg",
+    "/pic2.jpg",
+    "/pic3.jpg",
+    "/pic4.jpg",
+    "/pic6.jpg",
+    "/pic7.jpg",
+    "/pic8.jpg",
+    "/pic9.jpg",
+    "/pic10.jpg",
+    "/pic11.jpg",
+  ]
+
   const features = [
     { icon: Utensils, title: "Authentic Recipes", description: "Traditional Filipino dishes passed down through generations" },
     { icon: Star, title: "Fresh Ingredients", description: "Daily prepared with the freshest local ingredients" },
@@ -57,8 +75,9 @@ const HomePage = () => {
 
             {/* CTA Buttons */}
             {/* <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start pt-4">
+              <p>are you an admin? Log in</p>
               <button className="bg-linear-to-r from-red-600 to-red-700 text-white px-8 py-3 rounded-xl font-semibold hover:from-red-700 hover:to-red-800 transition-all duration-300 hover:shadow-lg transform hover:scale-105">
-                Order Now
+                Admin? Log in
               </button>
               <button className="border-2 border-red-600 text-red-600 px-8 py-3 rounded-xl font-semibold hover:bg-red-600 hover:text-white transition-all duration-300 transform hover:scale-105">
                 View Menu
@@ -91,7 +110,7 @@ const HomePage = () => {
           </div>
 
           {/* Right Content - Logo Circle */}
-          <div className="flex-1 flex lg:justify-end">
+          <div className="flex-1 flex lg:justify-end animate-fade-in">
             <div className="relative w-72 h-72 sm:w-80 sm:h-80 lg:w-96 lg:h-96 ">
               <div className="absolute inset-0 bg-red-200 rounded-full "></div>
               <div className="animate-bounce relative w-full h-full bg-linear-to-r from-red-500 to-red-700 rounded-full items-center justify-center shadow-2xl border-8 border-white text-white bg-cover bg-center" style={{ backgroundImage: "url('/icon.jpeg')" }}>
@@ -105,7 +124,7 @@ const HomePage = () => {
         </section>
 
         {/* Features Section */}
-        <section className="bg-white py-16 lg:py-20 border-t border-gray-100 shadow-2xl">
+        <section className="bg-white py-16 lg:py-20 border-t border-gray-100 shadow-2xl animate-fade-in rounded-xl">
           <div className="text-center mb-12">
             <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-3">
               WHY CHOOSE <span className="text-red-600">KUYA VINCE</span>
@@ -130,6 +149,39 @@ const HomePage = () => {
             })}
           </div>
         </section>
+
+        <div className="flex flex-col lg:flex-row items-center justify-between gap-10 py-10 animate-fade-in">
+			{/* Left Content: Text and Button */}
+			<div className="flex flex-col items-center lg:items-start text-center lg:text-left space-y-6 lg:w-1/2">
+				<TextAnimations />
+
+				<p className="flex items-center gap-2 text-zinc-700 text-lg">
+				Get our app now <ArrowDownIcon size={26} />
+				</p>
+
+				<button
+				onClick={() => navigate('/notfound')}
+				className="bg-red-600 px-6 py-3 rounded-xl text-xl font-bold text-white flex items-center gap-2 hover:bg-red-700 transition-all"
+				>
+				Get app
+				<Smartphone size={30} />
+				</button>
+			</div>
+
+			{/* Right Content: Carousel */}
+			<div className="lg:w-1/2 bg-linear-to-br from-gray-100 via-red-100 to-gray-100 px-10 shadow-lg rounded">
+				<div className="w-full max-w-4xl mx-auto">
+				<Carousel slides={slides} />
+				</div>
+			</div>
+			</div>
+        {/* <div className="flex-row items-center justify-center w-100 mx-auto px-5 py-5 text-center mt-10">
+            <p className="pb-2 text-zinc-700">are you an admin? </p>
+
+            <button onClick={() => navigate("/notadmin")} className="flex gap-2 items-center mx-auto bg-linear-to-r from-red-600 to-red-700 text-white px-5 py-3 rounded-xl font-semibold hover:from-red-700 hover:to-red-800 transition-all duration-300 hover:shadow-lg transform hover:scale-105">
+              Log in <ArrowRight className="flex justify-center" />
+            </button>
+        </div> */}
       </div>
       <Footer />
     </div>

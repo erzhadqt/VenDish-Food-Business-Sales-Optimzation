@@ -57,7 +57,7 @@ const ServicesPage = () => {
       <div className="max-w-7xl mx-auto px-6">
 
         {/* Header Section */}
-        <div className="text-center mb-16">
+        <div className="text-center mb-16 animate-fade-in">
           <h1 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-4">
             OUR <span className="text-red-600">SERVICES</span>
           </h1>
@@ -70,7 +70,7 @@ const ServicesPage = () => {
         </div>
 
         {/* Services Section */}
-        <div className="grid lg:grid-cols-2 gap-12 items-center mb-20">
+        <div className="grid lg:grid-cols-2 gap-12 items-center mb-20 animate-fade-in">
           
           {/* Service Cards */}
           <div className="grid sm:grid-cols-2 gap-6">
