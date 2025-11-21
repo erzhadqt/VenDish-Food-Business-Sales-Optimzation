@@ -3,7 +3,7 @@ import { useState } from "react";
 import { FaArrowLeft } from "react-icons/fa";
 
 import api from "../api"
-import { useNavigate, NavLink } from "react-router-dom"
+import { useNavigate, NavLink, Link } from "react-router-dom"
 import { ACCESS_TOKEN, REFRESH_TOKEN } from "../constants";
 
 function Form({ route, method }) {
@@ -116,13 +116,13 @@ function Form({ route, method }) {
 
 
 				</form>
-				<NavLink
+				<Link
 					to={"/"}
 					className="absolute bottom-4 left-4 flex items-center gap-2 text-black hover:text-blue-500 transition-colors duration-200 sm:bottom-6 sm:left-6"
 				>
 					<FaArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
 					<span className="font-semibold text-base sm:text-lg">Back</span>
-				</NavLink>
+				</Link>
 
 			</div>
 		</div>

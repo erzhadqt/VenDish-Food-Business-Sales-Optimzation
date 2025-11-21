@@ -24,16 +24,16 @@ const Sidebar = () => {
   const [isMinimized, setIsMinimized] = useState(false);
 
   const menu = [
-    { id: 'menu', icon: Menu, label: 'Menu & Products', path: '/admin/menu' },
     { id: 'sales', icon: TrendingUp, label: 'Sales & Reports', path: '/admin/sales' },
+    { id: 'menu', icon: Menu, label: 'Menu & Products', path: '/admin/menu' },
+    { id: 'invoices', icon: FileText, label: 'Invoices', path: '/admin/invoices' },
     { id: 'feedback', icon: MessageSquare, label: 'Customer Feedback', path: '/admin/customerFeedback' },
     { id: 'users', icon: Users, label: 'User Management', path: '/admin/userManagement' },
-    { id: 'invoices', icon: FileText, label: 'Invoices', path: '/admin/invoices' },
     { id: 'point-of-sale', icon: PresentationIcon, label: 'POS', path: '/admin/pos' }
   ];
 
   const cms = [
-    { id: 'cms', icon: Settings, label: 'CMS', path: '/cms' }
+    { id: 'cms', icon: Settings, label: 'CMS', path: '/admin/cms' }
   ];
 
   const renderNavItem = (item) => {
@@ -67,7 +67,7 @@ const Sidebar = () => {
   };
 
   return (
-    <div className={`flex flex-col bg-gray-50 border-r border-gray-200 h-full shadow-sm transition-all duration-300 
+    <div className={`flex flex-col bg-gray-100 border-r border-gray-200 h-full shadow-sm transition-all duration-300 
                      ${isMinimized ? 'w-20' : 'w-64'}`}>
 
       {/* Header */}
@@ -119,7 +119,7 @@ const Sidebar = () => {
 
       {/* Logout */}
       <div className="p-4 border-t border-gray-200 inset-0">
-        <AlertDialog onConfirm={logout}>
+        <AlertDialog onConfirm={logout} title="Confirm Logout" description="Are you sure you want to Logout?">
           <button
             className={`
               w-full flex items-center gap-2 px-4 py-2.5 bg-gray-900 hover:bg-gray-800 text-white 

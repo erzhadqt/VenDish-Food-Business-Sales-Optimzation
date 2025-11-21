@@ -1,6 +1,6 @@
 from django.db import models
 from django.utils import timezone
-
+from django.contrib.auth.models import User
 
 # PRODUCT
 class Product(models.Model):
@@ -14,17 +14,49 @@ class Product(models.Model):
         ('add_on', 'Add-on'),
         
     ]
-    
-
     product_name = models.CharField(max_length=100)
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
     price = models.DecimalField(max_digits=10, decimal_places=2)
-    stock_quantity = models.PositiveIntegerField(default=0)
+    stock_quantity = models.PositiveIntegerField(default=0) 
     date_added = models.DateTimeField(default=timezone.now)
+    image = models.ImageField(upload_to="product_images/", null=True, blank=True)
 
     def __str__(self):
         return self.product_name
 
+# RECEIPT
+class Receipt(models.Model):
+    subtotal = models.DecimalField(max_digits=10, decimal_places=2)
+    vat = models.DecimalField(max_digits=10, decimal_places=2)
+    total = models.DecimalField(max_digits=10, decimal_places=2)
+
+    cash_given = models.DecimalField(max_digits=10, decimal_places=2)
+    change = models.DecimalField(max_digits=10, decimal_places=2)
+
+    created_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"Receipt #{self.id}"
+
+
+class ReceiptItem(models.Model):
+    receipt = models.ForeignKey(Receipt, on_delete=models.CASCADE, related_name="items")
+    product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True)
+
+    product_name = models.CharField(max_length=255)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    quantity = models.PositiveIntegerField()
+
+    @property
+    def subtotal(self):
+        return self.price * self.quantity
+
+    def __str__(self):
+        return f"{self.quantity} × {self.product_name}"
+    
+class Discount(models.Model):
+    name = models.CharField(max_length=50)
+    rate = models.DecimalField(max_digits=5, decimal_places=2)
 
 # COSTING
 class Costing(models.Model):

@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Select } from '@/components/ui/select';
 import {
   Dialog,
   DialogTrigger,
@@ -22,51 +21,66 @@ export default function AddProductDialog({ onSaved, children }) {
   const [price, setPrice] = useState("");
   const [stock, setStock] = useState("");
   const [loading, setLoading] = useState(false);
+  const [image, setImage] = useState(null);
 
   const categories = [
-  { value: "chicken", label: "Chicken" },
-  { value: "beef", label: "Beef" },
-  { value: "fish", label: "Fish" },
-  { value: "vegetables", label: "Vegetables" },
-  { value: "combo_meal", label: "Combo Meal" },
-  { value: "value_meal", label: "Value Meal" },
-  { value: "add_on", label: "Add-on" },
-];
-
+    { value: "chicken", label: "Chicken" },
+    { value: "beef", label: "Beef" },
+    { value: "fish", label: "Fish" },
+    { value: "vegetables", label: "Vegetables" },
+    { value: "combo_meal", label: "Combo Meal" },
+    { value: "value_meal", label: "Value Meal" },
+    { value: "add_on", label: "Add-on" },
+  ];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      await api.post("/firstapp/products/", {
-        product_name: productName,
-        category,
-        price,
-        stock_quantity: stock,
+      const formData = new FormData();
+      formData.append("product_name", productName);
+      formData.append("category", category);
+      formData.append("price", parseFloat(price));
+      formData.append("stock_quantity", parseInt(stock, 10));
+      if (image) formData.append("image", image);
+
+      await api.post("/firstapp/products/", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
       });
 
+      // success
       setLoading(false);
-      setOpen(false); // <-- close the modal
-      onSaved(); // refresh list & show success
+      setOpen(false);
+      onSaved();
 
-      // clear form for next time
       setProductName("");
       setCategory("");
       setPrice("");
       setStock("");
+      setImage(null);
     } catch (err) {
-      console.error("Failed to add product:", err);
+      console.error("Failed to add product:", err.response?.data || err);
       setLoading(false);
       alert("Failed to add product. Please try again.");
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(val) => setOpen(val)}>
       <DialogTrigger asChild>{children}</DialogTrigger>
 
-      <DialogContent className="sm:max-w-md">
+      {/* Custom blurred backdrop: appears only when `open` is true */}
+      {open && (
+        <div
+          // note: z-40 so DialogContent (z-50) sits above it
+          className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
+          aria-hidden="true"
+        />
+      )}
+
+      {/* DialogContent will be rendered by shadcn; ensure it has higher z-index */}
+      <DialogContent className="sm:max-w-md z-50">
         <DialogHeader>
           <DialogTitle>Add New Product</DialogTitle>
           <DialogDescription>
@@ -94,7 +108,9 @@ export default function AddProductDialog({ onSaved, children }) {
               required
               className="px-3 py-2 border rounded-md"
             >
-              <option value="" disabled>Select category</option>
+              <option value="" disabled>
+                Select category
+              </option>
               {categories.map((c) => (
                 <option key={c.value} value={c.value}>
                   {c.label}
@@ -125,12 +141,23 @@ export default function AddProductDialog({ onSaved, children }) {
             />
           </div>
 
+          <div className="grid gap-2">
+            <Label htmlFor="image">Upload Image</Label>
+            <Input
+              id="image"
+              type="file"
+              accept="image/*"
+              onChange={(e) => setImage(e.target.files[0])}
+              className="block w-full border rounded-md p-2"
+            />
+          </div>
+
           <DialogFooter className="flex justify-end gap-2">
             <DialogClose asChild>
               <Button variant="outline">Cancel</Button>
             </DialogClose>
             <Button type="submit" disabled={loading}>
-              {loading ? "Saving..." : "Save"}
+              {loading ? "Saving..." : "Add"}
             </Button>
           </DialogFooter>
         </form>

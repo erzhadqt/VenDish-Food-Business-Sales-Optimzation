@@ -1,7 +1,6 @@
 import { useState } from "react";
 import api from "../api";
 import { Button } from "@/components/ui/button";
-import { Select } from '@/components/ui/select';
 import {
   Dialog,
   DialogClose,
@@ -17,39 +16,59 @@ import { Label } from "@/components/ui/label";
 export default function EditProductDialog({ product, onClose, onSaved }) {
   const [loading, setLoading] = useState(false);
   const [category, setCategory] = useState(product.category || "");
+  const [image, setImage] = useState(null);
 
   const categories = [
-  { value: "chicken", label: "Chicken" },
-  { value: "beef", label: "Beef" },
-  { value: "fish", label: "Fish" },
-  { value: "vegetables", label: "Vegetables" },
-  { value: "combo_meal", label: "Combo Meal" },
-  { value: "value_meal", label: "Value Meal" },
-  { value: "add_on", label: "Add-on" },
-];
+    { value: "chicken", label: "Chicken" },
+    { value: "beef", label: "Beef" },
+    { value: "fish", label: "Fish" },
+    { value: "vegetables", label: "Vegetables" },
+    { value: "combo_meal", label: "Combo Meal" },
+    { value: "value_meal", label: "Value Meal" },
+    { value: "add_on", label: "Add-on" },
+  ];
 
   const handleSave = async (e) => {
     e.preventDefault();
     setLoading(true);
 
-    const formData = new FormData(e.target);
-    const values = Object.fromEntries(formData.entries());
+    const formData = new FormData();
+    const productName = e.target.product_name.value;
+    const price = parseFloat(e.target.price.value);
+    const stockQuantity = parseInt(e.target.stock_quantity.value, 10);
+
+    formData.append("product_name", productName);
+    formData.append("price", price);
+    formData.append("category", category);
+    formData.append("stock_quantity", stockQuantity);
+    if (image) formData.append("image", image);
 
     try {
-      await api.put(`/firstapp/products/${product.id}/`, values);
+      await api.patch(`/firstapp/products/${product.id}/`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
 
-      onSaved(); // refresh product list
-      onClose(); // close dialog
+      onSaved();
+      onClose();
     } catch (err) {
-      console.error("Update error:", err);
+      console.error("Update error:", err.response?.data || err);
+      alert("Failed to update product. Check the console for details.");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[450px]">
+      {/* Custom blurred backdrop */}
+      <div
+        className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
+        aria-hidden="true"
+        onClick={onClose} // backdrop click closes modal (optional)
+      />
+
+      {/* Modal content (above backdrop) */}
+      <DialogContent className="sm:max-w-[450px] z-50">
         <DialogHeader>
           <DialogTitle>Edit Product</DialogTitle>
           <DialogDescription>
@@ -58,26 +77,24 @@ export default function EditProductDialog({ product, onClose, onSaved }) {
         </DialogHeader>
 
         <form onSubmit={handleSave} className="grid gap-4">
-
           <div className="grid gap-2">
             <Label>Product Name</Label>
-            <Input
-              name="product_name"
-              defaultValue={product.product_name}
-              required
-            />
+            <Input name="product_name" defaultValue={product.product_name} required />
           </div>
 
           <div className="grid gap-2">
             <Label htmlFor="category">Category</Label>
             <select
+              name="category"
               id="category"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
               required
               className="px-3 py-2 border rounded-md"
             >
-              <option value="" disabled>Select category</option>
+              <option value="" disabled>
+                Select category
+              </option>
               {categories.map((c) => (
                 <option key={c.value} value={c.value}>
                   {c.label}
@@ -85,7 +102,6 @@ export default function EditProductDialog({ product, onClose, onSaved }) {
               ))}
             </select>
           </div>
-
 
           <div className="grid gap-2">
             <Label>Price</Label>
@@ -105,6 +121,16 @@ export default function EditProductDialog({ product, onClose, onSaved }) {
               type="number"
               defaultValue={product.stock_quantity}
               required
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="image">Upload Image</Label>
+            <Input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setImage(e.target.files[0])}
+              className="block w-full border rounded-md p-2"
             />
           </div>
 

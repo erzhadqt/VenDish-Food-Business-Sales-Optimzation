@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import api from "../../api";
-import { EditIcon, Trash2Icon, PlusSquare } from "lucide-react";
+import { EditIcon, Trash2Icon, PlusSquare, UserCogIcon, UserPlus, UserRoundPen } from "lucide-react";
 
 import UpdateUserDialog from "../../Components/UpdateUserDialog";
 import ConfirmDeleteUserDialog from "../../Components/ConfirmDeleteUserDialog";
@@ -47,81 +47,117 @@ export default function UserTable() {
   };
 
   return (
-    <div className="w-full p-6">
-      <div className="flex justify-between mb-5 items-center">
-        <h1 className="text-3xl font-bold mb-4">User Management</h1>
+    <div className="w-full min-h-screen bg-gray-50 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="flex items-center gap-3 text-3xl font-bold text-gray-900">
+            <UserCogIcon size={32} className="text-gray-700" /> 
+            User Management
+          </h1>
 
-        <AddUserDialog onSaved={fetchUsers}>
-          <button className="flex gap-1 bg-blue-900 items-center px-2 py-2 rounded-lg text-zinc-200 font-medium">
-          <PlusSquare /> Add User
-        </button>
-        </AddUserDialog>
-      </div>
-      
-
-      {showSuccess && (
-        <div className="mb-4">
-          <SuccessAlert />
+          <AddUserDialog onSaved={fetchUsers}>
+            <button className="flex gap-2 items-center bg-gray-900 hover:bg-gray-800 text-white px-4 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm">
+              <UserPlus size={20} /> User
+            </button>
+          </AddUserDialog>
         </div>
-      )}
 
-      {/* Loading */}
-      {loading && <p className="text-gray-500">Loading...</p>}
+        {/* Success Alert */}
+        {showSuccess && (
+          <div className="mb-6">
+            <SuccessAlert />
+          </div>
+        )}
 
-      {/* No Users */}
-      {!loading && users.length === 0 && (
-        <p className="text-gray-500">No users found.</p>
-      )}
+        {/* Loading */}
+        {loading && (
+          <p className="text-gray-500 text-center py-8">Loading...</p>
+        )}
 
-      {/* USER TABLE */}
-      <div className="overflow-x-auto rounded-lg shadow border border-gray-200">
-        <table className="w-full text-left">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="py-3 px-4 border-b">ID</th>
-              <th className="py-3 px-4 border-b">Username</th>
-              <th className="py-3 px-4 border-b">Email</th>
-              <th className="py-3 px-4 border-b">First Name</th>
-              <th className="py-3 px-4 border-b">Last Name</th>
-              <th className="py-3 px-4 border-b text-center">Actions</th>
-            </tr>
-          </thead>
+        {/* No Users */}
+        {!loading && users.length === 0 && (
+          <div className="text-center py-16">
+            <p className="text-gray-400 text-lg">No users found.</p>
+          </div>
+        )}
 
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id} className="hover:bg-gray-50 transition">
-                <td className="py-2 px-4 border-b">{u.id}</td>
-                <td className="py-2 px-4 border-b">{u.username}</td>
-                <td className="py-2 px-4 border-b">{u.email}</td>
-                <td className="py-2 px-4 border-b">{u.first_name}</td>
-                <td className="py-2 px-4 border-b">{u.last_name}</td>
+        {/* USER TABLE */}
+        {!loading && users.length > 0 && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="py-3.5 px-4 text-left text-sm font-semibold text-gray-700">
+                      ID
+                    </th>
+                    <th className="py-3.5 px-4 text-left text-sm font-semibold text-gray-700">
+                      Username
+                    </th>
+                    <th className="py-3.5 px-4 text-left text-sm font-semibold text-gray-700">
+                      Email
+                    </th>
+                    <th className="py-3.5 px-4 text-left text-sm font-semibold text-gray-700">
+                      First Name
+                    </th>
+                    <th className="py-3.5 px-4 text-left text-sm font-semibold text-gray-700">
+                      Last Name
+                    </th>
+                    <th className="py-3.5 px-4 text-center text-sm font-semibold text-gray-700">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
 
-                <td className="py-2 px-4 border-b text-center">
-                  <div className="flex justify-center gap-3">
-                    {/* Edit button */}
-                    <button
-                      onClick={() => setSelectedUser(u)}
-                      className="text-blue-600 hover:text-blue-800"
-                    >
-                      <EditIcon size={18} />
-                    </button>
+                <tbody className="divide-y divide-gray-200">
+                  {users.map((u) => (
+                    <tr key={u.id} className="hover:bg-gray-50 transition-colors duration-150">
+                      <td className="py-3 px-4 text-sm text-gray-600">
+                        {u.id}
+                      </td>
+                      <td className="py-3 px-4 text-sm font-medium text-gray-900">
+                        {u.username}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600">
+                        {u.email}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600">
+                        {u.first_name}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600">
+                        {u.last_name}
+                      </td>
 
-                    {/* Delete button + confirmation */}
-                    <ConfirmDeleteUserDialog
-                      title="Delete User"
-                      description="Are you sure you want to delete this user? This action cannot be undone."
-                      onConfirm={() => handleDelete(u.id)}
-                    >
-                      <button className="text-red-600 hover:text-red-800">
-                        <Trash2Icon size={18} />
-                      </button>
-                    </ConfirmDeleteUserDialog>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                      <td className="py-3 px-4">
+                        <div className="flex justify-center gap-1">
+                          {/* Edit button */}
+                          <button
+                            onClick={() => setSelectedUser(u)}
+                            className="p-2 hover:bg-gray-100 rounded-md transition-colors duration-150"
+                          >
+                            <UserRoundPen size={26} className="text-green-500" />
+                          </button>
+
+                          {/* Delete button + confirmation */}
+                          <ConfirmDeleteUserDialog
+                            title="Delete User"
+                            description="Are you sure you want to delete this user? This action cannot be undone."
+                            onConfirm={() => handleDelete(u.id)}
+                          >
+                            <button className="p-2 hover:bg-red-50 rounded-md transition-colors duration-150">
+                              <Trash2Icon size={26} className="text-red-600 hover:text-red-600" />
+                            </button>
+                          </ConfirmDeleteUserDialog>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Update Modal */}
@@ -133,5 +169,5 @@ export default function UserTable() {
         />
       )}
     </div>
-  );
+  );  
 }

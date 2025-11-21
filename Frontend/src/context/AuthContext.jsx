@@ -1,5 +1,5 @@
 import { createContext, useContext, useState } from "react";
-import axios from "axios";
+import api from '../api'
 
 const AuthContext = createContext();
 
@@ -13,7 +13,7 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       // OPTIONAL: notify backend
-      await axios.post("/api/logout/", {}, {
+      await api.post("/api/logout/", {}, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         }

@@ -10,7 +10,7 @@ import {
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 
-export default function AlertDialog({ children, onConfirm }) {
+export default function AlertDialog({ title, description, children, onConfirm }) {
   return (
     <ShadAlertDialog>
       <AlertDialogTrigger asChild>
@@ -19,9 +19,9 @@ export default function AlertDialog({ children, onConfirm }) {
 
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Confirm Logout</AlertDialogTitle>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>
-            Are you sure you want to log out?
+            {description}
           </AlertDialogDescription>
         </AlertDialogHeader>
 

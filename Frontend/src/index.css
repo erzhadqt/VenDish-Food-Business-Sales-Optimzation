@@ -2,16 +2,12 @@
 @import 'tailwindcss';
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
+/* @custom-variant dark (&:is(.dark *)); */
 
 @theme {
   --font-poppins: "Poppins", sans-serif;
   --font-sans: "Poppins", sans-serif; /* if you want Poppins to replace your default sans */
 }
-
-/* *{
-    border: 1px solid red
-} */
 body{
     padding: 0;
     margin: 0;

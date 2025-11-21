@@ -8,6 +8,7 @@ import SalesAndReports from "./Pages/admin-pages/SalesAndReports";
 import CustomerFeedback from "./Pages/admin-pages/CustomerFeedback";
 import UserManagement from "./Pages/admin-pages/UserManagement";
 import Invoices from "./Pages/admin-pages/Invoices";
+import CMS from "./Pages/admin-pages/CMS";
 import Login from "./Pages/login-signup/Login";
 import Signup from "./Pages/login-signup/Signup";
 import ProtectedRoute from "./Components/ProtectedRoute";
@@ -52,6 +53,7 @@ function App() {
         	<Route path="/admin/customerFeedback" element={<CustomerFeedback />} />
         	<Route path="/admin/userManagement" element={<UserManagement />} />
         	<Route path="/admin/invoices" element={<Invoices />} />
+        	<Route path="/admin/cms" element={<CMS />} />
       	</Route>
 
 		<Route path="/admin/pos" element={<ProtectedRoute><Pos /></ProtectedRoute>} />

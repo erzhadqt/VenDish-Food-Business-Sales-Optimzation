@@ -24,6 +24,7 @@ export default function AddUserDialog({ onSaved, children }) {
 
     const formData = new FormData(e.target);
     const values = Object.fromEntries(formData);
+    console.log(values)
 
     try {
       await api.post("/firstapp/users/", values);
