@@ -19,7 +19,7 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path, include
 
-from firstapp.views import CreateUserView, UserViewSet, UserDetailView, HomePageViewSet, AboutPageViewSet, ContactPageViewSet
+from firstapp.views import CreateUserView, UserViewSet, UserDetailView, HomePageViewSet, AboutPageViewSet, ContactPageViewSet, CurrentUserView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 
@@ -30,13 +30,12 @@ urlpatterns = [
     path('firstapp/token/refresh/', TokenRefreshView.as_view(), name='refresh'),
     path('firstapp-auth/', include('rest_framework.urls')),
 
-    # path("firstapp/users", UserViewSet.as_view({'get': 'list'})),
     path("firstapp/users/<int:pk>/", UserDetailView.as_view(), name="user-detail"),
-    # path("firstapp/user/delete/<int:pk>/", UserDelete.as_view(), name="delete-user"),
-    # path("firstapp/users/<int:pk>/", UserListView.as_view(), name="user-list"),
     # path('home/', HomePageViewSet.as_view()),
     # path('about/', AboutPageViewSet.as_view()),
     # path('contact/', ContactPageViewSet.as_view()),
+
+    path('firstapp/user/me/', CurrentUserView.as_view(), name='current_user'),
 
     path('firstapp/', include('firstapp.urls')),
 ]

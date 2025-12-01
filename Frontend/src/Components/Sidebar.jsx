@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -15,34 +15,35 @@ import {
   TicketPercent,
   ClipboardPenIcon
 } from 'lucide-react';
-
 import AlertDialog from "./AlertDialog";
 import { useAuth } from '../context/AuthContext';
 
-const Sidebar = () => {
-  const { logout } = useAuth();
+// Accept isExpanded and toggleSidebar as props
+const Sidebar = ({ isExpanded, toggleSidebar }) => {
+  const { logout, user } = useAuth(); 
+  const navigate = useNavigate();
+  
+  // Calculate minimized state based on the prop
+  const isMinimized = !isExpanded;
 
-  const navigate = useNavigate()
-  const [isMinimized, setIsMinimized] = useState(false);
-
-  const menu = [
-    { id: 'sales', icon: TrendingUp, label: 'Sales & Reports', path: '/admin/sales' },
-    { id: 'menu', icon: Menu, label: 'Menu & Products', path: '/admin/menu' },
-    { id: 'users', icon: Users, label: 'User Management', path: '/admin/userManagement' },
-    { id: 'promo-management', icon: TicketPercent, label: 'Promo Management', path: '/admin/promo-management' },
-    { id: 'costings', icon: ClipboardPenIcon, label: 'Costings', path: '/admin/costing-table' },
-    { id: 'feedback', icon: MessageSquare, label: 'Customer Feedback', path: '/admin/customerFeedback' },
-    { id: 'transaction', icon: FileText, label: 'Transaction', path: '/admin/transaction' },
-    { id: 'point-of-sale', icon: PresentationIcon, label: 'POS', path: '/admin/pos' },
+  const allMenuItems = [
+    { id: 'sales', icon: TrendingUp, label: 'Sales & Reports', path: '/admin/sales', restricted: true },
+    { id: 'menu', icon: Menu, label: 'Menu & Products', path: '/admin/menu', restricted: true },
+    { id: 'users', icon: Users, label: 'User Management', path: '/admin/userManagement', restricted: true },
+    { id: 'promo-management', icon: TicketPercent, label: 'Promo Management', path: '/admin/promo-management', restricted: true },
+    // { id: 'costings', icon: ClipboardPenIcon, label: 'Costings', path: '/admin/costing-table', restricted: true },
+    { id: 'feedback', icon: MessageSquare, label: 'Customer Feedback', path: '/admin/customerFeedback', restricted: true },
+    { id: 'transaction', icon: FileText, label: 'Transaction', path: '/admin/transaction', restricted: false },
+    { id: 'point-of-sale', icon: PresentationIcon, label: 'POS', path: '/admin/pos', restricted: false },
   ];
 
-  const cms = [
-    { id: 'cms', icon: Settings, label: 'CMS', path: '/admin/cms' }
-  ];
+  // const cms = [{ id: 'cms', icon: Settings, label: 'CMS', path: '/admin/cms', restricted: true }];
+
+  const visibleMenu = allMenuItems.filter(item => user?.is_superuser || !item.restricted);
+  // const visibleCMS = cms.filter(item => user?.is_superuser || !item.restricted);
 
   const renderNavItem = (item) => {
     const Icon = item.icon;
-
     return (
       <NavLink
         key={item.id}
@@ -58,11 +59,9 @@ const Sidebar = () => {
         <Icon className="w-5 h-5 shrink-0" />
         {!isMinimized && <span>{item.label}</span>}
 
-        {/* Tooltip when minimized */}
         {isMinimized && (
           <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 
-                           group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 
-                           transition-opacity duration-200">
+                          group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-200">
             {item.label}
           </div>
         )}
@@ -71,81 +70,51 @@ const Sidebar = () => {
   };
 
   return (
-    <div className={`h-screen flex flex-col bg-gray-100 border-r border-gray-200 shadow-sm transition-all duration-300 
-                     ${isMinimized ? 'w-20' : 'w-64'}`}>
-
-      {/* Header */}
-      <div className="px-4 py-5 border-b border-gray-200 flex items-center justify-between">
-        {!isMinimized && (
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-gray-100 rounded-lg">
-              <LayoutDashboard className="w-5 h-5 text-gray-700" />
+    // Width logic is removed here because parent in Layout handles it
+    <div className="flex flex-col h-full w-full bg-gray-100 border-r border-gray-200 shadow-sm">
+      
+      <div className="flex-1 overflow-y-auto">
+        <div className="px-4 py-5 border-b border-gray-200 flex items-center justify-between">
+          {!isMinimized && (
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gray-100 rounded-lg">
+                <LayoutDashboard className="w-5 h-5 text-gray-700" />
+              </div>
+              <div className="flex flex-col">
+                <h2 className="text-lg font-semibold text-gray-800">Dashboard</h2>
+                <span className="text-xs text-gray-500 uppercase font-bold">
+                  {user?.is_superuser ? 'Administrator' : 'Staff'}
+                </span>
+              </div>
             </div>
-            <h2 className="text-lg font-semibold text-gray-800">Dashboard</h2>
-          </div>
-        )}
-
-        <button
-          onClick={() => setIsMinimized(!isMinimized)}
-          className={`p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200 ${isMinimized ? 'mx-auto' : ''}`}
-        >
-          {isMinimized ? (
-            <ChevronRight className="w-5 h-5 text-gray-600" />
-          ) : (
-            <ChevronLeft className="w-5 h-5 text-gray-600" />
           )}
-        </button>
+
+          <button
+            onClick={toggleSidebar}
+            className={`p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200 ${isMinimized ? 'mx-auto' : ''}`}
+          >
+            {isMinimized ? <ChevronRight className="w-5 h-5 text-gray-600" /> : <ChevronLeft className="w-5 h-5 text-gray-600" />}
+          </button>
+        </div>
+
+        <nav className="px-3 py-4 space-y-1">
+          {visibleMenu.map(renderNavItem)}
+        </nav>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-3 py-4">
-        <div className="space-y-1">
-          {menu.map(renderNavItem)}
-        </div>
-
-        {/* CMS Section */}
-        <div className="mt-8">
-          {!isMinimized && (
-            <div className="px-3 mb-2">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                Content Management
-              </p>
-            </div>
-          )}
-
-          {isMinimized && <div className="border-t border-gray-200 my-4" />}
-
-          <div className="space-y-1">
-            {cms.map(renderNavItem)}
-          </div>
-        </div>
-      </nav>
-
-      {/* Logout */}
-      <div className="p-4 border-t border-gray-200 inset-0">
+      <div className="p-4 border-t border-gray-200">
         <AlertDialog onConfirm={logout} title="Confirm Logout" description="Are you sure you want to Logout?">
           <button
-            className={`
-              w-full flex items-center gap-2 px-4 py-2.5 bg-gray-900 hover:bg-gray-800 text-white 
-              rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm group relative
-              ${isMinimized ? 'justify-center' : 'justify-center'}
-            `}
+            className={`w-full flex items-center gap-2 px-4 py-2.5 bg-gray-900 hover:bg-gray-800 text-white 
+                        rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm group relative
+                        ${isMinimized ? 'justify-center' : 'justify-center'}`}
             title={isMinimized ? 'Logout' : ''}
           >
             <LogOut className="w-4 h-4" />
             {!isMinimized && <span>Logout</span>}
-
-            {/* Tooltip if minimized */}
-            {isMinimized && (
-              <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded 
-                              opacity-0 group-hover:opacity-100 whitespace-nowrap z-50 transition-opacity">
-                Logout
-              </div>
-            )}
           </button>
         </AlertDialog>
       </div>
-
     </div>
   );
 };

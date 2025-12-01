@@ -3,17 +3,13 @@ import { CirclePowerIcon, Tag, Trash2, ShoppingBag } from "lucide-react";
 import { FaCheckCircle, FaExclamationCircle } from "react-icons/fa"; 
 
 import api from "../../api";
-import Header from "../../Components/Header";
 
-import AlertDialog from "../../Components/AlertDialog";
-import ReceiptDialog from "../../Components/ReceiptDialog";
+import ReceiptModal2 from "../../Components/ReceiptModal2";
 import VoidConfirmDialog from "../../Components/VoidConfirmDialog"; 
 import { SelectDiscount } from "../../Components/SelectDiscount";
 import { useAuth } from "../../context/AuthContext";
 
 const Pos = () => {
-  const { logout } = useAuth();
-
   // -------------------------------
   // States
   // -------------------------------
@@ -186,7 +182,7 @@ const Pos = () => {
     0
   );
   
-  const vat = subTotal * 0.12;
+  const vat = subTotal - (subTotal * .88);
   
   const standardDiscount =
     selectedDiscount === "senior"
@@ -196,16 +192,13 @@ const Pos = () => {
       : 0;
 
   const couponDiscount = appliedCoupon ? parseFloat(appliedCoupon.rate) : 0;
-  const tempTotal = subTotal + vat - standardDiscount - couponDiscount;
+  const tempTotal = subTotal - standardDiscount - couponDiscount;
   const total = tempTotal > 0 ? tempTotal : 0;
   const change = cash ? (cash - total).toFixed(2) : 0;
 
   // -------------------------------
-  // 5. NEW FUNCTION: Handle Void Current Order (Trash Icon)
+  // 5. Handle Void Current Order
   // -------------------------------
-  // 
-
-
   const handleVoidCurrentOrder = async () => {
     if (cartItems.length === 0) return;
 
@@ -227,23 +220,16 @@ const Pos = () => {
     };
 
     try {
-        // 1. Create Receipt
-        console.log("Creating receipt for void...");
         const createResponse = await api.post("/firstapp/receipt/", payload);
-        
-        // Handle both possible ID locations
         const newReceiptId = createResponse.data.receipt_id || createResponse.data.id;
-        console.log("Receipt Created. ID:", newReceiptId);
 
         if (!newReceiptId) throw new Error("Failed to get Receipt ID");
 
-        // 2. Void Receipt
-        console.log("Voiding Receipt ID:", newReceiptId);
         await api.post(`/firstapp/receipt/${newReceiptId}/void/`);
 
         alert("Order successfully Cancelled and Voided to History.");
 
-        // 3. Clear State
+        // Clear State
         setCartItems([]);
         setCash("");
         setAppliedCoupon(null);
@@ -255,7 +241,6 @@ const Pos = () => {
 
     } catch (error) {
         console.error("Void Process Failed:", error);
-        // If the Void step failed, the receipt exists but is COMPLETED.
         alert("Warning: Receipt was created but Void failed. Please void manually in History.");
     } finally {
         setLoading(false);
@@ -287,22 +272,10 @@ const Pos = () => {
     };
 
     try {
-      // 1. Send Data to Backend
       const response = await api.post("/firstapp/receipt/", payload);
       setReceiptDetails(response.data);
-      
-      // 2. Clear Cart & State
-      setCartItems([]);
-      setCash("");
-      setAppliedCoupon(null);
-      setPromoCode("");
-      setCouponError("");
-
-      // 3. IMPORTANT: Re-fetch Products to sync stocks for the next order
-      // This ensures the POS screen shows the real remaining stock from the DB
-      const prodResponse = await api.get("/firstapp/products/");
-      setProducts(prodResponse.data);
-
+      // NOTE: We do NOT clear cart items here anymore. 
+      // We wait until the user closes the Receipt Modal (via onConfirm)
     } catch (error) {
       console.error("Submit failed:", error);
       alert("Failed to submit order. Please try again.");
@@ -311,12 +284,21 @@ const Pos = () => {
     }
   };
 
+  // 7. NEW: Reset after Printing/Closing Receipt
+  const handleResetOrder = () => {
+      setCartItems([]);
+      setCash("");
+      setAppliedCoupon(null);
+      setPromoCode("");
+      setCouponError("");
+      setReceiptDetails(null); // This closes the modal if you are controlling it via state
+  };
+
   // -------------------------------
   // UI
   // -------------------------------
   return (
     <div className="font-poppins bg-zinc-300 min-h-screen">
-      
 
       {/* Main layout grid */}
       <div className="flex flex-col lg:flex-row gap-6 justify-center items-start px-4 py-6">
@@ -387,8 +369,7 @@ const Pos = () => {
                     <ShoppingBag size={20} /> Current Order
                 </h3>
                 {cartItems.length > 0 && (
-                     <VoidConfirmDialog 
-                        // UPDATED: Now calls handleVoidCurrentOrder
+                      <VoidConfirmDialog 
                         onConfirm={handleVoidCurrentOrder} 
                         trigger={
                             <button className="text-red-500 hover:text-red-700 bg-red-50 p-2 rounded-lg transition-colors" title="Void Order">
@@ -544,7 +525,14 @@ const Pos = () => {
                 <span className={`font-bold text-lg ${change < 0 ? 'text-red-500' : 'text-gray-900'}`}>₱{change}</span>
             </div>
 
-            <ReceiptDialog title="Transaction Receipt" receiptDetails={receiptDetails}>
+            {/* UPDATED RECEIPT MODAL LOGIC: 
+               We pass the handleResetOrder function to onConfirm 
+            */}
+            <ReceiptModal2 
+                title="Receipt" 
+                receiptDetails={receiptDetails} 
+                onConfirm={handleResetOrder} // <--- This function clears the cart when clicked
+            >
                 <button
                 onClick={handleSubmitOrder}
                 disabled={loading || parseFloat(cash || 0) < total}
@@ -556,8 +544,7 @@ const Pos = () => {
                 >
                 {loading ? <span className="animate-spin">↻</span> : 'COMPLETE ORDER'}
                 </button>
-            </ReceiptDialog>
-
+            </ReceiptModal2>
           </div>
         </div> 
       </div>

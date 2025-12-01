@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import api from "../../api";
-import { EditIcon, Trash2Icon, PlusSquare, UserCogIcon, UserPlus, UserRoundPen } from "lucide-react";
+import { Trash2Icon, UserCogIcon, UserPlus, UserRoundPen } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import UpdateUserDialog from "../../Components/UpdateUserDialog";
 import ConfirmDeleteUserDialog from "../../Components/ConfirmDeleteUserDialog";
@@ -13,6 +14,9 @@ export default function UserTable() {
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const rowsPerPage = 5;
+
   const fetchUsers = async () => {
     setLoading(true);
     try {
@@ -20,8 +24,9 @@ export default function UserTable() {
       setUsers(res.data);
     } catch (err) {
       console.error("Failed to load users", err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -46,14 +51,22 @@ export default function UserTable() {
     }
   };
 
+  const totalPages = Math.ceil(users.length / rowsPerPage);
+  const paginatedUsers = users.slice(
+    (currentPage - 1) * rowsPerPage,
+    currentPage * rowsPerPage
+  );
+
+  const handlePrevPage = () => setCurrentPage((prev) => Math.max(prev - 1, 1));
+  const handleNextPage = () =>
+    setCurrentPage((prev) => Math.min(prev + 1, totalPages));
+
   return (
-    <div className="w-full min-h-screen py-6">
+    <div className="w-full py-6">
       <div className="max-w-7xl mx-auto px-2">
-        {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <h1 className="flex items-center gap-3 text-3xl font-bold text-gray-900">
-            <UserCogIcon size={32} className="text-gray-700" /> 
-            User Management
+            <UserCogIcon size={32} className="text-gray-700" /> User Management
           </h1>
 
           <AddUserDialog onSaved={fetchUsers}>
@@ -63,26 +76,22 @@ export default function UserTable() {
           </AddUserDialog>
         </div>
 
-        {/* Success Alert */}
         {showSuccess && (
           <div className="mb-6">
             <SuccessAlert />
           </div>
         )}
 
-        {/* Loading */}
         {loading && (
           <p className="text-gray-500 text-center py-8">Loading...</p>
         )}
 
-        {/* No Users */}
         {!loading && users.length === 0 && (
           <div className="text-center py-16">
             <p className="text-gray-400 text-lg">No users found.</p>
           </div>
         )}
 
-        {/* USER TABLE */}
         {!loading && users.length > 0 && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <div className="overflow-x-auto">
@@ -98,6 +107,12 @@ export default function UserTable() {
                     <th className="py-3.5 px-4 text-left text-sm font-semibold text-gray-700">
                       Email
                     </th>
+                    {/* <th className="py-3.5 px-4 text-left text-sm font-semibold text-gray-700">
+                      Phone
+                    </th>
+                    <th className="py-3.5 px-4 text-left text-sm font-semibold text-gray-700">
+                      Address
+                    </th> */}
                     <th className="py-3.5 px-4 text-left text-sm font-semibold text-gray-700">
                       First Name
                     </th>
@@ -109,10 +124,12 @@ export default function UserTable() {
                     </th>
                   </tr>
                 </thead>
-
                 <tbody className="divide-y divide-gray-200">
-                  {users.map((u) => (
-                    <tr key={u.id} className="hover:bg-gray-50 transition-colors duration-150">
+                  {paginatedUsers.map((u) => (
+                    <tr
+                      key={u.id}
+                      className="hover:bg-gray-50 transition-colors duration-150"
+                    >
                       <td className="py-3 px-4 text-sm text-gray-600">
                         {u.id}
                       </td>
@@ -122,31 +139,40 @@ export default function UserTable() {
                       <td className="py-3 px-4 text-sm text-gray-600">
                         {u.email}
                       </td>
+                      {/* <td className="py-3 px-4 text-sm text-gray-600">
+                        {u.phone}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600">
+                        {u.address}
+                      </td> */}
                       <td className="py-3 px-4 text-sm text-gray-600">
                         {u.first_name}
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-600">
                         {u.last_name}
                       </td>
-
                       <td className="py-3 px-4">
                         <div className="flex justify-center gap-1">
-                          {/* Edit button */}
                           <button
                             onClick={() => setSelectedUser(u)}
                             className="p-2 hover:bg-gray-100 rounded-md transition-colors duration-150"
                           >
-                            <UserRoundPen size={26} className="text-green-500" />
+                            <UserRoundPen
+                              size={26}
+                              className="text-green-500"
+                            />
                           </button>
 
-                          {/* Delete button + confirmation */}
                           <ConfirmDeleteUserDialog
                             title="Delete User"
                             description="Are you sure you want to delete this user? This action cannot be undone."
                             onConfirm={() => handleDelete(u.id)}
                           >
                             <button className="p-2 hover:bg-red-50 rounded-md transition-colors duration-150">
-                              <Trash2Icon size={26} className="text-red-600 hover:text-red-600" />
+                              <Trash2Icon
+                                size={26}
+                                className="text-red-600 hover:text-red-600"
+                              />
                             </button>
                           </ConfirmDeleteUserDialog>
                         </div>
@@ -156,11 +182,30 @@ export default function UserTable() {
                 </tbody>
               </table>
             </div>
+
+            <div className="flex justify-end items-center gap-2 p-4">
+              <button
+                onClick={handlePrevPage}
+                disabled={currentPage === 1}
+                className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-50"
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <span className="text-sm text-gray-600">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                onClick={handleNextPage}
+                disabled={currentPage === totalPages}
+                className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-50"
+              >
+                <ChevronRight size={20} />
+              </button>
+            </div>
           </div>
         )}
       </div>
 
-      {/* Update Modal */}
       {selectedUser && (
         <UpdateUserDialog
           user={selectedUser}
@@ -169,5 +214,5 @@ export default function UserTable() {
         />
       )}
     </div>
-  );  
+  );
 }

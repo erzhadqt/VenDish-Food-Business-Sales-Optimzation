@@ -38,6 +38,12 @@ class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = UserSerializer
     permission_classes = [IsAdminUser]  # Ensure the user has admin permissions
 
+class CurrentUserView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        serializer = UserSerializer(request.user)
+        return Response(serializer.data)
 
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all().order_by("-id")
@@ -48,7 +54,15 @@ class ProductViewSet(viewsets.ModelViewSet):
     search_fields = ['product_name']
     filterset_fields = ['category']
 
-
+    def get_permissions(self):
+        # Allow any authenticated user (Staff or Admin) to list/retrieve
+        if self.action in ['list', 'retrieve']:
+            permission_classes = [IsAuthenticated]
+        else:
+            # Only Admins can create, update, or delete
+            permission_classes = [IsAdminUser]
+        return [permission() for permission in permission_classes]
+    
 class ReceiptViewSet(viewsets.ModelViewSet):
     queryset = Receipt.objects.all().order_by('-created_at')
     serializer_class = ReceiptSerializer
@@ -144,7 +158,7 @@ class ReceiptViewSet(viewsets.ModelViewSet):
             return Response({"error": str(e)}, status=500)
 
 class CouponViewSet(viewsets.ModelViewSet):
-    queryset = Coupon.objects.all()
+    queryset = Coupon.objects.all().order_by('-created_at')
     serializer_class = CouponSerializer
     # Default: Everyone can see the list of coupons
     permission_classes = [AllowAny]
@@ -165,8 +179,9 @@ class CouponViewSet(viewsets.ModelViewSet):
              )
 
         # 2. Assign the User and Change Status
-        # Note: You need to make sure your Model has 'claimed_by'
-
+        # --- FIXED: ADDED LINE TO SET claimed_by ---
+        coupon.claimed_by = request.user 
+        
         coupon.status = Coupon.Status.CLAIMED
         
         # 3. Save to Database
@@ -197,6 +212,7 @@ class DailySalesReportViewSet(viewsets.ReadOnlyModelViewSet):
     Supports filtering by date range.
     """
     serializer_class = DailySalesReportSerializer
+    permission_classes = [IsAdminUser]
 
     def get_queryset(self):
         """

@@ -17,22 +17,37 @@ import { Button } from "@/components/ui/button";
 export default function AddUserDialog({ onSaved, children }) {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false); // control dialog state
+  
+  // 1. New state for the checkbox
+  const [isStaff, setIsStaff] = useState(false);
 
+  // 2. Modified handleSubmit to include is_staff state
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     const formData = new FormData(e.target);
     const values = Object.fromEntries(formData);
-    console.log(values)
+    
+    // Add the is_staff status explicitly as a boolean
+    values.is_staff = isStaff;
+    
+    // Log the final payload to verify
+    console.log(values);
 
     try {
+      // Your backend serializer is correctly set up to handle the "is_staff" field.
       await api.post("/firstapp/users/", values);
-      onSaved();        // refresh parent list
-      setOpen(false);   // CLOSE the modal after success
+      
+      // Reset state and close on success
+      setIsStaff(false); // Reset checkbox state
+      onSaved();        
+      setOpen(false);   
     } catch (error) {
-      console.error("Failed to add user:", error);
-      alert("Failed to add user. Please try again.");
+      console.error("Failed to add user:", error.response?.data || error);
+      // Attempt to show detailed error if available
+      const errorDetail = error.response?.data ? JSON.stringify(error.response.data) : "Please check console for details.";
+      alert(`Failed to add user: ${errorDetail}`);
     }
 
     setLoading(false);
@@ -52,28 +67,42 @@ export default function AddUserDialog({ onSaved, children }) {
 
         <form onSubmit={handleSubmit} className="grid gap-4 mt-2">
           <div className="grid gap-2">
-            <Label>Username</Label>
-            <Input name="username" required />
+            <Label htmlFor="username">Username</Label>
+            <Input name="username" id="username" required />
           </div>
 
           <div className="grid gap-2">
-            <Label>First Name</Label>
-            <Input name="first_name" required />
+            <Label htmlFor="first_name">First Name</Label>
+            <Input name="first_name" id="first_name" required />
           </div>
 
           <div className="grid gap-2">
-            <Label>Last Name</Label>
-            <Input name="last_name" required />
+            <Label htmlFor="last_name">Last Name</Label>
+            <Input name="last_name" id="last_name" required />
           </div>
 
           <div className="grid gap-2">
-            <Label>Email</Label>
-            <Input name="email" type="email" required />
+            <Label htmlFor="email">Email</Label>
+            <Input name="email" id="email" type="email" required />
           </div>
 
           <div className="grid gap-2">
-            <Label>Password</Label>
-            <Input name="password" type="password" required />
+            <Label htmlFor="password">Password</Label>
+            <Input name="password" id="password" type="password" required />
+          </div>
+
+          {/* 3. Updated Checkbox Implementation */}
+          <div className="flex items-center justify-start gap-3">
+            <input 
+                type="checkbox"
+                id="is_staff_checkbox"
+                checked={isStaff} 
+                onChange={() => setIsStaff(!isStaff)}
+                className="h-4 w-4 rounded text-blue-600 focus:ring-blue-500" // Tailwind classes for checkbox styling
+            />
+            <Label htmlFor="is_staff_checkbox" className="select-none cursor-pointer">
+                Is Staff? (Grants POS and limited admin access)
+            </Label>
           </div>
 
           <DialogFooter>
