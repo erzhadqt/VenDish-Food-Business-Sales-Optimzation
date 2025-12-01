@@ -11,7 +11,9 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  PresentationIcon
+  PresentationIcon,
+  TicketPercent,
+  ClipboardPenIcon
 } from 'lucide-react';
 
 import AlertDialog from "./AlertDialog";
@@ -26,10 +28,12 @@ const Sidebar = () => {
   const menu = [
     { id: 'sales', icon: TrendingUp, label: 'Sales & Reports', path: '/admin/sales' },
     { id: 'menu', icon: Menu, label: 'Menu & Products', path: '/admin/menu' },
-    { id: 'invoices', icon: FileText, label: 'Invoices', path: '/admin/invoices' },
-    { id: 'feedback', icon: MessageSquare, label: 'Customer Feedback', path: '/admin/customerFeedback' },
     { id: 'users', icon: Users, label: 'User Management', path: '/admin/userManagement' },
-    { id: 'point-of-sale', icon: PresentationIcon, label: 'POS', path: '/admin/pos' }
+    { id: 'promo-management', icon: TicketPercent, label: 'Promo Management', path: '/admin/promo-management' },
+    { id: 'costings', icon: ClipboardPenIcon, label: 'Costings', path: '/admin/costing-table' },
+    { id: 'feedback', icon: MessageSquare, label: 'Customer Feedback', path: '/admin/customerFeedback' },
+    { id: 'transaction', icon: FileText, label: 'Transaction', path: '/admin/transaction' },
+    { id: 'point-of-sale', icon: PresentationIcon, label: 'POS', path: '/admin/pos' },
   ];
 
   const cms = [
@@ -67,7 +71,7 @@ const Sidebar = () => {
   };
 
   return (
-    <div className={`flex flex-col bg-gray-100 border-r border-gray-200 h-full shadow-sm transition-all duration-300 
+    <div className={`h-screen flex flex-col bg-gray-100 border-r border-gray-200 shadow-sm transition-all duration-300 
                      ${isMinimized ? 'w-20' : 'w-64'}`}>
 
       {/* Header */}

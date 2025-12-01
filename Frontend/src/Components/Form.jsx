@@ -26,7 +26,7 @@ function Form({ route, method }) {
 				const res = await api.post(route, { username, password })
 				localStorage.setItem(ACCESS_TOKEN, res.data.access);
 				localStorage.setItem(REFRESH_TOKEN, res.data.refresh);
-				navigate("/admin/menu")
+				navigate("/admin/sales")
 			}
 
 			else if (method === "signup") {
@@ -91,11 +91,11 @@ function Form({ route, method }) {
 					}
 
 
-					<button type="submit" className="w-full bg-[linear-gradient(to_right,#D91616,#FF4D50)] hover:bg-[linear-gradient(to_right,#FF4D50,#D91616)] text-white font-semibold py-2 rounded-lg transition-all duration-300 mt-4 cursor-pointer">
+					<button type="submit" className="w-full bg-[linear-gradient(to_right,#D91616,#FF4D50)] hover:bg-[linear-gradient(to_right,#FF4D50,#D91616)] text-white font-semibold py-2 rounded-lg transition-all duration-300 mt-4 mb-7 cursor-pointer">
 						{name}
 					</button>
 
-					{
+					{/* {
 						method === "login" ? (
 							<p className="text-center text-sm text-gray-700 mt-4">
 								Don’t have an account?{" "}
@@ -111,14 +111,14 @@ function Form({ route, method }) {
 								</button>
 							</p>
 						)
-					}
+					} */}
 
 
 
 				</form>
 				<Link
 					to={"/"}
-					className="absolute bottom-4 left-4 flex items-center gap-2 text-black hover:text-blue-500 transition-colors duration-200 sm:bottom-6 sm:left-6"
+					className="absolute bottom-2 left-4 flex items-center gap-2 text-black hover:text-gray-800 transition-colors duration-200 sm:bottom-6 sm:left-6"
 				>
 					<FaArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
 					<span className="font-semibold text-base sm:text-lg">Back</span>

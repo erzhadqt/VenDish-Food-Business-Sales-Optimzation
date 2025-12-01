@@ -8,7 +8,6 @@ import EditProductDialog from "../../Components/EditProductDialog";
 import SuccessAlert from "../../Components/SuccessAlert";
 import DeleteConfirmDialog from "../../Components/DeleteConfirmDialog";
 import AddProductDialog from "../../Components/AddProductDialog";
-import DiscountDialog from "../../Components/DiscountDialog";
 
 function ProductList() {
   const [products, setProducts] = useState([]);
@@ -80,19 +79,13 @@ function ProductList() {
   };
 
   return (
-    <div className="w-full min-h-screen bg-gray-100 p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="w-full min-h-screen p-4">
+      <div className="max-w-8xl mx-auto p-2">
         {/* Header */}
         <nav className="flex items-center justify-between mb-8">
           <h1 className="flex items-center gap-2 text-3xl font-bold text-gray-900"><ListIcon size={26}/> Product List</h1>
 
           <div className="flex gap-2" >
-            <DiscountDialog>
-              <button className="flex gap-2 items-center bg-white hover:bg-gray-200 text-zinc-700 px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-md border border-gray-200">
-                <TicketPercentIcon size={22} className="text-green-500"/> Discount
-              </button>
-            </DiscountDialog>
-            
             <AddProductDialog onSaved={handleUpdatedProduct}>
               <button className="flex gap-2 items-center bg-gray-900 hover:bg-gray-700 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm">
                 <PlusSquareIcon size={22} /> Product
@@ -134,7 +127,7 @@ function ProductList() {
           {products.map((p) => (
             <div
               key={p.id}
-              className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 p-5 border border-gray-200 flex flex-col"
+              className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 p-3 border border-gray-200 flex flex-col"
             >
               {/* Action buttons */}
               <div className="flex justify-end mb-1 -mt-3 ">
@@ -157,16 +150,16 @@ function ProductList() {
               </div>
 
               {p.image ? (
-				<img
-					src={p.image}
-					alt={p.product_name}
-					className="w-full h-50 object-cover shadow-md border border-gray-100 rounded-md mb-3"
-				/>
-				) : (
-				<div className="w-full h-40 bg-gray-200 rounded-md mb-3 flex items-center justify-center text-gray-500">
-					No Image
-				</div>
-				)}
+                <img
+                  src={p.image}
+                  alt={p.product_name}
+                  className="w-full h-50 object-cover shadow-md border-2 border-gray-300 rounded-md mb-3"
+                />
+                ) : (
+                <div className="w-full h-40 bg-gray-200 rounded-md mb-3 flex items-center justify-center text-gray-500">
+                  No Image
+                </div>
+                )}
 
 
               {/* Product info */}

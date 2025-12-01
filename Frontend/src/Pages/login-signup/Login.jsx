@@ -2,7 +2,7 @@ import React from 'react'
 import Form from '../../Components/Form'
 const Login = () => {
 
-  return <Form route="firstapp/token" method="login" />
+  return <Form route="firstapp/token/" method="login" />
   
 }
 

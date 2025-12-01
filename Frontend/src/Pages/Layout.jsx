@@ -12,9 +12,11 @@ const Layout = () => {
         </header>
 
         <div className="flex">
+          <div className=''>
             <Sidebar />
+          </div>
 
-            <main className="w-screen bg-gray-100">
+            <main className="w-screen bg-gray-200">
                 <Outlet />
             </main>
         </div>

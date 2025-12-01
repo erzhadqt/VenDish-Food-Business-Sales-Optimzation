@@ -1,7 +1,8 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
+from django.db import transaction
 
-from .models import Product, Costing, Receipt, ReceiptItem, Discount, Feedback, HomePage, AboutPage, ContactPage
+from .models import Product, Costing, Receipt, ReceiptItem, Coupon, Feedback, HomePage, AboutPage, ContactPage, DailySalesReport
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -28,32 +29,92 @@ class CostingSerializer(serializers.ModelSerializer):
         model = Costing
         fields = '__all__'
 
+class CouponSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.product_name', read_only=True)
+
+    class Meta:
+        model = Coupon
+        fields = '__all__'
+
 class ReceiptItemSerializer(serializers.ModelSerializer):
+    # ReadOnlyField looks for a property/method on the model with the same name.
+    # This grabs the @property subtotal from your ReceiptItem model.
+    subtotal = serializers.ReadOnlyField() 
+
     class Meta:
         model = ReceiptItem
-        fields = ['id', 'product', 'product_name', 'price', 'quantity']
+        fields = ['id', 'product', 'product_name', 'price', 'quantity', 'subtotal', 'coupon',]
+        # 'product' is included so you can send the ID when creating, 
+        # but 'product_name' stores the snapshot of the name at time of purchase.
 
 class ReceiptSerializer(serializers.ModelSerializer):
-    items = ReceiptItemSerializer(many=True)  # Explicitly define the items field
+    items = ReceiptItemSerializer(many=True)
+    
+    # WRITE ONLY: The frontend sends the ID here when creating a receipt
+    coupon = serializers.PrimaryKeyRelatedField(
+        queryset=Coupon.objects.all(), 
+        required=False, 
+        allow_null=True, 
+        write_only=True
+    )
+
+    coupon_details = CouponSerializer(source='coupon', read_only=True)
 
     class Meta:
         model = Receipt
-        fields = ['id', 'subtotal', 'vat', 'total', 'cash_given', 'change', 'created_at', 'items']
+        fields = [
+            'id', 'subtotal', 'vat', 'total', 
+            'cash_given', 'change', 'created_at', 
+            'items', 
+            'coupon',
+            'coupon_details',
+            'status',
+            'void_reason'
+        ]
 
     def create(self, validated_data):
-        items_data = validated_data.pop("items")  # Extract items data
-        receipt = Receipt.objects.create(**validated_data)  # Create the receipt
+        items_data = validated_data.pop("items") 
+        
+        # Extract coupon if present
+        coupon = validated_data.get('coupon', None)
 
-        # Create ReceiptItem objects for each item in items_data
-        for item in items_data:
-            ReceiptItem.objects.create(receipt=receipt, **item)
+        with transaction.atomic():  
+            # 1. Create the Receipt
+            receipt = Receipt.objects.create(**validated_data)
+
+            # 2. Logic: If a coupon is used, mark it as Redeemed?
+            # (Optional: depends on your business logic)
+            if coupon and coupon.status == Coupon.Status.ACTIVE:
+                coupon.status = Coupon.Status.REDEEMED
+                coupon.save()
+
+            # 3. Create Items
+            items_to_create = []
+            for item_data in items_data:
+                # If specific items have their own coupons (from previous logic), keep them
+                # Otherwise, ReceiptItem creation is standard
+                items_to_create.append(ReceiptItem(receipt=receipt, **item_data))
+            
+            ReceiptItem.objects.bulk_create(items_to_create)
 
         return receipt
 
-class DiscountSerializer(serializers.ModelSerializer):
+class DailySalesReportSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Discount
-        fields = '__all__'
+        model = DailySalesReport
+        fields = [
+            'id', 
+            'report_date', 
+            'total_revenue', 
+            'total_cost', 
+            'net_profit', 
+            'total_orders', 
+            'voided_orders', 
+            'top_selling_product',
+            'updated_at'
+        ]
+        # 'read_only_fields' ensures the API cannot overwrite calculated data manually
+        read_only_fields = fields
 
 class FeedbackSerializer(serializers.ModelSerializer):
     class Meta:

@@ -47,8 +47,8 @@ export default function UserTable() {
   };
 
   return (
-    <div className="w-full min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="w-full min-h-screen py-6">
+      <div className="max-w-7xl mx-auto px-2">
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <h1 className="flex items-center gap-3 text-3xl font-bold text-gray-900">
