@@ -1,212 +1,221 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogTrigger,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RefreshCw } from "lucide-react"; // Icon for generator
-import api from "../api"; // Your API instance
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Wand2, Tag, Percent, Coins, Gift, ShoppingBasket, CalendarClock } from "lucide-react"; 
+import api from "../api"; 
 
-export default function AddDiscountDialog({ onSaved, children }) {
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [products, setProducts] = useState([]); // Store list of products for dropdown
-
-  // Form States
-  const [name, setName] = useState("");
+export default function AddDiscountDialog({ open, onOpenChange, onSaved, products = [] }) {
+  // --- Coupon State ---
   const [code, setCode] = useState("");
-  const [rate, setRate] = useState("");
-  const [selectedProduct, setSelectedProduct] = useState("");
-  const [expiration, setExpiration] = useState("");
+  
+  // --- Criteria (Rule) State ---
+  const [ruleName, setRuleName] = useState(""); 
+  const [discountType, setDiscountType] = useState("percentage"); 
+  const [discountValue, setDiscountValue] = useState("");
+  const [minSpend, setMinSpend] = useState("0");
+  const [selectedFreeProduct, setSelectedFreeProduct] = useState("");
+  const [targetProductId, setTargetProductId] = useState("all"); 
 
-  // 1. Fetch Products when dialog opens
-  // We need this so the user can select which product the coupon applies to
-  useEffect(() => {
-    if (open) {
-      const fetchProducts = async () => {
-        try {
-          // Adjust URL to match your actual product endpoint
-          const res = await api.get("/firstapp/products/"); 
-          setProducts(res.data); 
-        } catch (err) {
-          console.error("Failed to load products", err);
-        }
-      };
-      fetchProducts();
-    }
-  }, [open]);
+  // --- NEW: Date State ---
+  const [validFrom, setValidFrom] = useState("");
+  const [validTo, setValidTo] = useState("");
 
-  // 2. Random Code Generator Logic
+  const [loading, setLoading] = useState(false);
+
   const generateRandomCode = () => {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     let result = "";
-    // Generate 8 character code
     for (let i = 0; i < 8; i++) {
       result += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     setCode(result);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSave = async () => {
+    if(!code) return alert("Please enter a Coupon Code");
+    if(!ruleName) return alert("Please name this promotion rule");
+    if(discountType !== 'free_item' && !discountValue) return alert("Please enter a discount value");
+    if(discountType === 'free_item' && !selectedFreeProduct) return alert("Please select a free product");
+
     setLoading(true);
 
     try {
-      const payload = {
-        name: name,
-        code: code,
-        rate: parseFloat(rate),
-        product: selectedProduct, // This sends the Product ID
-        expiration: expiration, // Send datetime string
-        active: true,
+      // STEP 1: Create Criteria
+      const criteriaPayload = {
+        name: ruleName,
+        discount_type: discountType,
+        min_spend: parseFloat(minSpend) || 0,
+        discount_value: discountType === 'free_item' ? 0 : parseFloat(discountValue),
+        free_product: discountType === 'free_item' ? selectedFreeProduct : null,
+        target_product: targetProductId === "all" ? null : targetProductId,
+        
+        // --- NEW: Send Dates ---
+        // If empty string, send null so backend handles it as "Always valid"
+        valid_from: validFrom || null,
+        valid_to: validTo || null
       };
 
-      // Assuming your router is set to /api/coupons/
-      await api.post("/firstapp/coupons/", payload);
+      const criteriaRes = await api.post("/firstapp/coupons-criteria/", criteriaPayload);
+      const newCriteriaId = criteriaRes.data.id;
 
-      // Success
-      setLoading(false);
-      setOpen(false);
+      // STEP 2: Create Coupon
+      await api.post("/firstapp/coupons/", {
+        code: code.toUpperCase(),
+        criteria_id: newCriteriaId,
+        status: "Active"
+      });
+
+      onSaved(); 
+      onOpenChange(false);
       
       // Reset Form
-      setName("");
       setCode("");
-      setRate("");
-      setSelectedProduct("");
-      setExpiration("");
-      
-      // Refresh parent list
-      if (onSaved) onSaved();
+      setRuleName("");
+      setDiscountValue("");
+      setMinSpend("0");
+      setSelectedFreeProduct("");
+      setTargetProductId("all");
+      setValidFrom(""); // Reset Date
+      setValidTo("");   // Reset Date
 
     } catch (err) {
-      console.error("Failed to add coupon:", err.response?.data || err);
+      console.error(err);
+      alert("Error creating coupon. Code might already exist.");
+    } finally {
       setLoading(false);
-      alert("Failed to add coupon. check console for details.");
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{children}</DialogTrigger>
-
-      {/* Blurred Backdrop */}
-      {open && (
-        <div
-          className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
-          aria-hidden="true"
-        />
-      )}
-
-      <DialogContent className="sm:max-w-md z-50">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create New Discount</DialogTitle>
-          <DialogDescription>
-            Generate a code and link it to a product.
-          </DialogDescription>
+          <DialogTitle>Create Coupon</DialogTitle>
+          <DialogDescription>Define code, discount rules, and validity.</DialogDescription>
         </DialogHeader>
 
-        <form className="grid gap-4" onSubmit={handleSubmit}>
+        <div className="grid gap-6 py-4">
           
-          {/* 1. Coupon Name */}
-          <div className="grid gap-2">
-            <Label htmlFor="name">Campaign Name</Label>
-            <Input
-              id="name"
-              placeholder="e.g. Summer Sale"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
+          {/* SECTION 1: THE CODE */}
+          <div className="p-4 bg-gray-50 rounded-lg border border-gray-100 space-y-3">
+             <div className="flex items-center gap-2 mb-2">
+                <Tag className="w-4 h-4 text-blue-600"/>
+                <h3 className="font-semibold text-sm text-gray-700">1. Coupon Code</h3>
+             </div>
+             <div className="flex gap-2">
+               <Input 
+                 placeholder="e.g., SUMMER2024" 
+                 value={code} 
+                 onChange={(e) => setCode(e.target.value.toUpperCase())} 
+                 className="uppercase font-mono tracking-widest text-lg"
+               />
+               <Button variant="outline" size="icon" onClick={generateRandomCode} title="Generate Random">
+                 <Wand2 className="h-4 w-4" />
+               </Button>
+             </div>
           </div>
 
-          {/* 2. Code Generator */}
-          <div className="grid gap-2">
-            <Label htmlFor="code">Coupon Code</Label>
-            <div className="flex gap-2">
-              <Input
-                id="code"
-                placeholder="Click Generate →" 
-                value={code}
-                readOnly // User cannot type
-                required
-                // Visual styling to look 'locked'
-                className="uppercase font-mono bg-gray-100 text-gray-500 cursor-not-allowed focus-visible:ring-0" 
-              />
-              <Button 
-                type="button" 
-                variant="secondary" 
-                onClick={generateRandomCode}
-                title="Generate Random Code"
-                className="whitespace-nowrap"
-              >
-                <RefreshCw size={16} className="mr-2" /> Generate
-              </Button>
+          {/* SECTION 2: THE RULES */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 border-b pb-2">
+                <h3 className="font-semibold text-sm text-gray-700">2. Discount Rules</h3>
+            </div>
+
+            <div className="grid gap-2">
+                <Label>Promotion Name</Label>
+                <Input placeholder="e.g., Summer Sale" value={ruleName} onChange={(e) => setRuleName(e.target.value)}/>
+            </div>
+
+            <div className="grid gap-2">
+                <Label>Applicable Product</Label>
+                <Select value={targetProductId} onValueChange={setTargetProductId}>
+                    <SelectTrigger>
+                        <SelectValue placeholder="Select Product" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all"><span className="font-bold">Entire Order</span></SelectItem>
+                        {products.map(p => (
+                            <SelectItem key={p.id} value={String(p.id)}>{p.product_name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                    <Label>Discount Type</Label>
+                    <Select value={discountType} onValueChange={setDiscountType}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="percentage">Percentage</SelectItem>
+                            <SelectItem value="fixed">Fixed Amount</SelectItem>
+                            <SelectItem value="free_item">Free Item</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <div className="grid gap-2">
+                    <Label>{discountType === 'free_item' ? 'Select Item' : 'Value'}</Label>
+                    {discountType === 'free_item' ? (
+                        <Select value={selectedFreeProduct} onValueChange={setSelectedFreeProduct}>
+                            <SelectTrigger><SelectValue placeholder="Pick Item" /></SelectTrigger>
+                            <SelectContent>
+                                {products.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.product_name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    ) : (
+                        <Input type="number" placeholder="10" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} />
+                    )}
+                </div>
+            </div>
+
+            <div className="grid gap-2">
+                <Label>Minimum Spend</Label>
+                <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-gray-500">₱</span>
+                    <Input type="number" className="pl-7" value={minSpend} onChange={(e) => setMinSpend(e.target.value)}/>
+                </div>
             </div>
           </div>
 
-          {/* 3. Discount Rate */}
-          <div className="grid gap-2">
-            <Label htmlFor="rate">Discount Amount ($)</Label>
-            <Input
-              id="rate"
-              type="number"
-              step="0.01"
-              placeholder="0.00"
-              value={rate}
-              onChange={(e) => setRate(e.target.value)}
-              required
-            />
+          {/* SECTION 3: VALIDITY (NEW) */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 border-b pb-2">
+                <CalendarClock className="w-4 h-4 text-orange-600"/>
+                <h3 className="font-semibold text-sm text-gray-700">3. Validity Period</h3>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                    <Label>Valid From</Label>
+                    <Input 
+                        type="datetime-local" 
+                        value={validFrom} 
+                        onChange={(e) => setValidFrom(e.target.value)} 
+                    />
+                </div>
+                <div className="grid gap-2">
+                    <Label>Valid Until</Label>
+                    <Input 
+                        type="datetime-local" 
+                        value={validTo} 
+                        onChange={(e) => setValidTo(e.target.value)} 
+                    />
+                </div>
+            </div>
+            <p className="text-xs text-gray-500 italic">Leave blank for no expiration.</p>
           </div>
 
-          {/* 4. Product Selection */}
-          <div className="grid gap-2">
-            <Label htmlFor="product">Apply to Product</Label>
-            <select
-              id="product"
-              value={selectedProduct}
-              onChange={(e) => setSelectedProduct(e.target.value)}
-              required
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <option value="" disabled>Select a product...</option>
-              {products.map((p) => (
-                // Assuming your product object has 'id' and 'product_name'
-                <option key={p.id} value={p.id}>
-                  {p.product_name || p.name} 
-                </option>
-              ))}
-            </select>
-          </div>
+        </div>
 
-          {/* 5. Expiration Date */}
-          <div className="grid gap-2">
-            <Label htmlFor="expiration">Expiration Date</Label>
-            <Input
-              id="expiration"
-              type="datetime-local"
-              value={expiration}
-              onChange={(e) => setExpiration(e.target.value)}
-              required
-            />
-          </div>
-
-          <DialogFooter className="flex justify-end gap-2 mt-4">
-            <DialogClose asChild>
-              <Button type="button" variant="outline">Cancel</Button>
-            </DialogClose>
-            <Button type="submit" disabled={loading}>
-              {loading ? "Creating..." : "Create Coupon"}
-            </Button>
-          </DialogFooter>
-        </form>
+        <DialogFooter>
+           <Button onClick={handleSave} disabled={loading} className="w-full sm:w-auto">
+             {loading ? "Creating..." : "Create Coupon"}
+           </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

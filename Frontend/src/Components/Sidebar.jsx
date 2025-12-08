@@ -18,12 +18,10 @@ import {
 import AlertDialog from "./AlertDialog";
 import { useAuth } from '../context/AuthContext';
 
-// Accept isExpanded and toggleSidebar as props
 const Sidebar = ({ isExpanded, toggleSidebar }) => {
   const { logout, user } = useAuth(); 
   const navigate = useNavigate();
   
-  // Calculate minimized state based on the prop
   const isMinimized = !isExpanded;
 
   const allMenuItems = [
@@ -37,10 +35,10 @@ const Sidebar = ({ isExpanded, toggleSidebar }) => {
     { id: 'point-of-sale', icon: PresentationIcon, label: 'POS', path: '/admin/pos', restricted: false },
   ];
 
-  // const cms = [{ id: 'cms', icon: Settings, label: 'CMS', path: '/admin/cms', restricted: true }];
+  const cms = [{ id: 'cms', icon: Settings, label: 'CMS', path: '/admin/cms', restricted: true }];
 
   const visibleMenu = allMenuItems.filter(item => user?.is_superuser || !item.restricted);
-  // const visibleCMS = cms.filter(item => user?.is_superuser || !item.restricted);
+  const visibleCMS = cms.filter(item => user?.is_superuser || !item.restricted);
 
   const renderNavItem = (item) => {
     const Icon = item.icon;
@@ -70,7 +68,6 @@ const Sidebar = ({ isExpanded, toggleSidebar }) => {
   };
 
   return (
-    // Width logic is removed here because parent in Layout handles it
     <div className="flex flex-col h-full w-full bg-gray-100 border-r border-gray-200 shadow-sm">
       
       <div className="flex-1 overflow-y-auto">
@@ -98,7 +95,16 @@ const Sidebar = ({ isExpanded, toggleSidebar }) => {
         </div>
 
         <nav className="px-3 py-4 space-y-1">
+          {/* 1. Render Main Menu Items */}
           {visibleMenu.map(renderNavItem)}
+
+          {/* 2. Divider (Only shows if there are CMS items to show) */}
+          {visibleCMS.length > 0 && (
+             <div className="my-2 border-t border-gray-300/50 mx-2" />
+          )}
+
+          {/* 3. Render CMS Items */}
+          {visibleCMS.map(renderNavItem)}
         </nav>
       </div>
 

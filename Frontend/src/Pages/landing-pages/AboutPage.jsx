@@ -1,92 +1,109 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Star, Quote, Heart } from 'lucide-react';
 import Navigation from '../../Components/Navigation';
 import Footer from '../../Components/Footer';
 
+// 1. Map Icon Strings to Components
+const ICON_MAP = {
+  'Heart': Heart,
+  'Star': Star,
+  'Quote': Quote
+};
+
+// 2. Default Data
+const DEFAULT_DATA = {
+  header: {
+    line1: "WE'RE MORE",
+    line1Highlight: "THAN",
+    line1End: "JUST A",
+    line1Highlight2: "PLACE TO EAT,",
+    line2: "WE'RE A",
+    line2Highlight: "TASTE",
+    line2End: "OF",
+    line2Highlight2: "HOME."
+  },
+  values: [
+    { title: 'MALASAKIT', desc: 'Serving with genuine care and compassion', iconName: 'Heart' },
+    { title: 'SARAP', desc: 'Authentic flavors that remind you of home', iconName: 'Star' },
+    { title: 'TRADITION', desc: 'Recipes passed down through generations', iconName: 'Quote' }
+  ],
+  story: {
+    title: "Our Story",
+    p1: "Inspired by the warmth of Filipino karinderyas and the love of home-cooked meals, we bring you the authentic flavors of pinoy bayan cuisine. Every dish is prepared with care, using traditional recipes passed down through generations, so you can enjoy the comforting taste of lola's cooking in every bite.",
+    p2: "Our journey started with a simple mission: to serve delicious, affordable, and hearty meals that bring people together. Whether you're craving classic adobo, sizzling sisig, or a hearty bowl of sinigang, we're here to make every meal feel like a celebration of Filipino culture and community.",
+    footer: "Masarap, malasakit, tulad ng pamilya!"
+  },
+  testimonials: [
+    { text: "Kuya Vince Karinderya the best karinderya I've ever been to! All the food there is so delicious and brings back childhood memories! Love it!", author: "ANGEL GARCIA", role: "REGULAR CUSTOMER" },
+    { text: "Amazing food and great service! The sisig reminds me of home. Will definitely come back again!", author: "MARIA SANTOS", role: "LOCAL RESIDENT" },
+    { text: "Best Filipino food in town! The adobo is perfectly cooked and the portions are generous. Truly feels like home!", author: "JUAN DELA CRUZ", role: "FOOD ENTHUSIAST" }
+  ]
+};
+
 const AboutPage = () => {
   const [currentTestimonial, setCurrentTestimonial] = useState(0);
+  const [content, setContent] = useState(DEFAULT_DATA);
 
-  const testimonials = [
-    {
-      text: "Kuya Vince Karinderya the best karinderya I've ever been to! All the food there is so delicious and brings back childhood memories! Love it!",
-      author: "ANGEL GARCIA",
-      role: "REGULAR CUSTOMER"
-    },
-    {
-      text: "Amazing food and great service! The sisig reminds me of home. Will definitely come back again!",
-      author: "MARIA SANTOS",
-      role: "LOCAL RESIDENT"
-    },
-    {
-      text: "Best Filipino food in town! The adobo is perfectly cooked and the portions are generous. Truly feels like home!",
-      author: "JUAN DELA CRUZ",
-      role: "FOOD ENTHUSIAST"
+  // 3. Load from LocalStorage
+  useEffect(() => {
+    const savedData = localStorage.getItem('aboutContent');
+    if (savedData) {
+      try {
+        setContent(JSON.parse(savedData));
+      } catch (e) {
+        console.error("Error loading CMS data", e);
+      }
     }
-  ];
+  }, []);
 
   return (
     <div className="w-full min-h-screen bg-linear-to-b from-white via-red-50 to-white pt-40">
       <Navigation />
       <div className="max-w-7xl mx-auto px-6 animate-fade-in">
 
-        {/* HEADER SECTION */}
+        {/* HEADER SECTION - CMS Controlled */}
         <div className="text-center space-y-4">
           <h1 className="text-3xl sm:text-5xl lg:text-6xl font-bold leading-tight">
-            WE'RE MORE <span className="text-red-600">THAN</span> JUST A{" "}
-            <span className="text-red-600">PLACE TO EAT,</span>
+            {content.header.line1} <span className="text-red-600">{content.header.line1Highlight}</span> {content.header.line1End}{" "}
+            <span className="text-red-600">{content.header.line1Highlight2}</span>
           </h1>
           <h2 className="text-3xl sm:text-5xl lg:text-6xl font-bold">
-            WE'RE A <span className="text-red-600">TASTE</span> OF{" "}
-            <span className="text-red-600">HOME.</span>
+            {content.header.line2} <span className="text-red-600">{content.header.line2Highlight}</span> {content.header.line2End}{" "}
+            <span className="text-red-600">{content.header.line2Highlight2}</span>
           </h2>
         </div>
 
-        {/* VALUES SECTION */}
+        {/* VALUES SECTION - CMS Controlled */}
         <div className="max-w-5xl mx-auto text-center pt-20">
           <div className="grid sm:grid-cols-3 gap-8 mb-12">
-            {[
-              { icon: Heart, title: 'MALASAKIT', desc: 'Serving with genuine care and compassion' },
-              { icon: Star, title: 'SARAP', desc: 'Authentic flavors that remind you of home' },
-              { icon: Quote, title: 'TRADITION', desc: 'Recipes passed down through generations' }
-            ].map(({ icon: Icon, title, desc }, i) => (
-              <div key={i} className="space-y-3">
-                <div className="bg-red-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto">
-                  <Icon className="text-red-600" size={30} />
+            {content.values.map((val, i) => {
+              const Icon = ICON_MAP[val.iconName] || Heart;
+              return (
+                <div key={i} className="space-y-3">
+                  <div className="bg-red-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto">
+                    <Icon className="text-red-600" size={30} />
+                  </div>
+                  <h3 className="font-bold text-lg text-gray-900">{val.title}</h3>
+                  <p className="text-gray-600 text-sm max-w-xs mx-auto">{val.desc}</p>
                 </div>
-                <h3 className="font-bold text-lg text-gray-900">{title}</h3>
-                <p className="text-gray-600 text-sm max-w-xs mx-auto">{desc}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
-          {/* OUR STORY */}
+          {/* OUR STORY - CMS Controlled */}
           <div className="bg-white rounded-2xl p-8 sm:p-10 shadow-lg border border-red-200 text-gray-700 text-base sm:text-lg leading-relaxed space-y-5">
             <h3 className="text-center text-xl sm:text-2xl font-semibold text-gray-900 mb-4">
-              Our Story
+              {content.story.title}
             </h3>
-            <p>
-              Inspired by the warmth of Filipino karinderyas and the love of home-cooked meals, 
-              we bring you the authentic flavors of{" "}
-              <span className="text-red-600 font-semibold">pinoy bayan cuisine</span>. 
-              Every dish is prepared with care, using traditional recipes passed down through generations, 
-              so you can enjoy the comforting taste of lola's cooking in every bite.
-            </p>
-            <p>
-              Our journey started with a simple mission: to serve{" "}
-              <span className="text-red-600 font-semibold">
-                delicious, affordable, and hearty meals
-              </span>{" "}
-              that bring people together. Whether you're craving classic adobo, sizzling sisig, 
-              or a hearty bowl of sinigang, we're here to make every meal feel like a celebration 
-              of Filipino culture and community.
-            </p>
+            <p>{content.story.p1}</p>
+            <p>{content.story.p2}</p>
             <p className="text-center text-red-600 font-semibold italic pt-4 border-t border-gray-200">
-              Masarap, malasakit, tulad ng pamilya!
+              {content.story.footer}
             </p>
           </div>
         </div>
 
-        {/* TESTIMONIAL SECTION */}
+        {/* TESTIMONIAL SECTION - CMS Controlled */}
         <div className="text-center space-y-8 pt-30">
           <div className="space-y-2">
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold">
@@ -98,26 +115,28 @@ const AboutPage = () => {
           </div>
 
           {/* ACTIVE TESTIMONIAL */}
-          <div className="bg-white rounded-3xl shadow-xl p-8 sm:p-10 border border-red-200 transition-all duration-300">
-            <div className="text-center space-y-6">
-              <div className="text-6xl text-red-600">"</div>
-              <p className="text-lg sm:text-xl text-gray-700 leading-relaxed italic max-w-3xl mx-auto">
-                {testimonials[currentTestimonial].text}
-              </p>
-              <div className="pt-4 border-t border-gray-200">
-                <div className="font-bold text-red-600 text-lg">
-                  {testimonials[currentTestimonial].author}
-                </div>
-                <div className="text-gray-600 text-sm">
-                  {testimonials[currentTestimonial].role}
+          {content.testimonials.length > 0 && (
+            <div className="bg-white rounded-3xl shadow-xl p-8 sm:p-10 border border-red-200 transition-all duration-300">
+              <div className="text-center space-y-6">
+                <div className="text-6xl text-red-600">"</div>
+                <p className="text-lg sm:text-xl text-gray-700 leading-relaxed italic max-w-3xl mx-auto">
+                  {content.testimonials[currentTestimonial]?.text}
+                </p>
+                <div className="pt-4 border-t border-gray-200">
+                  <div className="font-bold text-red-600 text-lg">
+                    {content.testimonials[currentTestimonial]?.author}
+                  </div>
+                  <div className="text-gray-600 text-sm">
+                    {content.testimonials[currentTestimonial]?.role}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* TESTIMONIAL SELECTOR */}
           <div className="flex flex-wrap justify-center gap-4 max-w-4xl mx-auto mt-6">
-            {testimonials.map((t, idx) => (
+            {content.testimonials.map((t, idx) => (
               <button
                 key={idx}
                 onClick={() => setCurrentTestimonial(idx)}
@@ -141,7 +160,7 @@ const AboutPage = () => {
 
           {/* DOTS */}
           <div className="flex justify-center mt-6 space-x-3">
-            {testimonials.map((_, idx) => (
+            {content.testimonials.map((_, idx) => (
               <button
                 key={idx}
                 onClick={() => setCurrentTestimonial(idx)}

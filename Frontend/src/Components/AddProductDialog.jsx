@@ -12,16 +12,21 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AlertCircle } from "lucide-react"; 
 import api from "../api";
 
-export default function AddProductDialog({ onSaved, children }) {
-  const [open, setOpen] = useState(false); // control dialog open state
+export default function AddProductDialog({ onSaved, children, existingProducts = [] }) {
+  const [open, setOpen] = useState(false);
   const [productName, setProductName] = useState("");
   const [category, setCategory] = useState("");
   const [price, setPrice] = useState("");
-  const [stock, setStock] = useState("");
+  
+  // CHANGED: Replaced stock (number) with isAvailable (boolean)
+  const [isAvailable, setIsAvailable] = useState(true);
+  
   const [loading, setLoading] = useState(false);
   const [image, setImage] = useState(null);
+  const [error, setError] = useState("");
 
   const categories = [
     { value: "chicken", label: "Chicken" },
@@ -31,64 +36,85 @@ export default function AddProductDialog({ onSaved, children }) {
     { value: "combo_meal", label: "Combo Meal" },
     { value: "value_meal", label: "Value Meal" },
     { value: "add_on", label: "Add-on" },
+    { value: "others", label: "Others" },
   ];
+
+  const handleOpenChange = (val) => {
+    setOpen(val);
+    if (!val) setError("");
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");
     setLoading(true);
+
+    const isDuplicate = existingProducts.some(
+      (p) => p.product_name.toLowerCase() === productName.trim().toLowerCase()
+    );
+
+    if (isDuplicate) {
+      setError("A product with this name already exists.");
+      setLoading(false); 
+      return; 
+    }
 
     try {
       const formData = new FormData();
       formData.append("product_name", productName);
       formData.append("category", category);
       formData.append("price", parseFloat(price));
-      formData.append("stock_quantity", parseInt(stock, 10));
+      
+      // CHANGED: Append boolean value
+      formData.append("is_available", isAvailable); 
+      
       if (image) formData.append("image", image);
 
       await api.post("/firstapp/products/", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      // success
       setLoading(false);
       setOpen(false);
       onSaved();
 
+      // Reset form
       setProductName("");
       setCategory("");
       setPrice("");
-      setStock("");
+      setIsAvailable(true); // Reset to true
       setImage(null);
+      setError("");
     } catch (err) {
       console.error("Failed to add product:", err.response?.data || err);
       setLoading(false);
-      alert("Failed to add product. Please try again.");
+      setError(err.response?.data?.message || "Failed to add product. Please try again.");
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={(val) => setOpen(val)}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{children}</DialogTrigger>
 
-      {/* Custom blurred backdrop: appears only when `open` is true */}
       {open && (
-        <div
-          // note: z-40 so DialogContent (z-50) sits above it
-          className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
-          aria-hidden="true"
-        />
+        <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" aria-hidden="true" />
       )}
 
-      {/* DialogContent will be rendered by shadcn; ensure it has higher z-index */}
       <DialogContent className="sm:max-w-md z-50">
         <DialogHeader>
           <DialogTitle>Add New Product</DialogTitle>
-          <DialogDescription>
-            Fill in the details below and click save.
-          </DialogDescription>
+          <DialogDescription>Fill in the details below and click save.</DialogDescription>
         </DialogHeader>
 
+        {error && (
+          <div className="bg-red-50 text-red-600 text-sm p-3 rounded-md flex items-center gap-2 border border-red-200">
+            <AlertCircle size={16} />
+            {error}
+          </div>
+        )}
+
         <form className="grid gap-4" onSubmit={handleSubmit}>
+          {/* ... Product Name Input (Keep as is) ... */}
           <div className="grid gap-2">
             <Label htmlFor="product-name">Product Name</Label>
             <Input
@@ -96,9 +122,11 @@ export default function AddProductDialog({ onSaved, children }) {
               value={productName}
               onChange={(e) => setProductName(e.target.value)}
               required
+              className={error.includes("name") ? "border-red-500 focus-visible:ring-red-500" : ""}
             />
           </div>
 
+          {/* ... Category Input (Keep as is) ... */}
           <div className="grid gap-2">
             <Label htmlFor="category">Category</Label>
             <select
@@ -108,17 +136,14 @@ export default function AddProductDialog({ onSaved, children }) {
               required
               className="px-3 py-2 border rounded-md"
             >
-              <option value="" disabled>
-                Select category
-              </option>
+              <option value="" disabled>Select category</option>
               {categories.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
+                <option key={c.value} value={c.value}>{c.label}</option>
               ))}
             </select>
           </div>
 
+          {/* ... Price Input (Keep as is) ... */}
           <div className="grid gap-2">
             <Label htmlFor="price">Price</Label>
             <Input
@@ -130,17 +155,21 @@ export default function AddProductDialog({ onSaved, children }) {
             />
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="stock">Stock Quantity</Label>
-            <Input
-              id="stock"
-              type="number"
-              value={stock}
-              onChange={(e) => setStock(e.target.value)}
-              required
+          {/* CHANGED: Replaced Stock Input with Checkbox */}
+          <div className="flex items-center gap-3 p-2 border rounded-md bg-gray-50">
+            <input
+              id="is_available"
+              type="checkbox"
+              checked={isAvailable}
+              onChange={(e) => setIsAvailable(e.target.checked)}
+              className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 border-gray-300"
             />
+            <Label htmlFor="is_available" className="cursor-pointer font-medium text-gray-700">
+              Mark as Available
+            </Label>
           </div>
 
+          {/* ... Image Input (Keep as is) ... */}
           <div className="grid gap-2">
             <Label htmlFor="image">Upload Image</Label>
             <Input

@@ -1,26 +1,51 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChefHat, Facebook, MessageCircle, Twitter, Instagram, Utensils, Star, Users, Clock, Smartphone, ArrowDownIcon } from 'lucide-react';
-import Navigation from '../../Components/Navigation'; // adjust path if needed
+import Navigation from '../../Components/Navigation';
 import Footer from '../../Components/Footer';
 import Carousel from '../../Components/Carousel';
 import TextAnimations from '../../Components/TextAnimations';
 
+// Default content (fallback if CMS hasn't been used yet)
+const DEFAULT_CONTENT = {
+  hero: {
+    line1Start: "SAVOR THE TASTE OF",
+    line1Highlight: "LOVE",
+    line1End: "AND TRADITION",
+    line2Start: "IN EVERY",
+    line2Highlight: "BITE",
+    descriptionStart: "At",
+    brandName: "Kuya Vince Karinderya",
+    descriptionMiddle: ", we take pride in serving the best",
+    cuisineType: "Pinoy bayan cuisine",
+    descriptionEnd: "— flavorful, hearty, and made just like how",
+    lolaText: "lola",
+    descriptionFinal: "used to cook."
+  },
+  popularDishes: ["Chicken Adobo", "Pork Sisig", "Beef Sinigang", "Kare-Kare"]
+};
+
 const HomePage = () => {
-	const navigate = useNavigate()
+  const navigate = useNavigate();
+  // State to hold the content
+  const [content, setContent] = useState(DEFAULT_CONTENT);
+
+  // Load CMS data on mount
+  useEffect(() => {
+    const savedData = localStorage.getItem('homepageContent');
+    if (savedData) {
+      try {
+        setContent(JSON.parse(savedData));
+      } catch (e) {
+        console.error("Error parsing CMS data", e);
+      }
+    }
+  }, []);
 
   const slides = [
-    "/pic1.jpg",
-    "/pic2.jpg",
-    "/pic3.jpg",
-    "/pic4.jpg",
-    "/pic6.jpg",
-    "/pic7.jpg",
-    "/pic8.jpg",
-    "/pic9.jpg",
-    "/pic10.jpg",
-    "/pic11.jpg",
-  ]
+    "/pic1.jpg", "/pic2.jpg", "/pic3.jpg", "/pic4.jpg", "/pic6.jpg",
+    "/pic7.jpg", "/pic8.jpg", "/pic9.jpg", "/pic10.jpg", "/pic11.jpg",
+  ];
 
   const features = [
     { icon: Utensils, title: "Authentic Recipes", description: "Traditional Filipino dishes passed down through generations" },
@@ -29,11 +54,8 @@ const HomePage = () => {
     { icon: Clock, title: "Always Ready", description: "Open daily to satisfy your cravings" }
   ];
 
-  const popularDishes = ["Chicken Adobo", "Pork Sisig", "Beef Sinigang", "Kare-Kare"];
-
   return (
     <div className="w-full min-h-screen bg-linear-to-br from-white via-red-100 to-white font-poppins">
-      {/* Navigation */}
       <Navigation />
 
       <div className="max-w-7xl mx-auto px-6">
@@ -45,26 +67,29 @@ const HomePage = () => {
           <div className="flex-1 text-center lg:text-left space-y-8 animate-fade-in">
             <div className="space-y-3">
               <h1 className="text-3xl lg:text-6xl font-bold text-gray-900 leading-tight ">
-                <span className="">SAVOR THE TASTE OF </span>
-                <span className="text-red-600">LOVE</span>
-                <span className=""> AND TRADITION</span>
+                <span className="">{content.hero.line1Start} </span>
+                <span className="text-red-600">{content.hero.line1Highlight}</span>
+                <span className=""> {content.hero.line1End}</span>
               </h1>
               <h2 className="text-3xl lg:text-5xl font-bold text-gray-800">
-                IN EVERY <span className="text-red-600">BITE</span>
+                {content.hero.line2Start} <span className="text-red-600">{content.hero.line2Highlight}</span>
               </h2>
             </div>
 
             <p className="text-gray-700 text-lg leading-relaxed max-w-lg mx-auto lg:mx-0">
-              At <span className="text-red-600 font-semibold">Kuya Vince Karinderya</span>, we take pride in serving the best 
-              <span className="text-red-600 font-semibold"> Pinoy bayan cuisine</span> — flavorful, hearty, and made just like how 
-              <span className="font-semibold"> lola</span> used to cook.
+              {content.hero.descriptionStart} <span className="text-red-600 font-semibold">{content.hero.brandName}</span>
+              {content.hero.descriptionMiddle} 
+              <span className="text-red-600 font-semibold"> {content.hero.cuisineType}</span> 
+              {content.hero.descriptionEnd} 
+              <span className="font-semibold"> {content.hero.lolaText}</span> 
+              {content.hero.descriptionFinal}
             </p>
 
-            {/* Popular Dishes */}
+            {/* Popular Dishes - Dynamic from State */}
             <div className="bg-white rounded-xl p-6 shadow-md border border-gray-100 max-w-md mx-auto lg:mx-0">
               <h3 className="font-bold text-red-600 mb-3 text-lg">POPULAR DISHES</h3>
               <div className="grid grid-cols-2 gap-2">
-                {popularDishes.map((dish, idx) => (
+                {content.popularDishes.map((dish, idx) => (
                   <div key={idx} className="flex items-center space-x-2 text-gray-700">
                     <div className="w-2 h-2 bg-red-600 rounded-full"></div>
                     <span className="text-sm font-medium">{dish}</span>
@@ -72,17 +97,6 @@ const HomePage = () => {
                 ))}
               </div>
             </div>
-
-            {/* CTA Buttons */}
-            {/* <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start pt-4">
-              <p>are you an admin? Log in</p>
-              <button className="bg-linear-to-r from-red-600 to-red-700 text-white px-8 py-3 rounded-xl font-semibold hover:from-red-700 hover:to-red-800 transition-all duration-300 hover:shadow-lg transform hover:scale-105">
-                Admin? Log in
-              </button>
-              <button className="border-2 border-red-600 text-red-600 px-8 py-3 rounded-xl font-semibold hover:bg-red-600 hover:text-white transition-all duration-300 transform hover:scale-105">
-                View Menu
-              </button>
-            </div> */}
 
             {/* Social Media */}
             <div className="pt-6">
@@ -114,10 +128,6 @@ const HomePage = () => {
             <div className="relative w-72 h-72 sm:w-80 sm:h-80 lg:w-96 lg:h-96 ">
               <div className="absolute inset-0 bg-red-200 rounded-full "></div>
               <div className="animate-bounce relative w-full h-full bg-linear-to-r from-red-500 to-red-700 rounded-full items-center justify-center shadow-2xl border-8 border-white text-white bg-cover bg-center" style={{ backgroundImage: "url('/icon.jpeg')" }}>
-                {/* <ChefHat size={70} className="animate-bounce mb-3" />
-                <h2 className="text-2xl lg:text-3xl font-bold tracking-wide">KUYA VINCE</h2>
-                <h3 className="text-3xl lg:text-4xl font-bold tracking-wider">KARINDERYA</h3>
-                <p className="text-sm opacity-80 mt-3">SINCE 2025</p> */}
               </div>
             </div>
           </div>
@@ -151,37 +161,30 @@ const HomePage = () => {
         </section>
 
         <div className="flex flex-col lg:flex-row items-center justify-between gap-10 py-10 animate-fade-in">
-			{/* Left Content: Text and Button */}
-			<div className="flex flex-col items-center lg:items-start text-center lg:text-left space-y-6 lg:w-1/2">
-				<TextAnimations />
+          {/* Left Content: Text and Button */}
+          <div className="flex flex-col items-center lg:items-start text-center lg:text-left space-y-6 lg:w-1/2">
+            <TextAnimations />
 
-				<p className="flex items-center gap-2 text-zinc-700 text-lg">
-				Get our app now <ArrowDownIcon size={26} />
-				</p>
+            <p className="flex items-center gap-2 text-zinc-700 text-lg">
+            Get our app now <ArrowDownIcon size={26} />
+            </p>
 
-				<button
-				onClick={() => navigate('/notfound')}
-				className="bg-red-600 px-6 py-3 rounded-xl text-xl font-bold text-white flex items-center gap-2 hover:bg-red-700 transition-all"
-				>
-				Get app
-				<Smartphone size={30} />
-				</button>
-			</div>
-
-			{/* Right Content: Carousel */}
-			<div className="lg:w-1/2 bg-linear-to-br from-gray-100 via-red-100 to-gray-100 px-10 shadow-lg rounded">
-				<div className="w-full max-w-4xl mx-auto">
-				<Carousel slides={slides} />
-				</div>
-			</div>
-			</div>
-        {/* <div className="flex-row items-center justify-center w-100 mx-auto px-5 py-5 text-center mt-10">
-            <p className="pb-2 text-zinc-700">are you an admin? </p>
-
-            <button onClick={() => navigate("/notadmin")} className="flex gap-2 items-center mx-auto bg-linear-to-r from-red-600 to-red-700 text-white px-5 py-3 rounded-xl font-semibold hover:from-red-700 hover:to-red-800 transition-all duration-300 hover:shadow-lg transform hover:scale-105">
-              Log in <ArrowRight className="flex justify-center" />
+            <button
+            onClick={() => navigate('/notfound')}
+            className="bg-red-600 px-6 py-3 rounded-xl text-xl font-bold text-white flex items-center gap-2 hover:bg-red-700 transition-all"
+            >
+            Get app
+            <Smartphone size={30} />
             </button>
-        </div> */}
+          </div>
+
+          {/* Right Content: Carousel */}
+          <div className="lg:w-1/2 bg-linear-to-br from-gray-100 via-red-100 to-gray-100 px-10 shadow-lg rounded">
+            <div className="w-full max-w-4xl mx-auto">
+            <Carousel slides={slides} />
+            </div>
+          </div>
+        </div>
       </div>
       <Footer />
     </div>

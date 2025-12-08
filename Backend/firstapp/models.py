@@ -4,7 +4,9 @@ from django.utils import timezone
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-
+from decimal import Decimal
+import uuid
+from django.conf import settings
 
 
 # PRODUCT
@@ -17,32 +19,70 @@ class Product(models.Model):
         ('combo_meal', 'Combo Meal'),
         ('value_meal', 'Value Meal'),
         ('add_on', 'Add-on'),
+        ('others', 'Others'),
     ]
     product_name = models.CharField(max_length=100)
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
     price = models.DecimalField(max_digits=10, decimal_places=2)
-    stock_quantity = models.PositiveIntegerField(default=0) 
+    is_available = models.BooleanField(default=True)
     date_added = models.DateTimeField(default=timezone.now)
     image = models.ImageField(upload_to="product_images/", null=True, blank=True)
 
     def __str__(self):
         return self.product_name
 
+class CouponCriteria(models.Model):
+    DISCOUNT_TYPES = [
+        ('percentage', 'Percentage Off'),
+        ('fixed', 'Fixed Amount Off'),
+        ('free_item', 'Free Item (Buy X Get Y)'),
+    ]
+
+    name = models.CharField(max_length=100, help_text="Internal name like 'Summer Sale 20%'")
+    discount_type = models.CharField(max_length=20, choices=DISCOUNT_TYPES, default='percentage')
+    discount_value = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text="Percentage or Fixed Amount")
+    
+    # Constraints
+    min_spend = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    min_quantity = models.PositiveIntegerField(default=0, help_text="Min total items in cart or min items of specific category")
+    
+    # Targeting
+    target_category = models.CharField(max_length=50, blank=True, null=True, help_text="If set, applies only to this category")
+    is_new_user_only = models.BooleanField(default=False)
+    
+    # Specifics for Free Items / Product Specific
+    free_product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name='criteria_free_product')
+    target_product = models.ForeignKey(
+        'Product', # Assuming your Product model is in the same app
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='targeted_coupons',
+        help_text="If set, the discount applies ONLY to this product, not the total bill."
+    )
+
+    # Date Constraints (Seasonal)
+    valid_from = models.DateTimeField(null=True, blank=True)
+    valid_to = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return self.name
+
 # RECEIPT 
 class Coupon(models.Model):
-    # Define the 3 status options strictly
     class Status(models.TextChoices):
         ACTIVE = 'Active', 'Active'
         CLAIMED = 'Claimed', 'Claimed'
         REDEEMED = 'Redeemed', 'Redeemed'
+        EXPIRED = 'Expired', 'Expired'
 
-    product = models.ForeignKey('Product', on_delete=models.CASCADE, related_name='coupons')
-    name = models.CharField(max_length=50)
-    rate = models.DecimalField(max_digits=5, decimal_places=2)
-    code = models.CharField(max_length=20, unique=True)
-    expiration = models.DateTimeField()
-    
-    # --- 2. ADD THIS FIELD ---
+    code = models.CharField(max_length=50, unique=True)
+    criteria = models.ForeignKey(CouponCriteria, on_delete=models.SET_NULL, related_name='coupons', null=True, 
+        blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
+    usage_limit = models.PositiveIntegerField(null=True, blank=True, help_text="Total times this code can be used")
+    times_used = models.PositiveIntegerField(default=0)
+
     claimed_by = models.ForeignKey(
         User, 
         on_delete=models.SET_NULL, 
@@ -50,57 +90,13 @@ class Coupon(models.Model):
         blank=True, 
         related_name='claimed_coupons'
     )
-
-    # The Status Field
-    status = models.CharField(
-        max_length=20, 
-        choices=Status.choices, 
-        default=Status.ACTIVE
-    )
     
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.code} - {self.name} ({self.status})"
+        criteria_name = self.criteria.name if self.criteria else "Legacy Coupon"
+        return f"{self.code} - {criteria_name}"
 
-    @property
-    def is_valid(self):
-        """
-        Determines if the coupon can be used at the POS.
-        Logic: 
-        1. Must not be expired.
-        2. Must not be Redeemed (Active or Claimed is fine for POS).
-        """
-        now = timezone.now()
-        
-        # Check Expiration
-        if self.expiration < now:
-            return False
-            
-        # Check Status
-        return self.status in [self.Status.ACTIVE, self.Status.CLAIMED]
-
-    # --- Optional Helper Methods for Clean State Transitions ---
-
-    # --- 3. UPDATE THIS METHOD TO ACCEPT USER ---
-    def claim(self, user):
-        """Helper to mark coupon as claimed by a specific user."""
-        if self.status == self.Status.ACTIVE:
-            self.status = self.Status.CLAIMED
-            self.claimed_by = user  # Save the user here
-            self.save()
-            return True
-        return False
-
-    def redeem(self):
-        """Helper to mark coupon as redeemed (used)."""
-        # Can be redeemed if it is Active OR Claimed
-        if self.status in [self.Status.ACTIVE, self.Status.CLAIMED]:
-            self.status = self.Status.REDEEMED
-            self.save()
-            return True
-        return False
-    
 class Receipt(models.Model):
     class Status(models.TextChoices):
         COMPLETED = 'COMPLETED', 'Completed'
@@ -120,6 +116,14 @@ class Receipt(models.Model):
     void_reason = models.TextField(null=True, blank=True) # Must allow nulls if you aren't saving it
     voided_at = models.DateTimeField(null=True, blank=True)
     voided_by = models.ForeignKey(User, related_name='voided_receipts', on_delete=models.SET_NULL, null=True, blank=True)
+
+    cashier = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='processed_receipts'
+    )
 
     def __str__(self):
         return f"Receipt #{self.id} - {self.status}"   
@@ -230,21 +234,6 @@ class DailySalesReport(models.Model):
             
             # Run the math (Revenue - Cost = Profit)
             report.generate_report()
-
-# COSTING
-class Costing(models.Model):
-    product = models.OneToOneField(Product, on_delete=models.CASCADE, related_name="costing")
-    ingredient_cost = models.DecimalField(max_digits=10, decimal_places=2)
-    electricity_cost = models.DecimalField(max_digits=10, decimal_places=2)
-    gas_consumption = models.DecimalField(max_digits=10, decimal_places=2)
-    labor_cost = models.DecimalField(max_digits=10, decimal_places=2)
-    profit_margin = models.DecimalField(max_digits=5, decimal_places=2, help_text="In percentage")
-
-    def total_cost(self):
-        return self.ingredient_cost + self.electricity_cost + self.gas_consumption + self.labor_cost
-
-    def __str__(self):
-        return f"Costing for {self.product.product_name}"
 
 # FEEDBACK
 class Feedback(models.Model):

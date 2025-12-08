@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 from django.db import transaction
 
-from .models import Product, Costing, Receipt, ReceiptItem, Coupon, Feedback, HomePage, AboutPage, ContactPage, DailySalesReport
+from .models import Product, Receipt, ReceiptItem, Coupon, Feedback, HomePage, AboutPage, ContactPage, DailySalesReport, CouponCriteria
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -22,19 +22,32 @@ class ProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = '__all__'
         extra_kwargs = {'date_added': {'read_only': True}}
-        
 
-class CostingSerializer(serializers.ModelSerializer):
+class CouponCriteriaSerializer(serializers.ModelSerializer):
+    free_product_name = serializers.CharField(source='free_product.product_name', read_only=True)
+
     class Meta:
-        model = Costing
+        model = CouponCriteria
         fields = '__all__'
 
 class CouponSerializer(serializers.ModelSerializer):
-    product_name = serializers.CharField(source='product.product_name', read_only=True)
+    criteria_details = CouponCriteriaSerializer(source='criteria', read_only=True)
+    criteria_id = serializers.PrimaryKeyRelatedField(
+        queryset=CouponCriteria.objects.all(), source='criteria', write_only=True, required=True
+    )
 
     class Meta:
         model = Coupon
-        fields = '__all__'
+        fields = [
+            'id', 'code', 'status', 'usage_limit', 'times_used', 
+            'created_at', 'criteria_details', 'criteria_id'
+        ]
+    
+    def get_is_owned_by_current_user(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return obj.claimed_by == request.user
+        return False
 
 class ReceiptItemSerializer(serializers.ModelSerializer):
     # ReadOnlyField looks for a property/method on the model with the same name.
@@ -49,6 +62,7 @@ class ReceiptItemSerializer(serializers.ModelSerializer):
 
 class ReceiptSerializer(serializers.ModelSerializer):
     items = ReceiptItemSerializer(many=True)
+    cashier_name = serializers.CharField(source='cashier.username', read_only=True)
     
     # WRITE ONLY: The frontend sends the ID here when creating a receipt
     coupon = serializers.PrimaryKeyRelatedField(
@@ -69,7 +83,8 @@ class ReceiptSerializer(serializers.ModelSerializer):
             'coupon',
             'coupon_details',
             'status',
-            'void_reason'
+            'void_reason',
+            'cashier_name'
         ]
 
     def create(self, validated_data):

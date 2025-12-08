@@ -1,67 +1,73 @@
 import React, { useEffect, useState } from 'react';
-import { Phone, Mail, MapPin, Facebook, MessageCircle, Clock } from 'lucide-react';
+import { Phone, Mail, MapPin, Facebook } from 'lucide-react';
 import Navigation from '../../Components/Navigation';
 import Footer from "../../Components/Footer";
-import api from '../../api';
+
+const DEFAULT_DATA = {
+  header: {
+    highlight: "CONTACT",
+    suffix: "US",
+    subtitle: "We’d love to hear from you!"
+  },
+  info: {
+    phone: "0912 345 6789",
+    email: "kuyavince@example.com",
+    address: "Cagayan de Oro City, Misamis Oriental",
+    facebookLink: "https://facebook.com",
+    facebookLabel: "Kuya Vince Karinderya"
+  }
+};
 
 const ContactPage = () => {
+  const [content, setContent] = useState(DEFAULT_DATA);
 
-  const [contact, setContact] = useState(null);
-
+  // Load from LocalStorage
   useEffect(() => {
-    api.get("firstapp/contact/")
-      .then((res) => {
-        setContact(res.data);
-      })
-      .catch((err) => {
-        console.error("Failed to fetch CMS data:", err);
-      });
+    const savedData = localStorage.getItem('contactContent');
+    if (savedData) {
+      try {
+        setContent(JSON.parse(savedData));
+      } catch (err) {
+        console.error("Failed to parse CMS data", err);
+      }
+    }
   }, []);
 
-  const contactInfo = contact
-    ? [
-        { 
-          icon: Phone,
-          label: "Phone",
-          value: contact.phone_number,
-          color: "bg-purple-100 border-purple-200",
-          iconColor: "text-purple-600",
-          link: `tel:${contact.phone_number}`
-        },
-        { 
-          icon: Mail,
-          label: "Email",
-          value: contact.email,
-          color: "bg-red-100 border-red-200",
-          iconColor: "text-red-600",
-          link: `mailto:${contact.email}`
-        },
-        { 
-          icon: MapPin,
-          label: "Address",
-          value: contact.address,
-          color: "bg-pink-100 border-pink-200",
-          iconColor: "text-pink-600",
-          link: "#"
-        },
-        { 
-          icon: Facebook,
-          label: "Facebook",
-          value: contact.fb_page,
-          color: "bg-blue-100 border-blue-200",
-          iconColor: "text-blue-600",
-          link: contact.fb_page
-        },
-      ]
-    : [];
-
-  if (!contact) {
-    return (
-      <div className="text-center text-gray-600 py-20">
-        Loading Contact Info...
-      </div>
-    );
-  }
+  // Map the CMS content to the display array
+  const contactInfo = [
+    { 
+      icon: Phone,
+      label: "Phone",
+      value: content.info.phone,
+      color: "bg-purple-100 border-purple-200",
+      iconColor: "text-purple-600",
+      link: `tel:${content.info.phone}`
+    },
+    { 
+      icon: Mail,
+      label: "Email",
+      value: content.info.email,
+      color: "bg-red-100 border-red-200",
+      iconColor: "text-red-600",
+      link: `mailto:${content.info.email}`
+    },
+    { 
+      icon: MapPin,
+      label: "Address",
+      value: content.info.address,
+      color: "bg-pink-100 border-pink-200",
+      iconColor: "text-pink-600",
+      link: "#"
+    },
+    { 
+      icon: Facebook,
+      label: "Facebook",
+      value: content.info.facebookLabel,
+      color: "bg-blue-100 border-blue-200",
+      iconColor: "text-blue-600",
+      link: content.info.facebookLink
+    },
+  ];
 
   return (
     <div className="w-full min-h-screen bg-linear-to-br from-white via-red-50 to-white pt-35">
@@ -72,10 +78,10 @@ const ContactPage = () => {
         {/* Header Section */}
         <div className="text-center mb-12">
           <h1 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-3">
-            <span className="text-red-600">CONTACT</span> US
+            <span className="text-red-600">{content.header.highlight}</span> {content.header.suffix}
           </h1>
           <p className="text-lg text-gray-600 max-w-xl mx-auto">
-            We’d love to hear from you!
+            {content.header.subtitle}
           </p>
         </div>
 

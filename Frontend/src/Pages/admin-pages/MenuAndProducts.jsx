@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import Searchbar from "../../Components/Searchbar";
 import api from "../../api";
-import { EditIcon, Trash2Icon, PlusSquareIcon, ListIcon, TicketPercentIcon } from "lucide-react";
+import { EditIcon, Trash2Icon, PlusSquareIcon, ListIcon } from "lucide-react";
 
 import EditProductDialog from "../../Components/EditProductDialog";
 import SuccessAlert from "../../Components/SuccessAlert";
@@ -15,7 +15,6 @@ function ProductList() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showSuccess, setShowSuccess] = useState(false);
 
-
   const [searchParams, setSearchParams] = useSearchParams();
   const queryParam = searchParams.get("search") || "";
   const categoryParam = searchParams.get("category") || "";
@@ -26,6 +25,7 @@ function ProductList() {
     { value: "fish", label: "Fish" },
     { value: "vegetables", label: "Vegetables" },
     { value: "combo_meal", label: "Combo Meal" },
+    { value: "others", label: "Others" },
   ];
 
   // Fetch products from API
@@ -86,7 +86,13 @@ function ProductList() {
           <h1 className="flex items-center gap-2 text-3xl font-bold text-gray-900"><ListIcon size={26}/> Product List</h1>
 
           <div className="flex gap-2" >
-            <AddProductDialog onSaved={handleUpdatedProduct}>
+            {/* ---------------------------------------------------- */}
+            {/* CHANGE HERE: Passed existingProducts prop for validation */}
+            {/* ---------------------------------------------------- */}
+            <AddProductDialog 
+                onSaved={handleUpdatedProduct} 
+                existingProducts={products} 
+            >
               <button className="flex gap-2 items-center bg-gray-900 hover:bg-gray-700 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm">
                 <PlusSquareIcon size={22} /> Product
               </button>
@@ -182,8 +188,17 @@ function ProductList() {
                   </div>
                   
                   <div className="flex items-center justify-between pt-2 border-t-3 border-gray-200">
-                    <span className="text-gray-500">Stock</span>
-                    <span className="font-semibold text-gray-800">{p.stock_quantity}</span>
+                    <span className="text-gray-500">Status</span>
+                    
+                    {p.is_available ? (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
+                        Available
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+                        Unavailable
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

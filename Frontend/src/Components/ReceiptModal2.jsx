@@ -1,7 +1,6 @@
 import React, { useRef } from "react";
 import {
   AlertDialog as ShadAlertDialog,
-  AlertDialogTrigger,
   AlertDialogContent,
   AlertDialogHeader,
   AlertDialogTitle,
@@ -15,27 +14,28 @@ import { Separator } from "@/components/ui/separator";
 import { Tag, Printer } from "lucide-react"; 
 import { useReactToPrint } from 'react-to-print';
 
-// 1. Import your print layout component
-import ReceiptPrintContent from "./ReceiptPrintContent"; // Adjust path as needed
+import ReceiptPrintContent from "./ReceiptPrintContent"; 
 
-export default function ReceiptModal2({ title, receiptDetails, children, onConfirm }) {
-  // 2. Create the reference
+export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, onOpenChange }) {
   const contentRef = useRef(null);
 
-  // 3. Setup the Print Hook
   const handlePrint = useReactToPrint({
-    contentRef: contentRef, // This now points to the hidden ReceiptPrintContent
+    contentRef: contentRef,
     documentTitle: `Receipt-${receiptDetails?.id || '000'}`,
+    // ----------------------------------------------------
+    // THIS IS THE FIX:
+    // When print dialog closes, we trigger the reset function (onConfirm)
+    // ----------------------------------------------------
     onAfterPrint: () => {
-        // Optional logic after printing
+        if (onConfirm) {
+            onConfirm(); // This calls handleResetOrder in Pos.js
+        }
     }
   });
 
   return (
-    <ShadAlertDialog>
-      <AlertDialogTrigger asChild>
-        {children}
-      </AlertDialogTrigger>
+    <ShadAlertDialog open={open} onOpenChange={onOpenChange}>
+      {/* Note: We removed AlertDialogTrigger because Pos.js controls opening */}
 
       <AlertDialogContent className="max-w-md">
         <AlertDialogHeader>
@@ -43,11 +43,7 @@ export default function ReceiptModal2({ title, receiptDetails, children, onConfi
           <AlertDialogDescription asChild>
             <div className="text-sm p-4 bg-white text-black"> 
             
-            {/* 4. INVISIBLE PRINT COMPONENT 
-                This component is hidden from the screen ("hidden" class) 
-                but holds the 'ref' so 'react-to-print' grabs THIS content.
-                We map 'receiptDetails' to 'transactionData'.
-            */}
+            {/* Hidden Print Component */}
             <div className="hidden">
                 <ReceiptPrintContent 
                     ref={contentRef} 
@@ -55,10 +51,7 @@ export default function ReceiptModal2({ title, receiptDetails, children, onConfi
                 />
             </div>
 
-            {/* 5. VISIBLE PREVIEW (No Ref)
-                This is what the user sees on the screen. 
-                We removed the 'ref={contentRef}' from here.
-            */}
+            {/* Visible Preview */}
             {receiptDetails ? (
             <>  
                 <div className="text-center mb-6">
@@ -77,7 +70,6 @@ export default function ReceiptModal2({ title, receiptDetails, children, onConfi
                             <span className="font-medium text-foreground">
                                 {item.product_name} × {item.quantity}
                             </span>
-
                             {item.coupon_details && (
                                 <span className="text-xs text-green-600 flex items-center gap-1">
                                     <Tag size={10} />
@@ -142,13 +134,14 @@ export default function ReceiptModal2({ title, receiptDetails, children, onConfi
         </AlertDialogHeader>
         
         <AlertDialogFooter>
-          <AlertDialogCancel>Close Preview</AlertDialogCancel>
+          {/* Cancel button manually triggers close without resetting if desired, or can be removed */}
+          <AlertDialogCancel onClick={() => onOpenChange(false)}>Close Preview</AlertDialogCancel>
           
           <AlertDialogAction 
             onClick={(e) => {
                 if (receiptDetails) {
-                    e.preventDefault(); 
-                    handlePrint();
+                    e.preventDefault(); // Keep modal open while print dialog is active
+                    handlePrint();      // Trigger print (and reset afterwards)
                 }
             }} 
             className="bg-gray-900 flex gap-2"
