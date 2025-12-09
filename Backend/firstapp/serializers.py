@@ -131,6 +131,11 @@ class DailySalesReportSerializer(serializers.ModelSerializer):
         # 'read_only_fields' ensures the API cannot overwrite calculated data manually
         read_only_fields = fields
 
+class StaffPerformanceSerializer(serializers.Serializer):
+    name = serializers.CharField(read_only=True)
+    revenue = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    orders = serializers.IntegerField(read_only=True)
+
 class FeedbackSerializer(serializers.ModelSerializer):
     class Meta:
         model = Feedback

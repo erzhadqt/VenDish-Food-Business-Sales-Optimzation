@@ -54,7 +54,7 @@ class CouponCriteria(models.Model):
     free_product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name='criteria_free_product')
     target_product = models.ForeignKey(
         'Product', # Assuming your Product model is in the same app
-        on_delete=models.SET_NULL, 
+        on_delete=models.SET_NULL,
         null=True, 
         blank=True, 
         related_name='targeted_coupons',

@@ -15,7 +15,7 @@ from django.db.models.functions import TruncDate
 
 
 from .serializers import (
-    UserSerializer, FeedbackSerializer, ProductSerializer, ReceiptSerializer, CouponSerializer, HomePageSerializer, AboutPageSerializer, ContactPageSerializer, DailySalesReportSerializer, CouponCriteriaSerializer
+    UserSerializer, FeedbackSerializer, ProductSerializer, ReceiptSerializer, CouponSerializer, HomePageSerializer, AboutPageSerializer, ContactPageSerializer, DailySalesReportSerializer, CouponCriteriaSerializer, StaffPerformanceSerializer
 )
 from .models import Product, Receipt, Coupon, Feedback, HomePage, AboutPage, ContactPage, DailySalesReport, CouponCriteria, ReceiptItem
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
@@ -71,23 +71,17 @@ class ReceiptViewSet(viewsets.ModelViewSet):
     lookup_field = "id"
 
     def get_queryset(self):
-        # 1. Get base queryset
         queryset = Receipt.objects.all().order_by('-created_at')
-        
-        # 2. Get current user
         user = self.request.user
 
-        # 3. Apply Filter
         if not user.is_authenticated:
             return Receipt.objects.none()
 
-        # FIX: Only Superusers (Admins) see all. 
-        # Even if they have 'is_staff=True', they will still be filtered 
-        # unless they are a Superuser.
+        # ADMINS see ALL receipts
         if user.is_superuser: 
             return queryset
         
-        # Everyone else (Cashiers) ONLY sees their own receipts
+        # STAFF see only their own
         return queryset.filter(cashier=user)
 
     # ---------------------------------------------------------
@@ -312,7 +306,7 @@ class DailySalesReportViewSet(viewsets.ViewSet):
     # Endpoint: GET /firstapp/sales/
     # ------------------------------------------------------------------
     def list(self, request):
-        # A. Base Query
+    # A. Base Query
         queryset = Receipt.objects.filter(status='COMPLETED')
         user = request.user
         
@@ -332,7 +326,7 @@ class DailySalesReportViewSet(viewsets.ViewSet):
             .order_by('-report_date')
         )
 
-        # D. Get Void Data
+        # D. Get Void Data (FIXED)
         void_queryset = Receipt.objects.filter(status='VOIDED')
         if not user.is_superuser:
             void_queryset = void_queryset.filter(cashier=user)
@@ -345,10 +339,9 @@ class DailySalesReportViewSet(viewsets.ViewSet):
         )
         void_map = {str(item['report_date']): item['voided_orders'] for item in void_data}
 
-        # E. Top Seller Logic (Fixed for N/A issue)
+        # E. Top Seller Logic
         top_seller_map = {}
         receipt_ids = queryset.values_list('id', flat=True)
-        
         if receipt_ids:
             item_stats = (
                 ReceiptItem.objects.filter(receipt__in=receipt_ids)
@@ -357,13 +350,12 @@ class DailySalesReportViewSet(viewsets.ViewSet):
                 .annotate(qty_sold=Sum('quantity'))
                 .order_by('sale_date', '-qty_sold') 
             )
-            # Map date string to product name
             for stat in item_stats:
-                date_str = str(stat['sale_date'])
+                date_str = str(stat['sale_date']) 
                 if date_str not in top_seller_map:
                     top_seller_map[date_str] = stat['product_name']
 
-        # F. Build Response
+        # F. Response Construction (FIXED: Include voided_orders)
         final_response = []
         for item in report_data:
             date_str = str(item['report_date'])
@@ -372,32 +364,21 @@ class DailySalesReportViewSet(viewsets.ViewSet):
             final_response.append({
                 "report_date": date_str,
                 "total_revenue": total_rev,
-                "net_profit": total_rev, # Gross Income
+                "net_profit": total_rev,
                 "total_cost": 0,
                 "total_orders": item['total_orders'],
-                "voided_orders": void_map.get(date_str, 0),
+                "voided_orders": void_map.get(date_str, 0),  # FIX: Get voided count from map
                 "top_selling_product": top_seller_map.get(date_str, "N/A")
             })
 
         return Response(final_response)
 
-    # ------------------------------------------------------------------
-    # 2. STAFF PERFORMANCE VIEW (Admin Only)
-    # Endpoint: GET /firstapp/sales/by-staff/
-    # ------------------------------------------------------------------
     @action(detail=False, methods=['get'], url_path='by-staff')
     def by_staff(self, request):
-        """
-        Groups sales by Cashier.
-        """
-        # Security: Only admins can see comparison
+        # Security: Only admins can see this
         if not request.user.is_superuser:
-            return Response(
-                {"error": "Unauthorized"}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
+            return Response({"error": "Unauthorized"}, status=403)
 
-        # Group by Cashier User ID
         staff_data = (
             Receipt.objects.filter(status='COMPLETED')
             .values('cashier__username', 'cashier__first_name', 'cashier__last_name')
@@ -410,15 +391,10 @@ class DailySalesReportViewSet(viewsets.ViewSet):
 
         response_data = []
         for item in staff_data:
-            username = item['cashier__username'] or "Unassigned / Legacy"
-            # Format Name: "John Doe" or just "johndoe"
+            username = item['cashier__username'] or "Unassigned"
             first = item['cashier__first_name']
             last = item['cashier__last_name']
-            
-            if first or last:
-                display_name = f"{first} {last}".strip()
-            else:
-                display_name = username
+            display_name = f"{first} {last}".strip() if (first or last) else username
 
             response_data.append({
                 "name": display_name,
@@ -426,7 +402,13 @@ class DailySalesReportViewSet(viewsets.ViewSet):
                 "orders": item['total_orders']
             })
 
-        return Response(response_data)
+        print(response_data)
+
+        # Pass the list of dictionaries to the serializer with many=True
+        serializer = StaffPerformanceSerializer(response_data, many=True)
+        return Response(serializer.data)
+    
+        
 
     @action(detail=False, methods=['post'], url_path='refresh-today')
     def refresh_today(self, request):
