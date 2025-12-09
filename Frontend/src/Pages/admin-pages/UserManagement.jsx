@@ -143,7 +143,7 @@ export default function UserManagement() {
                     <th className="py-3.5 px-3 text-left text-sm font-semibold text-gray-700">Email</th>
                     {/* Updated Columns */}
                     <th className="py-3.5 px-3 text-left text-sm font-semibold text-gray-700">First Name</th>
-                    <th className="py-3.5 px-3 text-left text-sm font-semibold text-gray-700">Middle</th>
+                    <th className="py-3.5 px-3 text-left text-sm font-semibold text-gray-700">Middle Name</th>
                     <th className="py-3.5 px-3 text-left text-sm font-semibold text-gray-700">Last Name</th>
                     <th className="py-3.5 px-3 text-left text-sm font-semibold text-gray-700">Phone</th>
                     <th className="py-3.5 px-3 text-left text-sm font-semibold text-gray-700">Address</th>

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { HistoryIcon, Loader2, AlertCircle, Tag, EllipsisVertical, ChevronLeft, ChevronRight, Ban, User } from 'lucide-react'; // Added User Icon
+import React, { useState, useEffect, useMemo } from 'react';
+import { HistoryIcon, Loader2, AlertCircle, Tag, EllipsisVertical, ChevronLeft, ChevronRight, Ban, User } from 'lucide-react';
 import api from '../../api';
 import ReceiptModal from '../../Components/ReceiptModal.jsx';
 
@@ -14,6 +14,7 @@ const Transaction = () => {
 
     const [filterStatus, setFilterStatus] = useState('ALL'); 
     const [filterCoupon, setFilterCoupon] = useState('ALL');
+    const [filterCashier, setFilterCashier] = useState('ALL'); // NEW: Cashier State
 
     const formatCurrency = (amount) => {  
         return new Intl.NumberFormat('en-US', {  
@@ -33,7 +34,6 @@ const Transaction = () => {
         setLoading(true);  
         setError(null);  
         try {  
-            // The backend automatically filters this based on the logged-in user!
             const response = await api.get('/firstapp/receipt/');  
             setTransactions(response.data);  
         } catch (err) {  
@@ -48,13 +48,25 @@ const Transaction = () => {
         fetchTransactions();  
     }, []);  
 
+    // NEW: Extract unique cashier names for the dropdown
+    const uniqueCashiers = useMemo(() => {
+        const names = transactions.map(t => t.cashier_name || "System");
+        return [...new Set(names)].sort();
+    }, [transactions]);
+
     const filteredTransactions = transactions.filter((receipt) => {  
         const statusMatch = filterStatus === 'ALL' || receipt.status === filterStatus;  
+        
         const couponMatch =  
             filterCoupon === 'ALL' ||  
             (filterCoupon === 'WITH' && receipt.coupon_details) ||  
             (filterCoupon === 'WITHOUT' && !receipt.coupon_details);  
-        return statusMatch && couponMatch;  
+        
+        // NEW: Cashier Filter Logic
+        const receiptCashier = receipt.cashier_name || "System";
+        const cashierMatch = filterCashier === 'ALL' || receiptCashier === filterCashier;
+
+        return statusMatch && couponMatch && cashierMatch;  
     });  
 
     const totalPages = Math.ceil(filteredTransactions.length / rowsPerPage);  
@@ -76,13 +88,14 @@ const Transaction = () => {
                     </h1>  
                 </nav>  
 
-                <div className="flex gap-4 mb-4 justify-end">  
+                <div className="flex flex-wrap gap-4 mb-4 justify-end">  
+                    {/* Status Filter */}
                     <div>  
                         <label className="text-sm font-medium text-gray-700 mr-2">Status:</label>  
                         <select  
                             value={filterStatus}  
                             onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}  
-                            className="border rounded px-2 py-1 text-sm"  
+                            className="border rounded px-2 py-1 text-sm bg-white"  
                         >  
                             <option value="ALL">All</option>  
                             <option value="COMPLETED">Completed</option>  
@@ -90,16 +103,32 @@ const Transaction = () => {
                         </select>  
                     </div>  
 
+                    {/* Coupon Filter */}
                     <div>  
                         <label className="text-sm font-medium text-gray-700 mr-2">Coupon:</label>  
                         <select  
                             value={filterCoupon}  
                             onChange={(e) => { setFilterCoupon(e.target.value); setCurrentPage(1); }}  
-                            className="border rounded px-2 py-1 text-sm"  
+                            className="border rounded px-2 py-1 text-sm bg-white"  
                         >  
                             <option value="ALL">All</option>  
                             <option value="WITH">With Coupon</option>  
                             <option value="WITHOUT">Without Coupon</option>  
+                        </select>  
+                    </div>  
+
+                    {/* NEW: Cashier Filter */}
+                    <div>  
+                        <label className="text-sm font-medium text-gray-700 mr-2">Cashier:</label>  
+                        <select  
+                            value={filterCashier}  
+                            onChange={(e) => { setFilterCashier(e.target.value); setCurrentPage(1); }}  
+                            className="border rounded px-2 py-1 text-sm bg-white min-w-[120px]"  
+                        >  
+                            <option value="ALL">All Cashiers</option>  
+                            {uniqueCashiers.map((name) => (
+                                <option key={name} value={name}>{name}</option>
+                            ))}
                         </select>  
                     </div>  
                 </div>  
@@ -135,7 +164,6 @@ const Transaction = () => {
                                         <tr>  
                                             <th className="px-6 py-4">Receipt ID</th>  
                                             <th className="px-6 py-4">Date</th>  
-                                            {/* NEW HEADER: CASHIER */}
                                             <th className="px-6 py-4">Cashier</th>
                                             <th className="px-6 py-4">Status</th>  
                                             <th className="px-6 py-4">Coupon</th>  
@@ -150,7 +178,6 @@ const Transaction = () => {
                                                 <td className="px-6 py-4 font-medium text-gray-900">#{receipt.id}</td>  
                                                 <td className="px-6 py-4">{formatDate(receipt.created_at)}</td> 
                                                 
-                                                {/* NEW COLUMN: CASHIER */}
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-2">
                                                         <User size={14} className="text-gray-400"/>
@@ -222,7 +249,7 @@ const Transaction = () => {
                                 >  
                                     <ChevronRight size={20} />  
                                 </button>  
-                            </div>  
+                            </div>
                         </>  
                     )}  
                 </div>  

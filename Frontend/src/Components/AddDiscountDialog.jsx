@@ -4,12 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Wand2, Tag, Percent, Coins, Gift, ShoppingBasket, CalendarClock } from "lucide-react"; 
+import { Wand2, Tag, CalendarClock, Hash } from "lucide-react"; 
 import api from "../api"; 
 
 export default function AddDiscountDialog({ open, onOpenChange, onSaved, products = [] }) {
   // --- Coupon State ---
   const [code, setCode] = useState("");
+  const [usageLimit, setUsageLimit] = useState(""); 
   
   // --- Criteria (Rule) State ---
   const [ruleName, setRuleName] = useState(""); 
@@ -19,8 +20,8 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
   const [selectedFreeProduct, setSelectedFreeProduct] = useState("");
   const [targetProductId, setTargetProductId] = useState("all"); 
 
-  // --- NEW: Date State ---
-  const [validFrom, setValidFrom] = useState("");
+  // --- Date State ---
+  // "Valid From" removed - it will be set automatically to now() on save
   const [validTo, setValidTo] = useState("");
 
   const [loading, setLoading] = useState(false);
@@ -52,20 +53,20 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
         free_product: discountType === 'free_item' ? selectedFreeProduct : null,
         target_product: targetProductId === "all" ? null : targetProductId,
         
-        // --- NEW: Send Dates ---
-        // If empty string, send null so backend handles it as "Always valid"
-        valid_from: validFrom || null,
+        // AUTOMATIC: Set Valid From to current time
+        valid_from: new Date().toISOString(), 
         valid_to: validTo || null
       };
 
       const criteriaRes = await api.post("/firstapp/coupons-criteria/", criteriaPayload);
       const newCriteriaId = criteriaRes.data.id;
 
-      // STEP 2: Create Coupon
+      // STEP 2: Create Coupon with Usage Limit
       await api.post("/firstapp/coupons/", {
         code: code.toUpperCase(),
         criteria_id: newCriteriaId,
-        status: "Active"
+        status: "Active",
+        usage_limit: usageLimit ? parseInt(usageLimit) : null 
       });
 
       onSaved(); 
@@ -73,13 +74,13 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
       
       // Reset Form
       setCode("");
+      setUsageLimit(""); 
       setRuleName("");
       setDiscountValue("");
       setMinSpend("0");
       setSelectedFreeProduct("");
       setTargetProductId("all");
-      setValidFrom(""); // Reset Date
-      setValidTo("");   // Reset Date
+      setValidTo("");
 
     } catch (err) {
       console.error(err);
@@ -94,29 +95,48 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Coupon</DialogTitle>
-          <DialogDescription>Define code, discount rules, and validity.</DialogDescription>
+          <DialogDescription>Define code, discount rules, and usage limits.</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-6 py-4">
           
-          {/* SECTION 1: THE CODE */}
+          {/* SECTION 1: THE CODE & LIMIT */}
           <div className="p-4 bg-gray-50 rounded-lg border border-gray-100 space-y-3">
              <div className="flex items-center gap-2 mb-2">
                 <Tag className="w-4 h-4 text-blue-600"/>
-                <h3 className="font-semibold text-sm text-gray-700">1. Coupon Code</h3>
+                <h3 className="font-semibold text-sm text-gray-700">1. Coupon Details</h3>
              </div>
-             <div className="flex gap-2">
-               <Input 
-                 placeholder="e.g., SUMMER2024" 
-                 value={code} 
-                 onChange={(e) => setCode(e.target.value.toUpperCase())} 
-                 className="uppercase font-mono tracking-widest text-lg"
-               />
-               <Button variant="outline" size="icon" onClick={generateRandomCode} title="Generate Random">
-                 <Wand2 className="h-4 w-4" />
-               </Button>
+             
+             <div className="grid grid-cols-2 gap-4">
+                {/* Code Input */}
+                <div className="space-y-1">
+                    <Label>Code</Label>
+                    <div className="flex gap-2">
+                        <Input 
+                            placeholder="CODE123" 
+                            value={code} 
+                            onChange={(e) => setCode(e.target.value.toUpperCase())} 
+                            className="uppercase font-mono tracking-widest"
+                        />
+                        <Button variant="outline" size="icon" onClick={generateRandomCode} title="Generate">
+                            <Wand2 className="h-4 w-4" />
+                        </Button>
+                    </div>
+                </div>
+
+                {/* Usage Limit Input */}
+                <div className="space-y-1">
+                    <Label className="flex items-center gap-1">Usage Limit <Hash size={12}/></Label>
+                    <Input 
+                        type="number"
+                        placeholder="e.g. 50" 
+                        value={usageLimit} 
+                        onChange={(e) => setUsageLimit(e.target.value)} 
+                    />
+                    <p className="text-[10px] text-gray-400">Leave blank for unlimited</p>
+                </div>
              </div>
-          </div>
+          </div>  
 
           {/* SECTION 2: THE RULES */}
           <div className="space-y-4">
@@ -181,32 +201,22 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
             </div>
           </div>
 
-          {/* SECTION 3: VALIDITY (NEW) */}
+          {/* SECTION 3: VALIDITY */}
           <div className="space-y-4">
             <div className="flex items-center gap-2 border-b pb-2">
                 <CalendarClock className="w-4 h-4 text-orange-600"/>
                 <h3 className="font-semibold text-sm text-gray-700">3. Validity Period</h3>
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                    <Label>Valid From</Label>
-                    <Input 
-                        type="datetime-local" 
-                        value={validFrom} 
-                        onChange={(e) => setValidFrom(e.target.value)} 
-                    />
-                </div>
-                <div className="grid gap-2">
-                    <Label>Valid Until</Label>
-                    <Input 
-                        type="datetime-local" 
-                        value={validTo} 
-                        onChange={(e) => setValidTo(e.target.value)} 
-                    />
-                </div>
+            <div className="grid gap-2">
+                <Label>Valid Until</Label>
+                <Input 
+                    type="datetime-local" 
+                    value={validTo} 
+                    onChange={(e) => setValidTo(e.target.value)} 
+                />
+                <p className="text-[10px] text-gray-400">Coupon is valid starting immediately upon creation.</p>
             </div>
-            <p className="text-xs text-gray-500 italic">Leave blank for no expiration.</p>
           </div>
 
         </div>

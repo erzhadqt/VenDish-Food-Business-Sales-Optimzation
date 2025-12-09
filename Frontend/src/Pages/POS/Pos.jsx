@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { Tag, Trash2, ShoppingBag } from "lucide-react"; 
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { Tag, Trash2, ShoppingBag, User, Search, X } from "lucide-react"; 
 import { FaCheckCircle, FaExclamationCircle } from "react-icons/fa"; 
 
 import api from "../../api";
@@ -13,6 +13,14 @@ const Pos = () => {
   const [cartItems, setCartItems] = useState([]);
   const [cash, setCash] = useState("");
   const [products, setProducts] = useState([]);
+  
+  // --- CUSTOMER SEARCH STATES ---
+  const [users, setUsers] = useState([]); 
+  const [selectedCustomer, setSelectedCustomer] = useState(null); 
+  const [customerSearch, setCustomerSearch] = useState(""); // Input text
+  const [showCustomerResults, setShowCustomerResults] = useState(false); // Dropdown visibility
+  const searchRef = useRef(null);
+
   const [receiptDetails, setReceiptDetails] = useState(null);
   const [loading, setLoading] = useState(false);
   
@@ -29,12 +37,27 @@ const Pos = () => {
     { value: "none", label: "No Discount" },
   ];
 
+  // Close search dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (searchRef.current && !searchRef.current.contains(event.target)) {
+        setShowCustomerResults(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const prodRes = await api.get("/firstapp/products/");
+        const [prodRes, userRes] = await Promise.all([
+            api.get("/firstapp/products/"),
+            api.get("/firstapp/users/") 
+        ]);
         setProducts(prodRes.data);
+        setUsers(userRes.data);
       } catch (error) {
         console.error("Failed to fetch data:", error);
       } finally {
@@ -47,10 +70,43 @@ const Pos = () => {
   const categories = ["All", ...new Set(products.map((p) => p.category))];
   const filteredFoods = selectedCategory === "All" ? products : products.filter((food) => food.category === selectedCategory);
 
+  // --- FILTER CUSTOMERS LOGIC ---
+  const filteredCustomers = useMemo(() => {
+    if (!customerSearch) return users.slice(0, 5); // Show first 5 if empty
+    const lowerQ = customerSearch.toLowerCase();
+    return users.filter(u => 
+        u.username.toLowerCase().includes(lowerQ) ||
+        (u.first_name && u.first_name.toLowerCase().includes(lowerQ)) ||
+        (u.last_name && u.last_name.toLowerCase().includes(lowerQ))
+    ).slice(0, 10); // Limit results
+  }, [users, customerSearch]);
+
+  const handleSelectCustomer = (user) => {
+      setSelectedCustomer(user.id);
+      setCustomerSearch(`${user.first_name} ${user.last_name} (${user.username})`.trim());
+      setShowCustomerResults(false);
+  };
+
+  const handleClearCustomer = () => {
+      setSelectedCustomer(null);
+      setCustomerSearch("");
+      setShowCustomerResults(false);
+  };
+
   const handleFoodClick = (food) => {
-    if (!food.is_available) return alert("This product is currently unavailable!");
+    if (!food.track_stock && !food.is_available) {
+        return alert("This product is currently unavailable!");
+    }
+    if (food.track_stock && food.stock_quantity <= 0) {
+        return alert("This item is currently Out of Stock.");
+    }
+
     const exist = cartItems.find((item) => item.id === food.id);
+
     if (exist) {
+      if (food.track_stock && exist.qty + 1 > food.stock_quantity) {
+          return alert(`Cannot add more. Only ${food.stock_quantity} units available.`);
+      }
       setCartItems(cartItems.map((item) => item.id === food.id ? { ...item, qty: item.qty + 1 } : item));
     } else {
       setCartItems([...cartItems, { ...food, qty: 1 }]);
@@ -66,34 +122,37 @@ const Pos = () => {
     }
   };
 
-  // ✅ NEW FUNCTION: Add item to cart automatically
   const autoAddItemToCart = (productId) => {
     if (!productId) return;
-
-    // Check if already in cart to avoid duplicates or infinite loops
     const exist = cartItems.find((item) => item.id === productId);
-    if (exist) return; // Already there, no need to add
+    if (exist) return; 
 
     const product = products.find(p => p.id === productId);
     if (product) {
-       if (product.is_available) {
-           setCartItems(prev => [...prev, { ...product, qty: 1 }]);
+       if (product.track_stock) {
+            if (product.stock_quantity > 0) {
+                setCartItems(prev => [...prev, { ...product, qty: 1 }]);
+            } else {
+                setCouponError(`Cannot apply coupon: Free item (${product.product_name}) is out of stock.`);
+                setAppliedCoupon(null);
+            }
        } else {
-           setCouponError(`Cannot apply coupon: The required item (${product.product_name}) is unavailable.`);
-           // We might want to clear the coupon here if the item can't be added
-           setAppliedCoupon(null);
+           if (product.is_available) {
+               setCartItems(prev => [...prev, { ...product, qty: 1 }]);
+           } else {
+               setCouponError(`Cannot apply coupon: The required item (${product.product_name}) is unavailable.`);
+               setAppliedCoupon(null);
+           }
        }
     }
   };
 
-  // Calculations
   const subTotal = cartItems.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const totalQty = cartItems.reduce((sum, item) => sum + item.qty, 0);
   const vat = subTotal - (subTotal * 0.88); 
 
   const standardDiscount = useMemo(() => {
-     if (selectedDiscount === "senior" || selectedDiscount === "pwd") return subTotal * 0.20;
-     return 0;
+      if (selectedDiscount === "senior" || selectedDiscount === "pwd") return subTotal * 0.20;
+      return 0;
   }, [selectedDiscount, subTotal]);
 
   const couponDiscountAmount = useMemo(() => {
@@ -135,7 +194,6 @@ const Pos = () => {
   const total = tempTotal > 0 ? tempTotal : 0;
   const change = cash ? (parseFloat(cash) - total).toFixed(2) : 0;
 
-  // ✅ UPDATED: Handle Apply Promo with Auto-Add Logic
   const handleApplyPromo = async () => {
     if (!promoCode.trim()) {
       setCouponError("Please enter a promo code");
@@ -146,11 +204,7 @@ const Pos = () => {
     setCouponError("");
     
     try {
-      // Note: Assuming your backend supports filtering by code ?code=XYZ
-      // If it returns a list, we take the first one.
       const response = await api.get(`/firstapp/coupons/?code=${promoCode.toUpperCase()}`);
-      
-      // Handle array response or single object depending on your API
       const couponData = Array.isArray(response.data) ? response.data[0] : response.data;
 
       if (!couponData) {
@@ -162,28 +216,30 @@ const Pos = () => {
 
       const coupon = couponData;
 
-      // Check Status
-      if (coupon.status !== 'Active' && coupon.status !== 'active') {
+      // Check sold out
+      const isSoldOut = coupon.usage_limit !== null && coupon.usage_limit <= 0;
+
+      if (isSoldOut) {
+          if (!selectedCustomer) {
+              setCouponError("Coupon sold out. Select a customer who has claimed it.");
+              setAppliedCoupon(null);
+              setCouponLoading(false);
+              return;
+          }
+      }
+      
+      const validStatuses = ['Active', 'active', 'Redeemed', 'redeemed'];
+      if (!validStatuses.includes(coupon.status)) {
         setCouponError(`Coupon is ${coupon.status}`);
         setAppliedCoupon(null);
         setCouponLoading(false);
         return;
       }
 
-      // Check Criteria
       if (coupon.criteria_details) {
         const criteria = coupon.criteria_details;
         const baseAmount = subTotal - standardDiscount;
 
-        // 1. Check Min Spend (Before adding item, usually based on current cart)
-        if (criteria.min_spend && parseFloat(criteria.min_spend) > baseAmount) {
-             // Exception: If the coupon GIVES a free item, maybe we allow it? 
-             // But usually min spend is strict.
-             // We will let it slide for now and rely on re-validation in useEffect if needed.
-        }
-
-        // 2. AUTO-ADD LOGIC
-        // If coupon targets a specific product OR gives a free product, try to add it.
         let itemToAutoAdd = null;
         if (criteria.target_product) {
             itemToAutoAdd = criteria.target_product;
@@ -196,7 +252,6 @@ const Pos = () => {
         }
       }
 
-      // Apply
       setAppliedCoupon(coupon);
       setPromoCode(""); 
       setCouponError("");
@@ -210,19 +265,16 @@ const Pos = () => {
     }
   };
 
-  // Re-validate coupon when cart changes
   useEffect(() => {
     if (appliedCoupon && appliedCoupon.criteria_details) {
         const criteria = appliedCoupon.criteria_details;
         
-        // Check Min Spend
         if (criteria.min_spend > 0 && subTotal < parseFloat(criteria.min_spend)) {
             setAppliedCoupon(null);
             setCouponError(`Coupon removed: Spend fell below ₱${criteria.min_spend}`);
             return;
         }
         
-        // Check Free Item Presence
         if (criteria.discount_type === 'free_item') {
              const hasItem = cartItems.some(i => i.id === criteria.free_product);
              if(!hasItem) {
@@ -232,7 +284,6 @@ const Pos = () => {
              }
         }
 
-        // Check Target Product Presence
         if (criteria.target_product) {
             const hasItem = cartItems.some(i => i.id === criteria.target_product);
             if(!hasItem) {
@@ -291,6 +342,14 @@ const Pos = () => {
     if (cartItems.length === 0) return alert("Cart is empty!");
     if (!cash || parseFloat(cash) < total) return alert("Insufficient cash!");
     
+    // Check if customer is selected for Redeemed coupons
+    if (appliedCoupon && (appliedCoupon.status === 'Redeemed' || appliedCoupon.usage_limit <= 0)) {
+        if (!selectedCustomer) {
+            alert("This coupon is sold out. You MUST select a registered customer to proceed.");
+            return;
+        }
+    }
+
     setLoading(true);
     const payload = {
       subtotal: subTotal.toFixed(2),
@@ -300,6 +359,9 @@ const Pos = () => {
       change,
       coupon: appliedCoupon ? appliedCoupon.id : null, 
       discount_type: selectedDiscount !== "none" ? selectedDiscount : null,
+      
+      customer_id: selectedCustomer, // Send selected ID
+
       items: cartItems.map((i) => ({
         product: i.id, 
         product_name: i.product_name, 
@@ -311,9 +373,10 @@ const Pos = () => {
       const response = await api.post("/firstapp/receipt/", payload);
       setReceiptDetails(response.data);
       setIsReceiptModalOpen(true);
+
     } catch (error) {
       console.error("Submit failed:", error);
-      alert("Failed to submit order.");
+      alert(error.response?.data?.error || "Failed to submit order.");
     } finally {
         setLoading(false);
     }
@@ -327,7 +390,13 @@ const Pos = () => {
       setCouponError("");
       setSelectedDiscount(null);
       setReceiptDetails(null);
+      
+      // Reset Customer Selection
+      setSelectedCustomer(null); 
+      setCustomerSearch("");
+
       setIsReceiptModalOpen(false);
+      api.get("/firstapp/products/").then(res => setProducts(res.data));
   };
 
   return (
@@ -365,12 +434,26 @@ const Pos = () => {
                     </div>
                     <h4 className="font-bold text-gray-800 text-center text-md line-clamp-1 w-full">{food.product_name}</h4>
                     <div className="flex-1"></div>
+                    
                     <div className="w-full flex justify-between items-end border-t pt-2 mt-1">
                        <span className="text-red-600 font-bold">₱{food.price}</span>
-                       {food.is_available ? (
-                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">Available</span>
+                       
+                       {food.track_stock ? (
+                           food.stock_quantity > 0 ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800 border border-green-200">
+                                   Stock: {food.stock_quantity}
+                                </span>
+                           ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 border border-red-200">
+                                   Out of Stock
+                                </span>
+                           )
                        ) : (
-                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">Unavailable</span>
+                           food.is_available ? (
+                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800 border border-green-200">Available</span>
+                           ) : (
+                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 border border-red-200">Unavailable</span>
+                           )
                        )}
                     </div>
                 </div>
@@ -382,7 +465,6 @@ const Pos = () => {
         {/* RIGHT: ORDER SUMMARY */}
         <div className="w-full lg:w-[400px] bg-white rounded-xl shadow-lg flex flex-col h-[calc(100vh-2rem)]">
              
-             {/* Header */}
              <div className="p-5 border-b flex justify-between items-center bg-gray-50 rounded-t-xl">
                 <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2"><ShoppingBag size={20} /> Current Order</h3>
                 
@@ -399,7 +481,6 @@ const Pos = () => {
                 )}
              </div>
 
-             {/* Cart Items */}
              <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
                 {cartItems.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-50">
@@ -430,10 +511,67 @@ const Pos = () => {
                 )}
              </div>
 
-             {/* Footer */}
              <div className="p-5 bg-gray-50 border-t shadow-[0_-5px_15px_rgba(0,0,0,0.05)] z-10 rounded-b-xl">
                 
-                {/* Totals */}
+                {/* --- UPDATED: SEARCHABLE CUSTOMER INPUT --- */}
+                <div className="mb-3 relative" ref={searchRef}>
+                    <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Customer (Optional)</label>
+                    <div className="relative">
+                        <div className="absolute left-3 top-2.5 text-gray-400">
+                            {selectedCustomer ? <User size={16} className="text-green-600" /> : <Search size={16} />}
+                        </div>
+                        
+                        <input 
+                            type="text"
+                            placeholder="Search customer name or ID..."
+                            value={customerSearch}
+                            onChange={(e) => {
+                                setCustomerSearch(e.target.value);
+                                setShowCustomerResults(true);
+                                if(e.target.value === "") setSelectedCustomer(null);
+                            }}
+                            onFocus={() => setShowCustomerResults(true)}
+                            className={`w-full pl-9 pr-8 py-2 border rounded-md text-sm outline-none focus:ring-2 transition ${selectedCustomer ? 'border-green-500 ring-green-100 bg-green-50' : 'focus:ring-blue-100'}`}
+                        />
+
+                        {customerSearch && (
+                            <button 
+                                onClick={handleClearCustomer}
+                                className="absolute right-2 top-2.5 text-gray-400 hover:text-red-500"
+                            >
+                                <X size={16} />
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Results Dropdown */}
+                    {showCustomerResults && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto z-20">
+                            {filteredCustomers.length > 0 ? (
+                                filteredCustomers.map(user => (
+                                    <button
+                                        key={user.id}
+                                        onClick={() => handleSelectCustomer(user)}
+                                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
+                                    >
+                                        <div className="bg-gray-200 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-gray-600">
+                                            {user.username.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div>
+                                            <div className="font-medium text-gray-800">
+                                                {user.first_name || user.username} {user.last_name}
+                                            </div>
+                                            <div className="text-xs text-gray-500">@{user.username}</div>
+                                        </div>
+                                    </button>
+                                ))
+                            ) : (
+                                <div className="px-3 py-2 text-sm text-gray-400 text-center">No customers found</div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
                 <div className="space-y-1 mb-4 text-sm text-gray-600">
                     <div className="flex justify-between"><span>Subtotal</span><span>₱{subTotal.toFixed(2)}</span></div>
                     {selectedDiscount !== "none" && selectedDiscount && (
@@ -454,22 +592,20 @@ const Pos = () => {
                     </div>
                 </div>
 
-                {/* Discount & Cash Inputs */}
                 <div className="grid grid-cols-2 gap-2 mb-3">
-                     <SelectDiscount options={discountOptions} onSelect={setSelectedDiscount} placeholder="Discount Type"/>
-                     <div className="relative">
-                       <span className="absolute left-3 top-2 text-gray-400">₱</span>
-                        <input 
-                          type="number" 
-                          value={cash} 
-                          onChange={(e) => setCash(e.target.value)} 
-                          className="w-full pl-6 pr-2 py-2 border rounded-md text-right font-bold focus:ring-2 focus:ring-green-500 outline-none" 
-                          placeholder="CASH"
-                        />
-                     </div>
+                      <SelectDiscount options={discountOptions} onSelect={setSelectedDiscount} placeholder="Discount Type"/>
+                      <div className="relative">
+                        <span className="absolute left-3 top-2 text-gray-400">₱</span>
+                         <input 
+                           type="number" 
+                           value={cash} 
+                           onChange={(e) => setCash(e.target.value)} 
+                           className="w-full pl-6 pr-2 py-2 border rounded-md text-right font-bold focus:ring-2 focus:ring-green-500 outline-none" 
+                           placeholder="CASH"
+                         />
+                      </div>
                 </div>
 
-                {/* Promo Code Section */}
                 <div className="flex gap-2 mb-2">
                     <input 
                       value={promoCode} 
@@ -501,7 +637,6 @@ const Pos = () => {
                     )}
                 </div>
 
-                {/* Error & Success Messages */}
                 {couponError && (
                   <div className="text-xs text-red-500 flex items-center gap-1 mb-2">
                     <FaExclamationCircle/> {couponError}

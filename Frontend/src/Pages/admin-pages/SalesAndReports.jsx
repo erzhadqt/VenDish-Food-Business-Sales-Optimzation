@@ -20,11 +20,16 @@ const periods = ["Daily", "Weekly", "Monthly", "Yearly"];
 const chartTypes = ["Bar", "Line", "Area"];
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
-export default function Sales() {
+export default function SalesAndReports() {
   // --- STATE ---
   const [reports, setReports] = useState([]); 
   const [staffReports, setStaffReports] = useState([]); // NEW: Store Staff Data
   const [loading, setLoading] = useState(true);
+  const [allReceipts, setAllReceipts] = useState([]); // NEW: Store raw receipts for filtering
+  const [originalReports, setOriginalReports] = useState([]); // NEW: Store server-side reports
+
+  const [cashierOptions, setCashierOptions] = useState([]); // NEW: List of cashier names
+  const [filterCashier, setFilterCashier] = useState("ALL"); // NEW: Selected Cashier
   
   // VIEW MODES: 'timeline' (Default) | 'staff' (Admin Only)
   const [viewMode, setViewMode] = useState('timeline'); 
@@ -38,43 +43,68 @@ export default function Sales() {
 
   // 1. CHECK ADMIN STATUS ON LOAD
   useEffect(() => {
-    try {
-        const userString = localStorage.getItem('user'); // Or however you store auth
-        if (userString) {
-            const user = JSON.parse(userString);
-            // Check if user is superuser (adjust property name based on your UserSerializer)
-            if (user.is_superuser === true || user.role === 'admin') {
-                setIsAdmin(true);
-            }
-        }
-    } catch (e) {
-        console.error("Error parsing user data:", e);
+    const getUserData = async () => {
+      try {
+        const response = await api.get('/firstapp/user/me/');
+
+
+        if (response.data.is_staff || response.data.is_superuser) setIsAdmin(true);
+      } catch (err) {
+        console.log(err)
+      }
+
+      
     }
+    getUserData()
   }, []);
+
+  console.log(isAdmin)
 
   // 2. FETCH REPORTS (Updated to fetch Staff data if Admin)
   const fetchReports = async () => {
     setLoading(true);
     try {
-      // A. Always fetch the Timeline (Sales Over Time)
+      // A. Fetch Timeline Data (Default Global/User Sales)
       const timelineRes = await api.get('/firstapp/sales/');
-      setReports(timelineRes.data);
+      setOriginalReports(timelineRes.data); // Store original reference
+      setReports(timelineRes.data);         // Set initial view
 
-      // B. If Admin, also fetch the Staff Performance breakdown
-      // We check the state 'isAdmin' here. Note: inside useEffect, state might lag slightly on first render,
-      // but the dependency array below handles re-fetching.
+      // B. If Admin, fetch receipts for Staff Calculation AND Client-side Filtering
       const userString = localStorage.getItem('user');
       const user = userString ? JSON.parse(userString) : null;
       
-      if (user && (user.is_superuser || user.role === 'admin')) {
-          try {
-            const staffRes = await api.get('/firstapp/sales/by-staff/');
-            setStaffReports(staffRes.data);
-          } catch (err) {
-            console.warn("Could not fetch staff data:", err);
-          }
-      }
+      if (user && user.is_superuser) {
+        try {
+          const receiptsRes = await api.get('/firstapp/receipt/');
+          const receipts = receiptsRes.data;
+          
+          setAllReceipts(receipts); // Save raw data
 
+          // 1. Group by Cashier for Staff View
+          const staffMap = {};
+          // 2. Extract Unique Cashier Names for Dropdown
+          const uniqueCashiers = new Set();
+
+          receipts.forEach(receipt => {
+            const cashierName = receipt.cashier_name || 'Unknown';
+            if(receipt.status === 'COMPLETED') {
+                if (!staffMap[cashierName]) {
+                    staffMap[cashierName] = { name: cashierName, revenue: 0, orders: 0 };
+                }
+                staffMap[cashierName].revenue += parseFloat(receipt.total || 0);
+                staffMap[cashierName].orders += 1;
+                
+                uniqueCashiers.add(cashierName);
+            }
+          });
+          
+          setStaffReports(Object.values(staffMap).sort((a, b) => b.revenue - a.revenue));
+          setCashierOptions(Array.from(uniqueCashiers).sort());
+
+        } catch (err) {
+          console.error("Staff data calculation error:", err);
+        }
+      }
     } catch (error) {
       console.error("Failed to fetch reports:", error);
     } finally {
@@ -82,7 +112,14 @@ export default function Sales() {
     }
   };
 
+
+  // Trigger fetch when component mounts or admin status changes
+  useEffect(() => {
+    fetchReports();
+  }, [isAdmin]);
+
   const refreshToday = async () => {
+    // ... existing refresh logic ...
     try {
       setLoading(true);
       await api.post('/firstapp/sales/refresh-today/');
@@ -93,6 +130,55 @@ export default function Sales() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    // If "ALL" is selected, restore the data fetched from server
+    if (filterCashier === 'ALL') {
+        if (originalReports.length > 0) {
+            setReports(originalReports);
+        }
+        return;
+    }
+
+    // If a specific cashier is selected, aggregate data from 'allReceipts'
+    const groupedData = {};
+
+    allReceipts.forEach(receipt => {
+        // 1. Check Cashier Match
+        const rCashier = receipt.cashier_name || 'Unknown';
+        if (rCashier !== filterCashier) return;
+
+        // 2. Get Date Key (YYYY-MM-DD)
+        const dateKey = receipt.created_at ? receipt.created_at.substring(0, 10) : 'N/A';
+
+        // 3. Initialize Group if new
+        if (!groupedData[dateKey]) {
+            groupedData[dateKey] = {
+                report_date: dateKey,
+                total_revenue: 0,
+                total_orders: 0,
+                voided_orders: 0,
+                top_selling_product: "N/A" // Harder to calculate client-side without item details, keeping generic
+            };
+        }
+
+        // 4. Aggregate Math
+        if (receipt.status === 'COMPLETED') {
+            groupedData[dateKey].total_revenue += parseFloat(receipt.total || 0);
+            groupedData[dateKey].total_orders += 1;
+        } else if (receipt.status === 'VOIDED') {
+            groupedData[dateKey].voided_orders += 1;
+        }
+    });
+
+    // Convert object back to array and sort
+    const calculatedReports = Object.values(groupedData).sort((a, b) => 
+        new Date(b.report_date) - new Date(a.report_date)
+    );
+
+    setReports(calculatedReports);
+
+  }, [filterCashier, allReceipts, originalReports]);
 
   // Re-fetch when admin status is determined
   useEffect(() => {
@@ -219,7 +305,6 @@ export default function Sales() {
       return [
         dateStr,
         r.total_revenue,
-        r.total_revenue, // Gross Income = Revenue (Since no COGS)
         r.total_orders,
         r.voided_orders,
         productName
@@ -256,18 +341,37 @@ export default function Sales() {
             {viewMode === 'timeline' ? 'Financial Reports' : 'Staff Performance'}
           </h1>
           <p className="text-gray-600">
-            {viewMode === 'timeline' 
-                ? 'Daily revenue and gross income tracking' 
+             {/* Dynamic description */}
+             {viewMode === 'timeline' 
+                ? (filterCashier === 'ALL' ? 'Daily revenue and gross income tracking' : `Sales history for: ${filterCashier}`)
                 : 'Comparative sales analysis by staff member'}
           </p>
         </div>
         
         <div className="flex gap-2">
             {/* --- ADMIN TOGGLE: Sales vs Staff --- */}
+            {isAdmin && viewMode === 'timeline' && (
+                <div className="flex items-center bg-white border border-gray-300 rounded-lg px-2">
+                    <span className="text-xs text-gray-500 mr-2 font-medium uppercase">Filter:</span>
+                    <select 
+                        value={filterCashier}
+                        onChange={(e) => setFilterCashier(e.target.value)}
+                        className="bg-transparent text-sm font-medium text-gray-700 py-2 focus:outline-none cursor-pointer"
+                    >
+                        <option value="ALL">All Cashiers</option>
+                        {cashierOptions.map(name => (
+                            <option key={name} value={name}>{name}</option>
+                        ))}
+                    </select>
+                </div>
+            )}
+
+            {/* ... Admin View Mode Toggles ... */}
             {isAdmin && (
                 <div className="bg-white border border-gray-300 rounded-lg p-1 flex mr-2">
+                {/* ... existing buttons ... */}
                     <button 
-                        onClick={() => setViewMode('timeline')}
+                        onClick={() => { setViewMode('timeline'); setFilterCashier('ALL'); }} // Reset filter when switching
                         className={`px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all ${viewMode === 'timeline' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
                     >
                         <BarChart3 size={16}/> Sales
@@ -281,7 +385,7 @@ export default function Sales() {
                 </div>
             )}
 
-            <button 
+           <button 
                 onClick={refreshToday} 
                 disabled={loading}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm transition-all disabled:opacity-50"
@@ -381,7 +485,7 @@ export default function Sales() {
                         <Tooltip formatter={(v) => `₱ ${v.toLocaleString()}`} />
                         <Legend />
                         <Bar dataKey="revenue" name="Revenue" fill="#1e40af" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="gross_income" name="Gross Income" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                        {/* <Bar dataKey="gross_income" name="Gross Income" fill="#22c55e" radius={[4, 4, 0, 0]} /> */}
                     </BarChart>
                     ) : chartType === "Line" ? (
                     <LineChart data={chartData}>
@@ -391,7 +495,7 @@ export default function Sales() {
                         <Tooltip formatter={(v) => `₱ ${v.toLocaleString()}`} />
                         <Legend />
                         <Line type="monotone" dataKey="revenue" name="Revenue" stroke="#1e40af" strokeWidth={3} dot={{ r: 3 }} />
-                        <Line type="monotone" dataKey="gross_income" name="Gross Income" stroke="#22c55e" strokeWidth={3} dot={{ r: 3 }} />
+                        {/* <Line type="monotone" dataKey="gross_income" name="Gross Income" stroke="#22c55e" strokeWidth={3} dot={{ r: 3 }} /> */}
                     </LineChart>
                     ) : (
                     <AreaChart data={chartData}>
@@ -498,27 +602,29 @@ export default function Sales() {
 
             {/* STAFF TABLE */}
             <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-                <table className="min-w-full">
-                    <thead>
-                        <tr className="bg-gray-800 text-white">
-                            <th className="py-3 px-4 text-left text-sm">Staff Name</th>
-                            <th className="py-3 px-4 text-left text-sm">Total Orders</th>
-                            {/* <th className="py-3 px-4 text-left text-sm">Total Revenue Generated</th> */}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {staffReports.length > 0 ? staffReports.map((staff, idx) => (
-                            <tr key={idx} className="border-b hover:bg-gray-50">
-                                <td className="py-3 px-4 font-medium text-gray-900">{staff.name}</td>
-                                <td className="py-3 px-4 text-gray-600">{staff.orders}</td>
-                                <td className="py-3 px-4 font-bold text-green-600">₱ {parseFloat(staff.revenue).toLocaleString()}</td>
-                            </tr>
-                        )) : (
-                            <tr><td colSpan="3" className="text-center py-8 text-gray-500">No staff data available.</td></tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
+              <table className="min-w-full">
+                  <thead>
+                      <tr className="bg-gray-800 text-white">
+                          <th className="py-3 px-4 text-left text-sm font-semibold">Staff Name</th>
+                          <th className="py-3 px-4 text-left text-sm font-semibold">Total Orders</th>
+                          <th className="py-3 px-4 text-left text-sm font-semibold">Total Revenue</th>
+                      </tr>
+                  </thead>
+                  <tbody>
+                      {staffReports.length > 0 ? staffReports.map((staff, idx) => (
+                          <tr key={idx} className="border-b hover:bg-gray-50">
+                              <td className="py-3 px-4 font-medium text-gray-900">{staff.name}</td>
+                              <td className="py-3 px-4 text-gray-600">{staff.orders}</td>
+                              <td className="py-3 px-4 font-bold text-green-600">
+                                  ₱ {parseFloat(staff.revenue).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                              </td>
+                          </tr>
+                      )) : (
+                          <tr><td colSpan="3" className="text-center py-8 text-gray-500">No staff data available.</td></tr>
+                      )}
+                  </tbody>
+              </table>
+          </div>
         </div>
       )}
 

@@ -186,18 +186,45 @@ function ProductList() {
                     <span className="text-gray-500">Price</span>
                     <span className="text-lg font-bold text-gray-900">₱{p.price}</span>
                   </div>
+
+                  {p.track_stock && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">Stock</span>
+                      <span className={`font-bold ${
+                          p.stock_quantity === 0 ? "text-red-600" : 
+                          p.stock_quantity < 10 ? "text-orange-600" : "text-gray-900"
+                      }`}>
+                          {p.stock_quantity}
+                      </span>
+                    </div>
+                  )}
+
+
                   
                   <div className="flex items-center justify-between pt-2 border-t-3 border-gray-200">
                     <span className="text-gray-500">Status</span>
                     
-                    {p.is_available ? (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
-                        Available
-                      </span>
+                    {p.track_stock ? (
+                      p.stock_quantity > 0 ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
+                            In Stock
+                          </span>
+                      ) : (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+                            Out of Stock
+                          </span>
+                      )
                     ) : (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
-                        Unavailable
-                      </span>
+                    /* LOGIC B: If NOT Tracking Stock, status depends on Manual Toggle */
+                      p.is_available ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
+                            Available
+                          </span>
+                      ) : (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
+                            Unavailable
+                          </span>
+                      )
                     )}
                   </div>
                 </div>

@@ -21,9 +21,12 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
   const [category, setCategory] = useState("");
   const [price, setPrice] = useState("");
   
-  // CHANGED: Replaced stock (number) with isAvailable (boolean)
-  const [isAvailable, setIsAvailable] = useState(true);
+  // NEW: State for Stock Quantity
+  const [stockQuantity, setStockQuantity] = useState(0);
+
+  const [trackStock, setTrackStock] = useState(false); // Default false
   
+  const [isAvailable, setIsAvailable] = useState(true);
   const [loading, setLoading] = useState(false);
   const [image, setImage] = useState(null);
   const [error, setError] = useState("");
@@ -64,8 +67,12 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
       formData.append("product_name", productName);
       formData.append("category", category);
       formData.append("price", parseFloat(price));
+
+      formData.append("track_stock", trackStock);
       
-      // CHANGED: Append boolean value
+      // NEW: Append stock quantity
+      formData.append("stock_quantity", parseInt(stockQuantity) || 0);
+
       formData.append("is_available", isAvailable); 
       
       if (image) formData.append("image", image);
@@ -82,7 +89,8 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
       setProductName("");
       setCategory("");
       setPrice("");
-      setIsAvailable(true); // Reset to true
+      setStockQuantity(0); // Reset Stock
+      setIsAvailable(true);
       setImage(null);
       setError("");
     } catch (err) {
@@ -114,7 +122,7 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
         )}
 
         <form className="grid gap-4" onSubmit={handleSubmit}>
-          {/* ... Product Name Input (Keep as is) ... */}
+          {/* Product Name Input */}
           <div className="grid gap-2">
             <Label htmlFor="product-name">Product Name</Label>
             <Input
@@ -126,7 +134,7 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
             />
           </div>
 
-          {/* ... Category Input (Keep as is) ... */}
+          {/* Category Input */}
           <div className="grid gap-2">
             <Label htmlFor="category">Category</Label>
             <select
@@ -143,19 +151,71 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
             </select>
           </div>
 
-          {/* ... Price Input (Keep as is) ... */}
-          <div className="grid gap-2">
-            <Label htmlFor="price">Price</Label>
-            <Input
-              id="price"
-              type="number"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              required
-            />
+          <div className="flex items-center gap-2">
+                <input 
+                    type="checkbox" 
+                    id="trackStock"
+                    checked={trackStock}
+                    onChange={(e) => setTrackStock(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded"
+                />
+                <Label htmlFor="trackStock" className="font-semibold">Track Stock Quantity?</Label>
+            </div>
+
+            {trackStock ? (
+                // OPTION A: Show Quantity Input
+                <div className="animate-in slide-in-from-top-2">
+                    <Label>Stock Quantity</Label>
+                    <Input 
+                        type="number" 
+                        value={stockQuantity} 
+                        onChange={e => setStockQuantity(e.target.value)} 
+                    />
+                </div>
+            ) : (
+                // OPTION B: Show Simple Availability Toggle
+                <div className="animate-in slide-in-from-top-2 flex items-center gap-2">
+                    <input 
+                        type="checkbox" 
+                        id="avail"
+                        checked={isAvailable}
+                        onChange={(e) => setIsAvailable(e.target.checked)}
+                        className="w-4 h-4 text-green-600 rounded"
+                    />
+                    <Label htmlFor="avail">Product is Available</Label>
+                </div>
+            )}
+
+          <div className="grid grid-cols-2 gap-4">
+             {/* Price Input */}
+            <div className="grid gap-2">
+                <Label htmlFor="price">Price (₱)</Label>
+                <Input
+                id="price"
+                type="number"
+                step="0.01"
+                min="0"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                required
+                />
+            </div>
+
+            {/* NEW: Stock Quantity Input */}
+            <div className="grid gap-2">
+                <Label htmlFor="stock">Stock Quantity</Label>
+                <Input
+                id="stock"
+                type="number"
+                min="0"
+                value={stockQuantity}
+                onChange={(e) => setStockQuantity(e.target.value)}
+                required
+                />
+            </div>
           </div>
 
-          {/* CHANGED: Replaced Stock Input with Checkbox */}
+          {/* Availability Checkbox */}
           <div className="flex items-center gap-3 p-2 border rounded-md bg-gray-50">
             <input
               id="is_available"
@@ -165,11 +225,11 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
               className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 border-gray-300"
             />
             <Label htmlFor="is_available" className="cursor-pointer font-medium text-gray-700">
-              Mark as Available
+              Mark as Available (Manual Override)
             </Label>
           </div>
 
-          {/* ... Image Input (Keep as is) ... */}
+          {/* Image Input */}
           <div className="grid gap-2">
             <Label htmlFor="image">Upload Image</Label>
             <Input

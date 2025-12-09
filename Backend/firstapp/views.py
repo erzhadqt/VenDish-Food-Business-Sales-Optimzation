@@ -12,8 +12,6 @@ from datetime import timedelta
 from django.db.models import Sum, Count, Q
 from django.db.models.functions import TruncDate
 
-
-
 from .serializers import (
     UserSerializer, FeedbackSerializer, ProductSerializer, ReceiptSerializer, CouponSerializer, HomePageSerializer, AboutPageSerializer, ContactPageSerializer, DailySalesReportSerializer, CouponCriteriaSerializer, StaffPerformanceSerializer
 )
@@ -28,17 +26,17 @@ from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 class CreateUserView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    permission_classes = [AllowAny]     # Anyone can register
+    permission_classes = [AllowAny]
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by("-id")
     serializer_class = UserSerializer
-    permission_classes = [IsAdminUser]   # Only admins can view/edit/delete users
+    permission_classes = [IsAdminUser]
 
 class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    permission_classes = [IsAdminUser]  # Ensure the user has admin permissions
+    permission_classes = [IsAdminUser]
 
 class CurrentUserView(APIView):
     permission_classes = [IsAuthenticated]
@@ -50,18 +48,16 @@ class CurrentUserView(APIView):
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all().order_by("-id")
     serializer_class = ProductSerializer
-    permission_classes = [IsAdminUser]  # change to IsAdminUser if needed
+    permission_classes = [IsAdminUser]
 
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     search_fields = ['product_name']
     filterset_fields = ['category']
 
     def get_permissions(self):
-        # Allow any authenticated user (Staff or Admin) to list/retrieve
         if self.action in ['list', 'retrieve']:
             permission_classes = [IsAuthenticated]
         else:
-            # Only Admins can create, update, or delete
             permission_classes = [IsAdminUser]
         return [permission() for permission in permission_classes]
     
@@ -77,11 +73,9 @@ class ReceiptViewSet(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return Receipt.objects.none()
 
-        # ADMINS see ALL receipts
         if user.is_superuser: 
             return queryset
         
-        # STAFF see only their own
         return queryset.filter(cashier=user)
 
     # ---------------------------------------------------------
@@ -93,16 +87,44 @@ class ReceiptViewSet(viewsets.ModelViewSet):
         if serializer.is_valid():
             try:
                 with transaction.atomic():
-                    # 1. Save Receipt with CURRENT USER as Cashier
-                    receipt = serializer.save(cashier=request.user)
+                    # 1. Get Customer (if selected in POS)
+                    customer_id = request.data.get('customer_id')
+                    target_customer = None
+                    if customer_id and customer_id != 'null': # Handle string 'null' from JS
+                        try:
+                            target_customer = User.objects.get(id=customer_id)
+                        except User.DoesNotExist:
+                            pass
 
-                    # 2. UPDATE COUPON
+                    # 2. Save Receipt with Cashier AND Customer
+                    receipt = serializer.save(
+                        cashier=request.user, 
+                        customer=target_customer
+                    )
+
+                    # 3. UPDATE COUPON
                     if receipt.coupon:
+                        # Lock the coupon row to prevent race conditions
                         coupon = Coupon.objects.select_for_update().get(id=receipt.coupon.id)
+                        
+                        # --- VALIDATION LOGIC ---
+                        # If usage_limit is 0 (Sold Out), stricter rules apply:
+                        if coupon.usage_limit is not None and coupon.usage_limit <= 0:
+                            
+                            # Rule A: Walk-ins cannot use sold-out coupons
+                            if not target_customer:
+                                raise Exception("This coupon is fully redeemed (0 remaining). Cannot be applied to walk-in orders.")
+                            
+                            # Rule B: Registered customers can ONLY use it if they have it in their wallet (claimed_by)
+                            has_claim = coupon.claimed_by.filter(id=target_customer.id).exists()
+                            if not has_claim:
+                                raise Exception("This coupon is sold out and this customer did not claim it beforehand.")
+
+                        # --- END VALIDATION ---
+
+                        # Increment global usage
                         coupon.times_used += 1
-                        if coupon.usage_limit and coupon.times_used >= coupon.usage_limit:
-                            coupon.status = Coupon.Status.REDEEMED
-                        coupon.save()
+                        coupon.save() 
 
                     return Response(
                         {"receipt_id": receipt.id, **serializer.data},
@@ -114,9 +136,6 @@ class ReceiptViewSet(viewsets.ModelViewSet):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
-    # ---------------------------------------------------------
-    # 2. LOG VOID (Partial Void from Cart) - NEW FUNCTION
-    # ---------------------------------------------------------
     @action(detail=False, methods=['post'], url_path='log-void')
     def log_void(self, request):
         items_data = request.data.get('items', [])
@@ -130,10 +149,9 @@ class ReceiptViewSet(viewsets.ModelViewSet):
             with transaction.atomic():
                 total_void_amount = sum(float(item['price']) * int(item['quantity']) for item in items_data)
 
-                # Create Receipt (Save 'cashier' here as well so they see their voids)
                 receipt = Receipt.objects.create(
                     status='VOIDED',
-                    cashier=user, # <--- Added this line
+                    cashier=user, 
                     total=total_void_amount,
                     subtotal=total_void_amount,
                     vat=0,
@@ -162,9 +180,6 @@ class ReceiptViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({"error": str(e)}, status=500)
 
-    # ---------------------------------------------------------
-    # 3. VOID FULL RECEIPT (Post-Transaction)
-    # ---------------------------------------------------------
     @action(detail=True, methods=['post'], url_path='void')
     def void_receipt(self, request, pk=None, id=None):
         receipt = self.get_object() 
@@ -177,24 +192,12 @@ class ReceiptViewSet(viewsets.ModelViewSet):
 
         try:
             with transaction.atomic():
-                # (Stock restoration logic removed as requested)
-
-                # A. Restore Coupon
                 if receipt.coupon:
                     coupon = Coupon.objects.select_for_update().get(id=receipt.coupon.id)
-                    
                     if coupon.times_used > 0:
                         coupon.times_used -= 1
-                    
-                    if coupon.status == Coupon.Status.REDEEMED:
-                        if getattr(coupon, 'claimed_by', None): 
-                            coupon.status = Coupon.Status.CLAIMED
-                        else:
-                            coupon.status = Coupon.Status.ACTIVE
-                    
                     coupon.save()
 
-                # B. Mark Receipt as Void
                 receipt.status = 'VOIDED' 
                 receipt.void_reason = request.data.get('reason', "Voided via POS")
                 receipt.voided_at = timezone.now()
@@ -209,112 +212,93 @@ class ReceiptViewSet(viewsets.ModelViewSet):
 class CouponViewSet(viewsets.ModelViewSet):
     queryset = Coupon.objects.all().order_by('-id')
     serializer_class = CouponSerializer
-    permission_classes = [IsAuthenticated]
+    
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            permission_classes = [AllowAny]
+        else:
+            permission_classes = [IsAuthenticated]
+        return [permission() for permission in permission_classes]
 
     def get_queryset(self):
-        """
-        By default, list Active coupons (Public) OR Coupons owned by the user.
-        """
         user = self.request.user
-        if user.is_superuser:
-            return Coupon.objects.all().order_by('-id')
         
-        # Show coupons that are:
-        # 1. Active AND Unclaimed (Public Promos)
-        # 2. OR Claimed by THIS user (My Wallet)
-        return Coupon.objects.filter(
-            status__in=['Active', 'Claimed']
-        ).filter(
-            Q(claimed_by=None) | Q(claimed_by=user)
-        ).order_by('-id')
+        # Base query for public coupons (Active and In Stock)
+        public_coupons = Coupon.objects.filter(
+            status='Active', 
+            usage_limit__gt=0
+        )
 
-    # ------------------------------------------------------------
-    # 2. THE FIX: ADD THE CLAIM ACTION
-    # ------------------------------------------------------------
+        if user.is_authenticated:
+            # FIX: Allow STAFF (Cashiers) to see ALL coupons
+            if user.is_superuser or user.is_staff:
+                return Coupon.objects.all().order_by('-id')
+            
+            # For Users: Show Active Public + Coupons they own
+            return Coupon.objects.filter(
+                Q(status='Active', usage_limit__gt=0) | 
+                Q(claimed_by=user)
+            ).distinct().order_by('-id')
+        
+        return public_coupons.order_by('-id')
+
     @action(detail=True, methods=['post'], url_path='claim')
     def claim(self, request, pk=None):
-        """
-        Endpoint: POST /firstapp/coupons/{id}/claim/
-        """
         coupon = self.get_object()
         user = request.user
 
-        # A. Validation: Is it already claimed?
         if coupon.status != 'Active':
-            return Response(
-                {"error": "This coupon is no longer active."}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": "This coupon is no longer active."}, status=status.HTTP_400_BAD_REQUEST)
         
-        if coupon.claimed_by is not None:
-            # If the user already owns it, just return success
-            if coupon.claimed_by == user:
-                return Response({"message": "You already own this coupon."})
-            
-            return Response(
-                {"error": "This coupon has already been claimed by someone else."}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        if coupon.claimed_by.filter(id=user.id).exists():
+            return Response({"message": "You already have this coupon in your wallet."})
 
-        # B. Claim Logic
+        if coupon.usage_limit is not None and coupon.usage_limit <= 0:
+             return Response({"error": "This coupon is fully claimed (Sold Out)."}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
-            coupon.claimed_by = user
-            coupon.status = 'Claimed' # Update status so it doesn't show for others
-            coupon.save()
+            with transaction.atomic():
+                coupon = Coupon.objects.select_for_update().get(id=coupon.id)
+                
+                if coupon.usage_limit is not None and coupon.usage_limit > 0:
+                    coupon.usage_limit -= 1
+                    coupon.claimed_by.add(user)
+                    coupon.save() # Trigger status update in model
+                else:
+                    return Response({"error": "Sold Out just now."}, status=400)
 
-            # Return the updated coupon data
             serializer = self.get_serializer(coupon)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
         except Exception as e:
-            return Response(
-                {"error": str(e)}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['get'], url_path='my-coupons')
     def my_coupons(self, request):
-        """
-        Fetch only the coupons claimed by the logged-in user.
-        """
         user = request.user
-        
-        # Safety check
         if not user.is_authenticated:
             return Response({"error": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
 
-        # Filter coupons where claimed_by is the current user
         my_coupons = Coupon.objects.filter(claimed_by=user).order_by('-created_at')
-        
         serializer = self.get_serializer(my_coupons, many=True)
         return Response(serializer.data)
 
+# ... [Rest of Views (CouponCriteria, DailySales, etc) remain unchanged] ...
 class CouponCriteriaViewSet(viewsets.ModelViewSet):
     queryset = CouponCriteria.objects.all().order_by('-id')
     serializer_class = CouponCriteriaSerializer
-    permission_classes = [IsAuthenticated] # Or IsAdminUser
+    permission_classes = [IsAuthenticated] 
 
 class DailySalesReportViewSet(viewsets.ViewSet):
-    """
-    Unified ViewSet for all Sales Reports (Timeline & Staff Performance).
-    Calculates data dynamically from Receipts (No static tables).
-    """
     permission_classes = [IsAuthenticated]
 
-    # ------------------------------------------------------------------
-    # 1. TIMELINE VIEW (Daily/Monthly Stats)
-    # Endpoint: GET /firstapp/sales/
-    # ------------------------------------------------------------------
     def list(self, request):
-    # A. Base Query
         queryset = Receipt.objects.filter(status='COMPLETED')
         user = request.user
         
-        # B. Filter: Admin sees all, Staff sees own
         if not user.is_superuser:
             queryset = queryset.filter(cashier=user)
         
-        # C. Aggregate Financials
         report_data = (
             queryset
             .annotate(report_date=TruncDate('created_at'))
@@ -326,7 +310,6 @@ class DailySalesReportViewSet(viewsets.ViewSet):
             .order_by('-report_date')
         )
 
-        # D. Get Void Data (FIXED)
         void_queryset = Receipt.objects.filter(status='VOIDED')
         if not user.is_superuser:
             void_queryset = void_queryset.filter(cashier=user)
@@ -339,7 +322,6 @@ class DailySalesReportViewSet(viewsets.ViewSet):
         )
         void_map = {str(item['report_date']): item['voided_orders'] for item in void_data}
 
-        # E. Top Seller Logic
         top_seller_map = {}
         receipt_ids = queryset.values_list('id', flat=True)
         if receipt_ids:
@@ -355,7 +337,6 @@ class DailySalesReportViewSet(viewsets.ViewSet):
                 if date_str not in top_seller_map:
                     top_seller_map[date_str] = stat['product_name']
 
-        # F. Response Construction (FIXED: Include voided_orders)
         final_response = []
         for item in report_data:
             date_str = str(item['report_date'])
@@ -367,7 +348,7 @@ class DailySalesReportViewSet(viewsets.ViewSet):
                 "net_profit": total_rev,
                 "total_cost": 0,
                 "total_orders": item['total_orders'],
-                "voided_orders": void_map.get(date_str, 0),  # FIX: Get voided count from map
+                "voided_orders": void_map.get(date_str, 0),
                 "top_selling_product": top_seller_map.get(date_str, "N/A")
             })
 
@@ -375,7 +356,6 @@ class DailySalesReportViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['get'], url_path='by-staff')
     def by_staff(self, request):
-        # Security: Only admins can see this
         if not request.user.is_superuser:
             return Response({"error": "Unauthorized"}, status=403)
 
@@ -402,13 +382,8 @@ class DailySalesReportViewSet(viewsets.ViewSet):
                 "orders": item['total_orders']
             })
 
-        print(response_data)
-
-        # Pass the list of dictionaries to the serializer with many=True
         serializer = StaffPerformanceSerializer(response_data, many=True)
         return Response(serializer.data)
-    
-        
 
     @action(detail=False, methods=['post'], url_path='refresh-today')
     def refresh_today(self, request):
@@ -419,18 +394,15 @@ class FeedbackViewSet(viewsets.ModelViewSet):
     serializer_class = FeedbackSerializer
     permission_classes = [IsAuthenticated]
 
-
 class HomePageViewSet(viewsets.ModelViewSet):
     queryset = HomePage.objects.all()
     serializer_class = HomePageSerializer
     permission_classes = [IsAuthenticated]
 
-
 class AboutPageViewSet(viewsets.ModelViewSet):
     queryset = AboutPage.objects.all()
     serializer_class = AboutPageSerializer
     permission_classes = [IsAuthenticated]
-
 
 class ContactPageViewSet(viewsets.ModelViewSet):
     queryset = ContactPage.objects.all()

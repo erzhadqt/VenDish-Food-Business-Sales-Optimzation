@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/Components/ui/table";
-import { Plus } from "lucide-react"; // Removed Settings2
+import { Plus } from "lucide-react"; 
 import api from "../../api";
-import AddDiscountDialog from "../../Components/AddDiscountDialog"; // Updated Import
+import AddDiscountDialog from "../../Components/AddDiscountDialog"; 
 
 const PromoManagement = () => {
   const [coupons, setCoupons] = useState([]);
   const [products, setProducts] = useState([]); 
   
-  // Only one modal state needed now
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const fetchData = async () => {
@@ -27,6 +26,22 @@ const PromoManagement = () => {
 
   useEffect(() => { fetchData(); }, []);
 
+  const getStatusBadge = (status, limit) => {
+    // If explicit status is Active but limit is 0, consider it Sold Out/Redeemed visually
+    const effectiveStatus = (limit === 0 && status === 'Active') ? 'Redeemed' : status;
+
+    switch (effectiveStatus) {
+        case 'Active':
+            return 'bg-green-100 text-green-700 border-green-200';
+        case 'Redeemed':
+            return 'bg-gray-200 text-gray-700 border-gray-300';
+        case 'Expired':
+            return 'bg-red-100 text-red-700 border-red-200';
+        default:
+            return 'bg-gray-100 text-gray-600 border-gray-200';
+    }
+  };
+
   return (
     <div className="p-6 space-y-8 bg-gray-50 min-h-screen">
       
@@ -37,7 +52,7 @@ const PromoManagement = () => {
             <p className="text-gray-500 text-sm">Create and track dynamic discount codes.</p>
         </div>
         
-        {/* Simplified Action Button */}
+        {/* Action Button */}
         <Button onClick={() => setIsCreateOpen(true)} className="bg-blue-600 hover:bg-blue-700">
             <Plus className="w-4 h-4 mr-2"/> Create New Coupon
         </Button>
@@ -88,18 +103,24 @@ const PromoManagement = () => {
 
                 {/* Status */}
                 <TableCell>
-                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${
-                      coupon.status === 'Active' 
-                      ? 'bg-green-50 text-green-700 border-green-200' 
-                      : 'bg-gray-100 text-gray-600 border-gray-200'
-                  }`}>
-                    {coupon.status}
+                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusBadge(coupon.status, coupon.usage_limit)}`}>
+                    {/* Visual Override: If limit is 0, show Redeemed even if DB lag */}
+                    {coupon.usage_limit === 0 ? "Redeemed" : coupon.status}
                   </span>
                 </TableCell>
 
                 {/* Usage */}
                 <TableCell className="text-right text-gray-600">
-                    {coupon.times_used} Used
+                    <div className="flex flex-col items-end">
+                        <span>{coupon.times_used} Used Total</span>
+                        {coupon.usage_limit !== null ? (
+                            <span className={`text-xs font-bold ${coupon.usage_limit === 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                {coupon.usage_limit} Remaining
+                            </span>
+                        ) : (
+                            <span className="text-xs text-gray-400">Unlimited</span>
+                        )}
+                    </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -119,7 +140,7 @@ const PromoManagement = () => {
         open={isCreateOpen} 
         onOpenChange={setIsCreateOpen}
         onSaved={fetchData}
-        products={products} // Passed down for "Free Item" selection
+        products={products} 
       />
 
     </div>
