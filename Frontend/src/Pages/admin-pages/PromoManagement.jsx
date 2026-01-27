@@ -26,9 +26,11 @@ const PromoManagement = () => {
 
   useEffect(() => { fetchData(); }, []);
 
-  const getStatusBadge = (status, limit) => {
-    // If explicit status is Active but limit is 0, consider it Sold Out/Redeemed visually
-    const effectiveStatus = (limit === 0 && status === 'Active') ? 'Redeemed' : status;
+  // UPDATED: Now accepts 'used' to calculate if limit is reached
+  const getStatusBadge = (status, limit, used) => {
+    // If usage limit is met, treat as Redeemed
+    const isSoldOut = limit !== null && used >= limit;
+    const effectiveStatus = (isSoldOut && status === 'Active') ? 'Redeemed' : status;
 
     switch (effectiveStatus) {
         case 'Active':
@@ -72,58 +74,64 @@ const PromoManagement = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {coupons.map((coupon) => (
-              <TableRow key={coupon.id}>
-                {/* Code */}
-                <TableCell className="font-mono font-bold text-blue-600 tracking-wider">
-                    {coupon.code}
-                </TableCell>
-                
-                {/* Promo Name */}
-                <TableCell className="font-medium text-gray-700">
-                    {coupon.criteria_details?.name || "No Rule Attached"}
-                </TableCell>
+            {coupons.map((coupon) => {
+                // Determine if sold out for rendering logic
+                const isSoldOut = coupon.usage_limit !== null && coupon.times_used >= coupon.usage_limit;
 
-                {/* Formatted Details */}
-                <TableCell>
-                    <div className="flex flex-col text-sm">
-                        <span className="font-semibold text-gray-600">
-                            {coupon.criteria_details?.discount_type === 'percentage' 
-                                ? `${coupon.criteria_details?.discount_value}% OFF`
-                                : coupon.criteria_details?.discount_type === 'fixed'
-                                ? `₱${coupon.criteria_details?.discount_value} OFF`
-                                : `FREE ITEM`
-                            }
-                        </span>
-                        {coupon.criteria_details?.min_spend > 0 && (
-                            <span className="text-xs text-gray-400">Min: ₱{coupon.criteria_details?.min_spend}</span>
-                        )}
-                    </div>
-                </TableCell>
+                return (
+                  <TableRow key={coupon.id}>
+                    {/* Code */}
+                    <TableCell className="font-mono font-bold text-blue-600 tracking-wider">
+                        {coupon.code}
+                    </TableCell>
+                    
+                    {/* Promo Name */}
+                    <TableCell className="font-medium text-gray-700">
+                        {coupon.criteria_details?.name || "No Rule Attached"}
+                    </TableCell>
 
-                {/* Status */}
-                <TableCell>
-                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusBadge(coupon.status, coupon.usage_limit)}`}>
-                    {/* Visual Override: If limit is 0, show Redeemed even if DB lag */}
-                    {coupon.usage_limit === 0 ? "Redeemed" : coupon.status}
-                  </span>
-                </TableCell>
-
-                {/* Usage */}
-                <TableCell className="text-right text-gray-600">
-                    <div className="flex flex-col items-end">
-                        <span>{coupon.times_used} Used Total</span>
-                        {coupon.usage_limit !== null ? (
-                            <span className={`text-xs font-bold ${coupon.usage_limit === 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                {coupon.usage_limit} Remaining
+                    {/* Formatted Details */}
+                    <TableCell>
+                        <div className="flex flex-col text-sm">
+                            <span className="font-semibold text-gray-600">
+                                {coupon.criteria_details?.discount_type === 'percentage' 
+                                    ? `${coupon.criteria_details?.discount_value}% OFF`
+                                    : coupon.criteria_details?.discount_type === 'fixed'
+                                    ? `₱${coupon.criteria_details?.discount_value} OFF`
+                                    : `FREE ITEM`
+                                }
                             </span>
-                        ) : (
-                            <span className="text-xs text-gray-400">Unlimited</span>
-                        )}
-                    </div>
-                </TableCell>
-              </TableRow>
-            ))}
+                            {coupon.criteria_details?.min_spend > 0 && (
+                                <span className="text-xs text-gray-400">Min: ₱{coupon.criteria_details?.min_spend}</span>
+                            )}
+                        </div>
+                    </TableCell>
+
+                    {/* Status */}
+                    <TableCell>
+                      {/* UPDATED: Pass times_used to getStatusBadge */}
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusBadge(coupon.status, coupon.usage_limit, coupon.times_used)}`}>
+                        {/* Visual Override: If limit reached, show Redeemed/Sold Out */}
+                        {isSoldOut ? "Redeemed" : coupon.status}
+                      </span>
+                    </TableCell>
+
+                    {/* Usage */}
+                    <TableCell className="text-right text-gray-600">
+                        <div className="flex flex-col items-end">
+                            <span>{coupon.times_used} Used Total</span>
+                            {coupon.usage_limit !== null ? (
+                                <span className={`text-xs font-bold ${isSoldOut ? 'text-red-600' : 'text-green-600'}`}>
+                                    {Math.max(0, coupon.usage_limit - coupon.times_used)} Remaining
+                                </span>
+                            ) : (
+                                <span className="text-xs text-gray-400">Unlimited</span>
+                            )}
+                        </div>
+                    </TableCell>
+                  </TableRow>
+                );
+            })}
             {coupons.length === 0 && (
                 <TableRow>
                     <TableCell colSpan={5} className="text-center py-8 text-gray-400">

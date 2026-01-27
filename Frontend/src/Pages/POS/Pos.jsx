@@ -216,12 +216,14 @@ const Pos = () => {
 
       const coupon = couponData;
 
-      // Check sold out
-      const isSoldOut = coupon.usage_limit !== null && coupon.usage_limit <= 0;
+      // -------------------------------------------------------------
+      // FIXED: Check usage limit vs times used (Static Limit Logic)
+      // -------------------------------------------------------------
+      const isSoldOut = coupon.usage_limit !== null && coupon.times_used >= coupon.usage_limit;
 
       if (isSoldOut) {
           if (!selectedCustomer) {
-              setCouponError("Coupon sold out. Select a customer who has claimed it.");
+              setCouponError("Coupon limit reached (Sold Out). Only reserved users allowed.");
               setAppliedCoupon(null);
               setCouponLoading(false);
               return;
@@ -342,10 +344,16 @@ const Pos = () => {
     if (cartItems.length === 0) return alert("Cart is empty!");
     if (!cash || parseFloat(cash) < total) return alert("Insufficient cash!");
     
-    // Check if customer is selected for Redeemed coupons
-    if (appliedCoupon && (appliedCoupon.status === 'Redeemed' || appliedCoupon.usage_limit <= 0)) {
+    // -------------------------------------------------------------
+    // FIXED: Check limit vs times used before submit
+    // -------------------------------------------------------------
+    const isCouponLimitReached = appliedCoupon && 
+                                 appliedCoupon.usage_limit !== null && 
+                                 appliedCoupon.times_used >= appliedCoupon.usage_limit;
+
+    if (appliedCoupon && (appliedCoupon.status === 'Redeemed' || isCouponLimitReached)) {
         if (!selectedCustomer) {
-            alert("This coupon is sold out. You MUST select a registered customer to proceed.");
+            alert("This coupon is sold out. You MUST select a registered customer who claimed it to proceed.");
             return;
         }
     }

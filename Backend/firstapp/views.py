@@ -108,22 +108,41 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                         coupon = Coupon.objects.select_for_update().get(id=receipt.coupon.id)
                         
                         # --- VALIDATION LOGIC ---
-                        # If usage_limit is 0 (Sold Out), stricter rules apply:
-                        if coupon.usage_limit is not None and coupon.usage_limit <= 0:
+
+                        # RULE A: ONE USE PER USER (If customer is identified)
+                        if target_customer:
+                            already_used = Receipt.objects.filter(
+                                coupon=coupon,
+                                customer=target_customer,
+                                status='COMPLETED'
+                            ).exclude(id=receipt.id).exists() # Exclude current receipt
+
+                            if already_used:
+                                raise Exception(f"User {target_customer.username} has already used this coupon.")
+
+                        # RULE B: GLOBAL USAGE LIMIT (Static Limit Check)
+                        # We compare times_used against usage_limit.
+                        if coupon.usage_limit is not None and coupon.times_used >= coupon.usage_limit:
                             
-                            # Rule A: Walk-ins cannot use sold-out coupons
+                            # If walk-in (no customer), they can't use a sold-out coupon
                             if not target_customer:
-                                raise Exception("This coupon is fully redeemed (0 remaining). Cannot be applied to walk-in orders.")
+                                raise Exception("This coupon is fully redeemed (Limit Reached). Cannot be applied.")
                             
-                            # Rule B: Registered customers can ONLY use it if they have it in their wallet (claimed_by)
+                            # If registered user, check if they claimed it properly BEFORE it ran out
+                            # (This assumes claims reserve a spot. If claims don't reserve, this block stops everyone)
                             has_claim = coupon.claimed_by.filter(id=target_customer.id).exists()
                             if not has_claim:
-                                raise Exception("This coupon is sold out and this customer did not claim it beforehand.")
+                                raise Exception("This coupon is sold out and you did not claim it beforehand.")
 
                         # --- END VALIDATION ---
 
                         # Increment global usage
                         coupon.times_used += 1
+                        
+                        # Auto-update status if limit reached
+                        if coupon.usage_limit is not None and coupon.times_used >= coupon.usage_limit:
+                            coupon.status = 'Redeemed'
+                            
                         coupon.save() 
 
                     return Response(
@@ -196,6 +215,11 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                     coupon = Coupon.objects.select_for_update().get(id=receipt.coupon.id)
                     if coupon.times_used > 0:
                         coupon.times_used -= 1
+                    
+                    # Revert status to Active if it was Redeemed
+                    if coupon.usage_limit is not None and coupon.times_used < coupon.usage_limit:
+                        coupon.status = 'Active'
+                        
                     coupon.save()
 
                 receipt.status = 'VOIDED' 
@@ -223,11 +247,9 @@ class CouponViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         
-        # Base query for public coupons (Active and In Stock)
-        public_coupons = Coupon.objects.filter(
-            status='Active', 
-            usage_limit__gt=0
-        )
+        # Base query for public coupons (Active and Not Sold Out)
+        # We use Q object to compare times_used vs usage_limit
+        public_coupons = Coupon.objects.filter(status='Active')
 
         if user.is_authenticated:
             # FIX: Allow STAFF (Cashiers) to see ALL coupons
@@ -236,7 +258,7 @@ class CouponViewSet(viewsets.ModelViewSet):
             
             # For Users: Show Active Public + Coupons they own
             return Coupon.objects.filter(
-                Q(status='Active', usage_limit__gt=0) | 
+                Q(status='Active') | 
                 Q(claimed_by=user)
             ).distinct().order_by('-id')
         
@@ -253,19 +275,21 @@ class CouponViewSet(viewsets.ModelViewSet):
         if coupon.claimed_by.filter(id=user.id).exists():
             return Response({"message": "You already have this coupon in your wallet."})
 
-        if coupon.usage_limit is not None and coupon.usage_limit <= 0:
+        # Check STATIC Usage Limit vs Current Claims
+        if coupon.usage_limit is not None and coupon.claimed_by.count() >= coupon.usage_limit:
              return Response({"error": "This coupon is fully claimed (Sold Out)."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             with transaction.atomic():
                 coupon = Coupon.objects.select_for_update().get(id=coupon.id)
                 
-                if coupon.usage_limit is not None and coupon.usage_limit > 0:
-                    coupon.usage_limit -= 1
-                    coupon.claimed_by.add(user)
-                    coupon.save() # Trigger status update in model
-                else:
-                    return Response({"error": "Sold Out just now."}, status=400)
+                # Double check inside transaction
+                if coupon.usage_limit is not None and coupon.claimed_by.count() >= coupon.usage_limit:
+                     return Response({"error": "Sold Out just now."}, status=400)
+
+                # Add user to claims WITHOUT decrementing usage_limit
+                coupon.claimed_by.add(user)
+                coupon.save() 
 
             serializer = self.get_serializer(coupon)
             return Response(serializer.data, status=status.HTTP_200_OK)
@@ -283,7 +307,7 @@ class CouponViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(my_coupons, many=True)
         return Response(serializer.data)
 
-# ... [Rest of Views (CouponCriteria, DailySales, etc) remain unchanged] ...
+# ... [Rest of Views remain unchanged] ...
 class CouponCriteriaViewSet(viewsets.ModelViewSet):
     queryset = CouponCriteria.objects.all().order_by('-id')
     serializer_class = CouponCriteriaSerializer

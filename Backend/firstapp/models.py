@@ -90,10 +90,14 @@ class Coupon(models.Model):
         return f"{self.code} - {criteria_name}"
 
     def save(self, *args, **kwargs):
-        if self.usage_limit is not None and self.usage_limit <= 0:
+        # FIX: Updated logic for Static Limit
+        # If usage limit is set and times_used meets/exceeds it, mark as REDEEMED (Sold Out)
+        if self.usage_limit is not None and self.times_used >= self.usage_limit:
             self.status = self.Status.REDEEMED
-        elif self.usage_limit is not None and self.usage_limit > 0 and self.status == self.Status.REDEEMED:
+        # If space frees up (e.g. voided receipt), and it was REDEEMED, open it back up
+        elif self.usage_limit is not None and self.times_used < self.usage_limit and self.status == self.Status.REDEEMED:
             self.status = self.Status.ACTIVE
+            
         super().save(*args, **kwargs)
 
 # RECEIPT 
