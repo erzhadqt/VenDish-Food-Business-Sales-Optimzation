@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useReactToPrint } from 'react-to-print';
 import { Tag, Trash2, ShoppingBag, User, Search, X } from "lucide-react"; 
 import { FaCheckCircle, FaExclamationCircle } from "react-icons/fa"; 
 
@@ -17,8 +18,8 @@ const Pos = () => {
   // --- CUSTOMER SEARCH STATES ---
   const [users, setUsers] = useState([]); 
   const [selectedCustomer, setSelectedCustomer] = useState(null); 
-  const [customerSearch, setCustomerSearch] = useState(""); // Input text
-  const [showCustomerResults, setShowCustomerResults] = useState(false); // Dropdown visibility
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [showCustomerResults, setShowCustomerResults] = useState(false);
   const searchRef = useRef(null);
 
   const [receiptDetails, setReceiptDetails] = useState(null);
@@ -30,6 +31,8 @@ const Pos = () => {
   const [couponLoading, setCouponLoading] = useState(false);
 
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+
+  const receiptContentRef = useRef(null);
 
   const discountOptions = [
     { value: "senior", label: "Senior Citizen (20%)" },
@@ -72,13 +75,13 @@ const Pos = () => {
 
   // --- FILTER CUSTOMERS LOGIC ---
   const filteredCustomers = useMemo(() => {
-    if (!customerSearch) return users.slice(0, 5); // Show first 5 if empty
+    if (!customerSearch) return users.slice(0, 5);
     const lowerQ = customerSearch.toLowerCase();
     return users.filter(u => 
         u.username.toLowerCase().includes(lowerQ) ||
         (u.first_name && u.first_name.toLowerCase().includes(lowerQ)) ||
         (u.last_name && u.last_name.toLowerCase().includes(lowerQ))
-    ).slice(0, 10); // Limit results
+    ).slice(0, 10);
   }, [users, customerSearch]);
 
   const handleSelectCustomer = (user) => {
@@ -216,7 +219,6 @@ const Pos = () => {
 
       const coupon = couponData;
 
-      // Check sold out
       const isSoldOut = coupon.usage_limit !== null && coupon.usage_limit <= 0;
 
       if (isSoldOut) {
@@ -238,7 +240,6 @@ const Pos = () => {
 
       if (coupon.criteria_details) {
         const criteria = coupon.criteria_details;
-        const baseAmount = subTotal - standardDiscount;
 
         let itemToAutoAdd = null;
         if (criteria.target_product) {
@@ -342,7 +343,6 @@ const Pos = () => {
     if (cartItems.length === 0) return alert("Cart is empty!");
     if (!cash || parseFloat(cash) < total) return alert("Insufficient cash!");
     
-    // Check if customer is selected for Redeemed coupons
     if (appliedCoupon && (appliedCoupon.status === 'Redeemed' || appliedCoupon.usage_limit <= 0)) {
         if (!selectedCustomer) {
             alert("This coupon is sold out. You MUST select a registered customer to proceed.");
@@ -360,7 +360,7 @@ const Pos = () => {
       coupon: appliedCoupon ? appliedCoupon.id : null, 
       discount_type: selectedDiscount !== "none" ? selectedDiscount : null,
       
-      customer_id: selectedCustomer, // Send selected ID
+      customer_id: selectedCustomer,
 
       items: cartItems.map((i) => ({
         product: i.id, 
@@ -382,6 +382,7 @@ const Pos = () => {
     }
   };
 
+  // ✅ STEP 1: Define handleResetOrder FIRST (without useCallback to avoid hook issues)
   const handleResetOrder = () => {
       setCartItems([]);
       setCash("");
@@ -390,14 +391,18 @@ const Pos = () => {
       setCouponError("");
       setSelectedDiscount(null);
       setReceiptDetails(null);
-      
-      // Reset Customer Selection
       setSelectedCustomer(null); 
       setCustomerSearch("");
-
       setIsReceiptModalOpen(false);
       api.get("/firstapp/products/").then(res => setProducts(res.data));
   };
+
+  // ✅ STEP 2: Define handlePrint AFTER handleResetOrder (so it can reference it)
+  const handlePrint = useReactToPrint({
+    content: () => receiptContentRef.current,
+    documentTitle: `Receipt-${receiptDetails?.id || '000'}`,
+    onAfterPrint: handleResetOrder
+  });
 
   return (
     <div className="font-poppins bg-zinc-300 min-h-screen flex flex-col lg:flex-row gap-4 p-4">
@@ -513,7 +518,6 @@ const Pos = () => {
 
              <div className="p-5 bg-gray-50 border-t shadow-[0_-5px_15px_rgba(0,0,0,0.05)] z-10 rounded-b-xl">
                 
-                {/* --- UPDATED: SEARCHABLE CUSTOMER INPUT --- */}
                 <div className="mb-3 relative" ref={searchRef}>
                     <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Customer (Optional)</label>
                     <div className="relative">
@@ -544,7 +548,6 @@ const Pos = () => {
                         )}
                     </div>
 
-                    {/* Results Dropdown */}
                     {showCustomerResults && (
                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto z-20">
                             {filteredCustomers.length > 0 ? (
@@ -656,7 +659,8 @@ const Pos = () => {
                 <ReceiptModal2 
                    title="Order Receipt" 
                    receiptDetails={receiptDetails} 
-                   onConfirm={handleResetOrder} 
+                   onConfirm={handlePrint}
+                   contentRef={receiptContentRef}
                    open={isReceiptModalOpen}
                    onOpenChange={setIsReceiptModalOpen}
                 />

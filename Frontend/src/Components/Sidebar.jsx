@@ -1,5 +1,5 @@
-import React from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import React, { useState } from 'react';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Menu, 
@@ -13,7 +13,7 @@ import {
   ChevronRight,
   PresentationIcon,
   TicketPercent,
-  ClipboardPenIcon
+  ClipboardPenIcon,
 } from 'lucide-react';
 import AlertDialog from "./AlertDialog";
 import { useAuth } from '../context/AuthContext';
@@ -21,6 +21,7 @@ import { useAuth } from '../context/AuthContext';
 const Sidebar = ({ isExpanded, toggleSidebar }) => {
   const { logout, user } = useAuth(); 
   const navigate = useNavigate();
+  const location = useLocation();
   
   const isMinimized = !isExpanded;
 
@@ -35,10 +36,17 @@ const Sidebar = ({ isExpanded, toggleSidebar }) => {
     { id: 'point-of-sale', icon: PresentationIcon, label: 'POS', path: '/admin/pos', restricted: false },
   ];
 
-  const cms = [{ id: 'cms', icon: Settings, label: 'CMS', path: '/admin/cms', restricted: true }];
+  
+  const cmsMenuItem = { 
+    id: 'cms', 
+    icon: Settings, 
+    label: 'CMS', 
+    path: '/admin/cms', 
+    restricted: true 
+  };
 
   const visibleMenu = allMenuItems.filter(item => user?.is_superuser || !item.restricted);
-  const visibleCMS = cms.filter(item => user?.is_superuser || !item.restricted);
+  const showCMS = user?.is_superuser; // Only superusers can see CMS
 
   const renderNavItem = (item) => {
     const Icon = item.icon;
@@ -95,16 +103,16 @@ const Sidebar = ({ isExpanded, toggleSidebar }) => {
         </div>
 
         <nav className="px-3 py-4 space-y-1">
-          {/* 1. Render Main Menu Items */}
+         
           {visibleMenu.map(renderNavItem)}
 
-          {/* 2. Divider (Only shows if there are CMS items to show) */}
-          {visibleCMS.length > 0 && (
+         
+          {showCMS && (
              <div className="my-2 border-t border-gray-300/50 mx-2" />
           )}
 
-          {/* 3. Render CMS Items */}
-          {visibleCMS.map(renderNavItem)}
+  
+          {showCMS && renderNavItem(cmsMenuItem)}
         </nav>
       </div>
 

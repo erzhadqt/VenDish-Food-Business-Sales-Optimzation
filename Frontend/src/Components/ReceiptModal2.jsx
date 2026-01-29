@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React from "react";
 import {
   AlertDialog as ShadAlertDialog,
   AlertDialogContent,
@@ -12,46 +12,32 @@ import {
 
 import { Separator } from "@/components/ui/separator";
 import { Tag, Printer } from "lucide-react"; 
-import { useReactToPrint } from 'react-to-print';
 
 import ReceiptPrintContent from "./ReceiptPrintContent"; 
 
-export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, onOpenChange }) {
-  const contentRef = useRef(null);
-
-  const handlePrint = useReactToPrint({
-    contentRef: contentRef,
-    documentTitle: `Receipt-${receiptDetails?.id || '000'}`,
-    // ----------------------------------------------------
-    // THIS IS THE FIX:
-    // When print dialog closes, we trigger the reset function (onConfirm)
-    // ----------------------------------------------------
-    onAfterPrint: () => {
-        if (onConfirm) {
-            onConfirm(); // This calls handleResetOrder in Pos.js
-        }
-    }
-  });
+export default function ReceiptModal2({ 
+  title, 
+  receiptDetails, 
+  onConfirm,     // This will be handlePrint from Pos.jsx
+  contentRef,    // Receive ref from Pos.jsx
+  open, 
+  onOpenChange 
+}) {
 
   return (
     <ShadAlertDialog open={open} onOpenChange={onOpenChange}>
-      {/* Note: We removed AlertDialogTrigger because Pos.js controls opening */}
-
       <AlertDialogContent className="max-w-md">
         <AlertDialogHeader>
           <AlertDialogTitle>{title} #{receiptDetails?.id || 0} </AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="text-sm p-4 bg-white text-black"> 
             
-            {/* Hidden Print Component */}
-            <div className="hidden">
-                <ReceiptPrintContent 
-                    ref={contentRef} 
-                    transactionData={receiptDetails} 
-                />
+            {/* Hidden Print Component - This will be printed */}
+            <div style={{ display: 'none' }}>
+              <ReceiptPrintContent ref={contentRef} transactionData={receiptDetails} />
             </div>
 
-            {/* Visible Preview */}
+            {/* Visible Preview Content */}
             {receiptDetails ? (
             <>  
                 <div className="text-center mb-6">
@@ -134,29 +120,21 @@ export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, 
         </AlertDialogHeader>
         
         <AlertDialogFooter>
-          {/* Cancel button manually triggers close without resetting if desired, or can be removed */}
-          <AlertDialogCancel onClick={() => onOpenChange(false)}>Close Preview</AlertDialogCancel>
+          <AlertDialogCancel onClick={() => onOpenChange(false)}>
+            Close Preview
+          </AlertDialogCancel>
           
           <AlertDialogAction 
             onClick={(e) => {
-                if (receiptDetails) {
-                    e.preventDefault(); // Keep modal open while print dialog is active
-                    handlePrint();      // Trigger print (and reset afterwards)
+                if (receiptDetails && onConfirm) {
+                    e.preventDefault(); // Keep modal open while printing
+                    onConfirm();        // This calls handlePrint from Pos.jsx
                 }
             }} 
             className="bg-gray-900 flex gap-2"
           >
              <Printer size={16} /> Print Receipt
           </AlertDialogAction>
-          
-          {onConfirm && (
-              <button 
-                onClick={onConfirm}
-                className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-green-600 text-white hover:bg-green-700 h-10 px-4 py-2"
-              >
-                New Order
-              </button>
-          )}
 
         </AlertDialogFooter>
       </AlertDialogContent>

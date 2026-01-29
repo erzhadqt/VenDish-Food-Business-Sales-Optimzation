@@ -1,73 +1,71 @@
 import React, { useEffect, useState } from 'react';
-import { Phone, Mail, MapPin, Facebook } from 'lucide-react';
+import { Phone, Mail, MapPin, Facebook, Instagram, Twitter, Globe } from 'lucide-react';
 import Navigation from '../../Components/Navigation';
 import Footer from "../../Components/Footer";
+import axios from 'axios';
+
+// Icon mapping
+const ICON_MAP = {
+  Phone, Mail, MapPin, Facebook, Instagram, Twitter, Globe
+};
 
 const DEFAULT_DATA = {
   header: {
     highlight: "CONTACT",
     suffix: "US",
-    subtitle: "We’d love to hear from you!"
-  },
-  info: {
-    phone: "0912 345 6789",
-    email: "kuyavince@example.com",
-    address: "Cagayan de Oro City, Misamis Oriental",
-    facebookLink: "https://facebook.com",
-    facebookLabel: "Kuya Vince Karinderya"
+    subtitle: "We'd love to hear from you!"
   }
 };
 
 const ContactPage = () => {
   const [content, setContent] = useState(DEFAULT_DATA);
+  const [contactInfo, setContactInfo] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Load from LocalStorage
+ 
   useEffect(() => {
-    const savedData = localStorage.getItem('contactContent');
-    if (savedData) {
-      try {
-        setContent(JSON.parse(savedData));
-      } catch (err) {
-        console.error("Failed to parse CMS data", err);
-      }
-    }
+    const timestamp = new Date().getTime();
+    
+    // Load Contact Page Header
+    axios.get(`http://localhost:8000/firstapp/contact-page/?_t=${timestamp}`)
+      .then((res) => {
+        if (res.data && res.data.length > 0) {
+          const data = res.data[0];
+          setContent({
+            header: {
+              highlight: data.header_highlight || DEFAULT_DATA.header.highlight,
+              suffix: data.header_suffix || DEFAULT_DATA.header.suffix,
+              subtitle: data.header_subtitle || DEFAULT_DATA.header.subtitle
+            }
+          });
+        }
+      })
+      .catch((err) => {
+        console.error('Error loading contact page:', err);
+      });
+
+   
+    axios.get(`http://localhost:8000/firstapp/contact-info/?_t=${timestamp}`)
+      .then((res) => {
+        setContactInfo(res.data || []);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error('Error loading contact info:', err);
+        setLoading(false);
+      });
   }, []);
 
-  // Map the CMS content to the display array
-  const contactInfo = [
-    { 
-      icon: Phone,
-      label: "Phone",
-      value: content.info.phone,
-      color: "bg-purple-100 border-purple-200",
-      iconColor: "text-purple-600",
-      link: `tel:${content.info.phone}`
-    },
-    { 
-      icon: Mail,
-      label: "Email",
-      value: content.info.email,
-      color: "bg-red-100 border-red-200",
-      iconColor: "text-red-600",
-      link: `mailto:${content.info.email}`
-    },
-    { 
-      icon: MapPin,
-      label: "Address",
-      value: content.info.address,
-      color: "bg-pink-100 border-pink-200",
-      iconColor: "text-pink-600",
-      link: "#"
-    },
-    { 
-      icon: Facebook,
-      label: "Facebook",
-      value: content.info.facebookLabel,
-      color: "bg-blue-100 border-blue-200",
-      iconColor: "text-blue-600",
-      link: content.info.facebookLink
-    },
-  ];
+  if (loading) {
+    return (
+      <div className="w-full min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
+          <p className="text-gray-500 mt-4">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full min-h-screen bg-linear-to-br from-white via-red-50 to-white pt-35">
@@ -85,18 +83,23 @@ const ContactPage = () => {
           </p>
         </div>
 
-        {/* Contact Info Grid */}
+        {/* Contact Info */}
         <div className="grid lg:grid-row-2 gap-10 items-center justify-center mb-16">
           <div className="space-y-5">
             {contactInfo.map((item, idx) => {
-              const Icon = item.icon;
+              const Icon = ICON_MAP[item.icon_name] || Phone;
+              const colorClass = `bg-${item.color}-100 border-${item.color}-200`;
+              const iconColorClass = `text-${item.color}-600`;
+              
               return (
                 <a 
                   key={idx} 
                   href={item.link}
+                  target={item.link.startsWith('http') ? '_blank' : '_self'}
+                  rel={item.link.startsWith('http') ? 'noopener noreferrer' : ''}
                   className="flex items-center space-x-4 group cursor-pointer hover:scale-[1.02] transition-transform duration-300"
                 >
-                  <div className={`${item.color} ${item.iconColor} p-4 rounded-xl border`}>
+                  <div className={`${colorClass} ${iconColorClass} p-4 rounded-xl border`}>
                     <Icon size={22} />
                   </div>
                   <div className="w-100 bg-white border border-gray-100 p-4 rounded-xl shadow-sm">
@@ -106,12 +109,57 @@ const ContactPage = () => {
                 </a>
               );
             })}
+            
+            {contactInfo.length === 0 && (
+              <div className="text-center py-12 text-gray-500">
+                <p>No contact information available.</p>
+              </div>
+            )}
           </div>
         </div>
 
       </div>
 
       <Footer />
+      
+      <style>{`
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+          animation: fade-in 0.6s ease-out;
+        }
+        
+        /* Tailwind color classes for dynamic colors */
+        .bg-purple-100 { background-color: #f3e8ff; }
+        .border-purple-200 { border-color: #e9d5ff; }
+        .text-purple-600 { color: #9333ea; }
+        
+        .bg-red-100 { background-color: #fee2e2; }
+        .border-red-200 { border-color: #fecaca; }
+        .text-red-600 { color: #dc2626; }
+        
+        .bg-pink-100 { background-color: #fce7f3; }
+        .border-pink-200 { border-color: #fbcfe8; }
+        .text-pink-600 { color: #db2777; }
+        
+        .bg-blue-100 { background-color: #dbeafe; }
+        .border-blue-200 { border-color: #bfdbfe; }
+        .text-blue-600 { color: #2563eb; }
+        
+        .bg-green-100 { background-color: #dcfce7; }
+        .border-green-200 { border-color: #bbf7d0; }
+        .text-green-600 { color: #16a34a; }
+        
+        .bg-yellow-100 { background-color: #fef3c7; }
+        .border-yellow-200 { border-color: #fde68a; }
+        .text-yellow-600 { color: #ca8a04; }
+        
+        .bg-indigo-100 { background-color: #e0e7ff; }
+        .border-indigo-200 { border-color: #c7d2fe; }
+        .text-indigo-600 { color: #4f46e5; }
+      `}</style>
     </div>
   );
 };

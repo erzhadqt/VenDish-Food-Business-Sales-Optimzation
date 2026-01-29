@@ -20,7 +20,9 @@ import MenuAndProducts from "./Pages/admin-pages/MenuAndProducts";
 import SalesAndReports from "./Pages/admin-pages/SalesAndReports";
 import CustomerFeedback from "./Pages/admin-pages/CustomerFeedback";
 import UserManagement from "./Pages/admin-pages/UserManagement";
-import CMS from "./Pages/admin-pages/CMS";
+
+import CMSNavbar from "./Pages/admin-pages/CMS/CMSNavbar";
+
 import Pos from "./Pages/POS/Pos";
 import PromoManagement from "./Pages/admin-pages/PromoManagement";
 import Transaction from "./Pages/admin-pages/Transaction";
@@ -57,7 +59,10 @@ function App() {
         	<Route path="/admin/customerFeedback" element={<CustomerFeedback />} />
         	<Route path="/admin/userManagement" element={<UserManagement />} />
         	<Route path="/admin/transaction" element={<Transaction />} />
-        	<Route path="/admin/cms" element={<CMS />} />
+
+        
+        	<Route path="/admin/cms" element={<CMSNavbar />} />
+
         	<Route path="/admin/promo-management" element={<PromoManagement />} />
         	<Route path="/admin/costing-table" element={<CostingTable />} />
 			<Route path="/admin/pos" element={<Pos />} />

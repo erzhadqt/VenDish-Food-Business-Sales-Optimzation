@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 from django.db import transaction
 
-from .models import Product, Receipt, ReceiptItem, Coupon, Feedback, HomePage, AboutPage, ContactPage, DailySalesReport, CouponCriteria
+from .models import Product, Receipt, ReceiptItem, Coupon, Feedback, HomePage, PopularDish, HomePageImage, ServicesPage, Service, AboutPage, Testimonial, ContactPage, ContactInfo, DailySalesReport, CouponCriteria
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -160,10 +160,65 @@ class FeedbackSerializer(serializers.ModelSerializer):
     class Meta: model = Feedback; fields = '__all__'
 
 class HomePageSerializer(serializers.ModelSerializer):
-    class Meta: model = HomePage; fields = '__all__'
+    class Meta:
+        model = HomePage
+        fields = '__all__'
+        extra_kwargs = {
+            'banner_image': {
+                'required': False,  
+                'allow_null': True,  
+            }
+        }
+    
+    def update(self, instance, validated_data):
+        """
+        Custom update to handle banner_image properly.
+        If banner_image is not in validated_data, keep the existing one.
+        """
+        # Only update banner_image if a new one was provided
+        if 'banner_image' not in validated_data:
+            # No new image provided, keep the existing one
+            validated_data['banner_image'] = instance.banner_image
+        
+        return super().update(instance, validated_data)
+
+class PopularDishSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PopularDish
+        fields = '__all__'
+
+
+class HomePageImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HomePageImage
+        fields = '__all__'
+
+class ServicesPageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ServicesPage
+        fields = '__all__'
+
+
+class ServiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Service
+        fields = '__all__'
 
 class AboutPageSerializer(serializers.ModelSerializer):
     class Meta: model = AboutPage; fields = '__all__'
 
+class TestimonialSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Testimonial
+        fields = '__all__'
+    
+
 class ContactPageSerializer(serializers.ModelSerializer):
-    class Meta: model = ContactPage; fields = '__all__'
+    class Meta: 
+        model = ContactPage; 
+        fields = '__all__'
+
+class ContactInfoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContactInfo
+        fields = '__all__'

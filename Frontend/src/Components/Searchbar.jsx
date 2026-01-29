@@ -1,17 +1,16 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Search } from "lucide-react";
 
 const Searchbar = ({ onSearch, categories, initialQuery = "", initialCategory = "" }) => {
   const [query, setQuery] = useState(initialQuery);
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
 
-  const handleSearch = (e) => {
-    e.preventDefault();
+  useEffect(() => {
     onSearch(query, selectedCategory);
-  };
+  }, [query, selectedCategory]); 
 
   return (
-    <form onSubmit={handleSearch} className="flex items-center gap-2 mb-6">
+    <div className="flex items-center gap-2 mb-6">
       <div className="flex items-center border border-gray-400 rounded-xl gap-1 py-2 pl-1">
         <Search size={26} />
         <input
@@ -35,14 +34,7 @@ const Searchbar = ({ onSearch, categories, initialQuery = "", initialCategory = 
           </option>
         ))}
       </select>
-
-      <button
-        type="submit"
-        className="px-4 py-2 shadow-lg border border-gray-400 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition"
-      >
-        Search
-      </button>
-    </form>
+    </div>
   );
 };
 

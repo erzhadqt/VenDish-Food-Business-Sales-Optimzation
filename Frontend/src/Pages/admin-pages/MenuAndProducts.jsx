@@ -19,6 +19,14 @@ function ProductList() {
   const queryParam = searchParams.get("search") || "";
   const categoryParam = searchParams.get("category") || "";
 
+  useEffect(() => {
+  const delayDebounceFn = setTimeout(() => {
+    fetchProducts(queryParam, categoryParam);
+  }, 300); // Wait 300ms after the last keystroke before calling the API
+
+  return () => clearTimeout(delayDebounceFn);
+}, [queryParam, categoryParam]);
+
   const categories = [
     { value: "chicken", label: "Chicken" },
     { value: "beef", label: "Beef" },
@@ -46,8 +54,7 @@ function ProductList() {
 
   // Update URL params whenever search or category changes
   const handleSearch = (query, category) => {
-    fetchProducts(query, category);
-
+   
     const params = {};
     if (query) params.search = query;
     if (category) params.category = category;
@@ -58,7 +65,7 @@ function ProductList() {
   // Load products on mount based on URL params
   useEffect(() => {
     fetchProducts(queryParam, categoryParam);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [queryParam, categoryParam]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refresh list + show success alert
   const handleUpdatedProduct = () => {

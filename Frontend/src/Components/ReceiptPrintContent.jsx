@@ -1,18 +1,17 @@
 import React, { forwardRef } from "react";
 
-const ReceiptPrintContent = forwardRef(({ transactionData }, ref) => {
+// ✅ FIX: Properly structure forwardRef - props first, ref second
+const ReceiptPrintContent = forwardRef((props, ref) => {
+  const { transactionData } = props;
   
   const items = transactionData?.items || [];
   
-  // ✅ FIX: Use the correct field names from your API/Serializer
   const subtotal = Number(transactionData?.subtotal || 0); 
   const vat = Number(transactionData?.vat || 0);
   const total = Number(transactionData?.total || 0); 
   const cash = Number(transactionData?.cash_given || 0); 
   const change = Number(transactionData?.change || 0);
   
-  // Calculate discount if needed (Total should be Subtotal + VAT - Discount)
-  // Or if backend sends coupon details, use that.
   const discountVal = transactionData?.coupon_details ? Number(transactionData.coupon_details.rate) : 0;
 
   const created = transactionData?.created_at
@@ -78,11 +77,9 @@ const ReceiptPrintContent = forwardRef(({ transactionData }, ref) => {
               <tr key={index}>
                 <td className="align-top py-1 text-center">{item.quantity}</td>
                 <td className="align-top py-1 pr-1 leading-tight">
-                  {item.product_name || "Item"} 
-                  {/* Note: Serializer sends 'product_name', not 'product.name' */}
+                  {item.product_name || "Item"}
                 </td>
                 <td className="align-top py-1 text-right whitespace-nowrap">
-                  {/* Note: Serializer likely sends 'price' or calculated subtotal per item */}
                   {Number(item.price * item.quantity).toFixed(2)}
                 </td>
               </tr>
@@ -98,13 +95,11 @@ const ReceiptPrintContent = forwardRef(({ transactionData }, ref) => {
             <span>{subtotal.toFixed(2)}</span>
           </div>
 
-          {/* VAT */}
           <div className="flex justify-between">
             <span>VAT (12%):</span>
             <span>{vat.toFixed(2)}</span>
           </div>
 
-          {/* DISCOUNT */}
           {discountVal > 0 && (
             <div className="flex justify-between">
               <span>
@@ -114,19 +109,16 @@ const ReceiptPrintContent = forwardRef(({ transactionData }, ref) => {
             </div>
           )}
 
-          {/* TOTAL */}
           <div className="flex justify-between font-bold text-xs pt-1 mt-1 border-t border-black">
             <span>Total:</span>
             <span>{total.toFixed(2)}</span>
           </div>
 
-          {/* CASH */}
           <div className="flex justify-between pt-1">
             <span>Cash:</span>
             <span>{cash.toFixed(2)}</span>
           </div>
 
-          {/* CHANGE */}
           <div className="flex justify-between">
             <span>Change:</span>
             <span>{change.toFixed(2)}</span>
@@ -148,5 +140,7 @@ const ReceiptPrintContent = forwardRef(({ transactionData }, ref) => {
     </div>
   );
 });
+
+ReceiptPrintContent.displayName = "ReceiptPrintContent";
 
 export default ReceiptPrintContent;

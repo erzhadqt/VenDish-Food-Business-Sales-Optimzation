@@ -11,11 +11,16 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from datetime import timedelta
 from django.db.models import Sum, Count, Q
 from django.db.models.functions import TruncDate
+#i add
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAdminUser
+from rest_framework.decorators import action
+
 
 from .serializers import (
-    UserSerializer, FeedbackSerializer, ProductSerializer, ReceiptSerializer, CouponSerializer, HomePageSerializer, AboutPageSerializer, ContactPageSerializer, DailySalesReportSerializer, CouponCriteriaSerializer, StaffPerformanceSerializer
+    UserSerializer, FeedbackSerializer, ProductSerializer, ReceiptSerializer, CouponSerializer, HomePageSerializer, PopularDishSerializer, HomePageImageSerializer, ServicesPageSerializer, ServiceSerializer, AboutPageSerializer, TestimonialSerializer, ContactPageSerializer, ContactInfoSerializer, DailySalesReportSerializer, CouponCriteriaSerializer, StaffPerformanceSerializer
 )
-from .models import Product, Receipt, Coupon, Feedback, HomePage, AboutPage, ContactPage, DailySalesReport, CouponCriteria, ReceiptItem
+from .models import Product, Receipt, Coupon, Feedback, HomePage, PopularDish, HomePageImage, ServicesPage, Service, AboutPage, Testimonial, ContactPage, ContactInfo, DailySalesReport, CouponCriteria, ReceiptItem
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 
 
@@ -56,7 +61,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
-            permission_classes = [IsAuthenticated]
+            permission_classes = [AllowAny] #i change to IsAunthenticated
         else:
             permission_classes = [IsAdminUser]
         return [permission() for permission in permission_classes]
@@ -397,12 +402,106 @@ class FeedbackViewSet(viewsets.ModelViewSet):
 class HomePageViewSet(viewsets.ModelViewSet):
     queryset = HomePage.objects.all()
     serializer_class = HomePageSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]  # DEVELOPMENT ONLY - Allow all users
+    
+    def update(self, request, *args, **kwargs):
+       
+        kwargs['partial'] = True
+        return super().update(request, *args, **kwargs)
+    
+    def partial_update(self, request, *args, **kwargs):
+        
+        kwargs['partial'] = True
+        return super().update(request, *args, **kwargs)
 
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def featured_products(request):
+    """Get available products for homepage - Public access"""
+    products = Product.objects.filter(is_available=True).order_by('-date_added')[:8]
+    serializer = ProductSerializer(products, many=True)
+    return Response(serializer.data)
+
+
+class PopularDishViewSet(viewsets.ModelViewSet):
+    queryset = PopularDish.objects.filter(is_active=True)
+    serializer_class = PopularDishSerializer
+    permission_classes = [AllowAny]  # DEVELOPMENT ONLY - Allow all users
+    
+    @action(detail=False, methods=['get'])
+    def active(self, request):
+        """Get only active popular dishes"""
+        dishes = PopularDish.objects.filter(is_active=True).order_by('order', 'name')
+        serializer = self.get_serializer(dishes, many=True)
+        return Response(serializer.data)
+
+
+class HomePageImageViewSet(viewsets.ModelViewSet):
+    queryset = HomePageImage.objects.filter(is_active=True)
+    serializer_class = HomePageImageSerializer
+    permission_classes = [AllowAny]  # DEVELOPMENT ONLY - Allow all users
+    
+    @action(detail=False, methods=['get'])
+    def by_type(self, request):
+        """Get images filtered by type"""
+        image_type = request.query_params.get('type', None)
+        if image_type:
+            images = HomePageImage.objects.filter(
+                is_active=True, 
+                image_type=image_type
+            ).order_by('order')
+        else:
+            images = HomePageImage.objects.filter(is_active=True).order_by('image_type', 'order')
+        
+        serializer = self.get_serializer(images, many=True)
+        return Response(serializer.data)
+    
+class ServicesPageViewSet(viewsets.ModelViewSet):
+    queryset = ServicesPage.objects.all()
+    serializer_class = ServicesPageSerializer
+    permission_classes = [AllowAny]
+    
+    def create(self, request, *args, **kwargs):
+       
+        # Check if instance already exists
+        if ServicesPage.objects.exists():
+            return Response(
+                {'error': 'ServicesPage already exists. Use PUT to update.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        return super().create(request, *args, **kwargs)
+
+
+class ServiceViewSet(viewsets.ModelViewSet):
+    serializer_class = ServiceSerializer
+    permission_classes = [AllowAny]
+    
+    def get_queryset(self):
+        
+        # This allows CMS to see and edit all services
+        if self.request.user.is_authenticated or self.action in ['list', 'retrieve', 'create', 'update', 'partial_update', 'destroy']:
+            return Service.objects.all().order_by('order', 'title')
+        
+        return Service.objects.filter(is_active=True).order_by('order', 'title')
+    
+    @action(detail=False, methods=['get'])
+    def active(self, request):
+        """Get only active services for frontend display"""
+        services = Service.objects.filter(is_active=True).order_by('order', 'title')
+        serializer = self.get_serializer(services, many=True)
+        return Response(serializer.data)
+    
 class AboutPageViewSet(viewsets.ModelViewSet):
     queryset = AboutPage.objects.all()
     serializer_class = AboutPageSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
+
+class TestimonialViewSet(viewsets.ModelViewSet):
+    queryset = Testimonial.objects.filter(is_active=True)
+    serializer_class = TestimonialSerializer
+    permission_classes = [AllowAny]
 
 class ContactPageViewSet(viewsets.ModelViewSet):
     queryset = ContactPage.objects.all()
@@ -415,3 +514,32 @@ class ContactPageViewSet(viewsets.ModelViewSet):
             return Response([], status=200)
         serializer = self.get_serializer(latest)
         return Response(serializer.data)
+    
+    def create(self, request, *args, **kwargs):
+        
+        instance = ContactPage.objects.first()
+        if instance:
+            # Update existing instance
+            serializer = self.get_serializer(instance, data=request.data, partial=False)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            # Create new instance
+            return super().create(request, *args, **kwargs)
+    
+    def update(self, request, *args, **kwargs):
+        """Override update to always update the singleton instance"""
+        instance = ContactPage.objects.first()
+        if not instance:
+            return Response({"error": "No ContactPage exists"}, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = self.get_serializer(instance, data=request.data, partial=kwargs.get('partial', False))
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+    
+class ContactInfoViewSet(viewsets.ModelViewSet):
+    queryset = ContactInfo.objects.filter(is_active=True)
+    serializer_class = ContactInfoSerializer
+    permission_classes = [AllowAny]
