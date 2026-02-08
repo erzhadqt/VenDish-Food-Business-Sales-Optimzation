@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Product, Receipt, ReceiptItem, Coupon, Feedback, HomePage, AboutPage, ContactPage, DailySalesReport, CouponCriteria
+from .models import Product, Receipt, ReceiptItem, Coupon, Feedback, HomePage, AboutPage, ContactPage, DailySalesReport, CouponCriteria, Review
 
 # Register your models here
 admin.site.register(Product)
@@ -12,6 +12,7 @@ admin.site.register(Coupon)
 admin.site.register(CouponCriteria)
 
 admin.site.register(Feedback)
+admin.site.register(Review)
 
 admin.site.register(HomePage)
 admin.site.register(AboutPage)

@@ -16,6 +16,8 @@ import { Label } from "@/components/ui/label";
 export default function EditProductDialog({ product, onClose, onSaved }) {
   const [loading, setLoading] = useState(false);
   const [category, setCategory] = useState(product.category || "");
+  // Initialize availability from the existing product data
+  const [isAvailable, setIsAvailable] = useState(product.is_available ?? true);
   const [image, setImage] = useState(null);
 
   const categories = [
@@ -26,6 +28,7 @@ export default function EditProductDialog({ product, onClose, onSaved }) {
     { value: "combo_meal", label: "Combo Meal" },
     { value: "value_meal", label: "Value Meal" },
     { value: "add_on", label: "Add-on" },
+    { value: "others", label: "Others" },
   ];
 
   const handleSave = async (e) => {
@@ -35,12 +38,13 @@ export default function EditProductDialog({ product, onClose, onSaved }) {
     const formData = new FormData();
     const productName = e.target.product_name.value;
     const price = parseFloat(e.target.price.value);
-    const stockQuantity = parseInt(e.target.stock_quantity.value, 10);
 
     formData.append("product_name", productName);
     formData.append("price", price);
     formData.append("category", category);
-    formData.append("stock_quantity", stockQuantity);
+    // Send availability status instead of stock
+    formData.append("is_available", isAvailable); 
+    
     if (image) formData.append("image", image);
 
     try {
@@ -64,7 +68,7 @@ export default function EditProductDialog({ product, onClose, onSaved }) {
       <div
         className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
         aria-hidden="true"
-        onClick={onClose} // backdrop click closes modal (optional)
+        onClick={onClose} 
       />
 
       {/* Modal content (above backdrop) */}
@@ -114,14 +118,18 @@ export default function EditProductDialog({ product, onClose, onSaved }) {
             />
           </div>
 
-          <div className="grid gap-2">
-            <Label>Stock Quantity</Label>
-            <Input
-              name="stock_quantity"
-              type="number"
-              defaultValue={product.stock_quantity}
-              required
+          {/* New Availability Toggle */}
+          <div className="flex items-center gap-3 p-3 border rounded-md bg-gray-50">
+            <input
+              id="is_available"
+              type="checkbox"
+              checked={isAvailable}
+              onChange={(e) => setIsAvailable(e.target.checked)}
+              className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 border-gray-300 cursor-pointer"
             />
+            <Label htmlFor="is_available" className="cursor-pointer font-medium text-gray-700 select-none">
+              Is Product Available?
+            </Label>
           </div>
 
           <div className="grid gap-2">

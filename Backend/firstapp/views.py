@@ -13,9 +13,9 @@ from django.db.models import Sum, Count, Q
 from django.db.models.functions import TruncDate
 
 from .serializers import (
-    UserSerializer, FeedbackSerializer, ProductSerializer, ReceiptSerializer, CouponSerializer, HomePageSerializer, AboutPageSerializer, ContactPageSerializer, DailySalesReportSerializer, CouponCriteriaSerializer, StaffPerformanceSerializer
+    UserSerializer, FeedbackSerializer, ProductSerializer, ReceiptSerializer, CouponSerializer, HomePageSerializer, AboutPageSerializer, ContactPageSerializer, DailySalesReportSerializer, CouponCriteriaSerializer, StaffPerformanceSerializer, ReviewSerializer
 )
-from .models import Product, Receipt, Coupon, Feedback, HomePage, AboutPage, ContactPage, DailySalesReport, CouponCriteria, ReceiptItem
+from .models import Product, Receipt, Coupon, Feedback, HomePage, AboutPage, ContactPage, DailySalesReport, CouponCriteria, ReceiptItem, Review
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 
 
@@ -297,7 +297,7 @@ class CouponViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    @action(detail=False, methods=['get'], url_path='my-coupons')
+    @action(detail=False, methods=['get'], url_path='mine')
     def my_coupons(self, request):
         user = request.user
         if not user.is_authenticated:
@@ -412,6 +412,21 @@ class DailySalesReportViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['post'], url_path='refresh-today')
     def refresh_today(self, request):
         return Response({"message": "Data synchronized"}, status=200)
+
+class ReviewViewSet(viewsets.ModelViewSet):
+    queryset = Review.objects.all().order_by('-created_at')
+    serializer_class = ReviewSerializer
+    permission_classes = [IsAuthenticated] # Or [AllowAny] for GET if you want public to see them
+
+    def get_queryset(self):
+        queryset = Review.objects.all().order_by('-created_at')
+        
+        # Filter by type if needed ?type=food
+        review_type = self.request.query_params.get('type')
+        if review_type:
+            queryset = queryset.filter(review_type=review_type)
+            
+        return queryset
 
 class FeedbackViewSet(viewsets.ModelViewSet):
     queryset = Feedback.objects.all()

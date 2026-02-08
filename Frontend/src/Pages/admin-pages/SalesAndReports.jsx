@@ -23,15 +23,14 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'
 export default function SalesAndReports() {
   // --- STATE ---
   const [reports, setReports] = useState([]); 
-  const [staffReports, setStaffReports] = useState([]); // NEW: Store Staff Data
+  const [staffReports, setStaffReports] = useState([]); 
   const [loading, setLoading] = useState(true);
-  const [allReceipts, setAllReceipts] = useState([]); // NEW: Store raw receipts for filtering
-  const [originalReports, setOriginalReports] = useState([]); // NEW: Store server-side reports
+  const [allReceipts, setAllReceipts] = useState([]); 
+  const [originalReports, setOriginalReports] = useState([]); 
 
-  const [cashierOptions, setCashierOptions] = useState([]); // NEW: List of cashier names
-  const [filterCashier, setFilterCashier] = useState("ALL"); // NEW: Selected Cashier
+  const [cashierOptions, setCashierOptions] = useState([]); 
+  const [filterCashier, setFilterCashier] = useState("ALL"); 
   
-  // VIEW MODES: 'timeline' (Default) | 'staff' (Admin Only)
   const [viewMode, setViewMode] = useState('timeline'); 
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -46,65 +45,88 @@ export default function SalesAndReports() {
     const getUserData = async () => {
       try {
         const response = await api.get('/firstapp/user/me/');
-
-
-        if (response.data.is_staff || response.data.is_superuser) setIsAdmin(true);
+        // Allow BOTH Staff and Superusers to access admin features
+        if (response.data.is_staff || response.data.is_superuser) {
+            setIsAdmin(true);
+        }
       } catch (err) {
-        console.log(err)
+        console.log(err);
       }
-
-      
     }
-    getUserData()
+    getUserData();
   }, []);
 
-  console.log(isAdmin)
-
-  // 2. FETCH REPORTS (Updated to fetch Staff data if Admin)
+  // 2. FETCH REPORTS
   const fetchReports = async () => {
     setLoading(true);
     try {
-      // A. Fetch Timeline Data (Default Global/User Sales)
+      // A. Fetch Timeline Data (Global Sales)
       const timelineRes = await api.get('/firstapp/sales/');
-      setOriginalReports(timelineRes.data); // Store original reference
-      setReports(timelineRes.data);         // Set initial view
+      setOriginalReports(timelineRes.data); 
+      setReports(timelineRes.data);         
 
-      // B. If Admin, fetch receipts for Staff Calculation AND Client-side Filtering
-      const userString = localStorage.getItem('user');
-      const user = userString ? JSON.parse(userString) : null;
-      
-      if (user && user.is_superuser) {
-        try {
-          const receiptsRes = await api.get('/firstapp/receipt/');
+      // B. Fetch Data for Filters (Receipts & Users)
+      // We check the token/user state here, but we also rely on the API call succeeding
+      try {
+          // Fetch Receipts and Users in parallel
+          const [receiptsRes, usersRes] = await Promise.all([
+            api.get('/firstapp/receipt/'),
+            api.get('/firstapp/users/')
+          ]);
+
           const receipts = receiptsRes.data;
+          const allUsers = usersRes.data;
           
-          setAllReceipts(receipts); // Save raw data
+          setAllReceipts(receipts); 
 
-          // 1. Group by Cashier for Staff View
+          // 1. Prepare Cashier List & Staff Data
           const staffMap = {};
-          // 2. Extract Unique Cashier Names for Dropdown
           const uniqueCashiers = new Set();
 
+          // A. Add ALL Users to the list (Broadened to ensure your accounts show up)
+          if (Array.isArray(allUsers)) {
+             allUsers.forEach(u => {
+                 // Logic: Include if they are staff, superuser, OR have "cashier"/"staff" in name
+                 // OR simply include everyone to be safe for now.
+                 const isRelevant = u.is_staff || u.is_superuser || 
+                                    u.username.toLowerCase().includes('cashier') || 
+                                    u.username.toLowerCase().includes('staff');
+                 
+                 if (isRelevant) {
+                     uniqueCashiers.add(u.username);
+                     // Initialize stats
+                     if (!staffMap[u.username]) {
+                         staffMap[u.username] = { name: u.username, revenue: 0, orders: 0 };
+                     }
+                 }
+             });
+          }
+
+          // B. Process Receipts to calculate Revenue
           receipts.forEach(receipt => {
             const cashierName = receipt.cashier_name || 'Unknown';
+            
+            // Ensure this cashier is in our unique list (even if deleted)
+            if (cashierName !== 'Unknown') {
+                uniqueCashiers.add(cashierName);
+            }
+
             if(receipt.status === 'COMPLETED') {
                 if (!staffMap[cashierName]) {
                     staffMap[cashierName] = { name: cashierName, revenue: 0, orders: 0 };
                 }
                 staffMap[cashierName].revenue += parseFloat(receipt.total || 0);
                 staffMap[cashierName].orders += 1;
-                
-                uniqueCashiers.add(cashierName);
             }
           });
           
           setStaffReports(Object.values(staffMap).sort((a, b) => b.revenue - a.revenue));
           setCashierOptions(Array.from(uniqueCashiers).sort());
 
-        } catch (err) {
-          console.error("Staff data calculation error:", err);
-        }
+      } catch (err) {
+          console.error("Error fetching detailed filter data (User might not be admin or network error):", err);
       }
+      
     } catch (error) {
       console.error("Failed to fetch reports:", error);
     } finally {
@@ -112,14 +134,12 @@ export default function SalesAndReports() {
     }
   };
 
-
   // Trigger fetch when component mounts or admin status changes
   useEffect(() => {
     fetchReports();
   }, [isAdmin]);
 
   const refreshToday = async () => {
-    // ... existing refresh logic ...
     try {
       setLoading(true);
       await api.post('/firstapp/sales/refresh-today/');
@@ -131,8 +151,8 @@ export default function SalesAndReports() {
     }
   };
 
+  // 3. HANDLE CASHIER FILTERING LOGIC
   useEffect(() => {
-    // If "ALL" is selected, restore the data fetched from server
     if (filterCashier === 'ALL') {
         if (originalReports.length > 0) {
             setReports(originalReports);
@@ -140,50 +160,67 @@ export default function SalesAndReports() {
         return;
     }
 
-    // If a specific cashier is selected, aggregate data from 'allReceipts'
     const groupedData = {};
 
     allReceipts.forEach(receipt => {
-        // 1. Check Cashier Match
         const rCashier = receipt.cashier_name || 'Unknown';
         if (rCashier !== filterCashier) return;
 
-        // 2. Get Date Key (YYYY-MM-DD)
-        const dateKey = receipt.created_at ? receipt.created_at.substring(0, 10) : 'N/A';
+        const dateObj = new Date(receipt.created_at);
+        const dateKey = receipt.created_at ? format(dateObj, 'yyyy-MM-dd') : 'N/A';
 
-        // 3. Initialize Group if new
         if (!groupedData[dateKey]) {
             groupedData[dateKey] = {
                 report_date: dateKey,
                 total_revenue: 0,
                 total_orders: 0,
                 voided_orders: 0,
-                top_selling_product: "N/A" // Harder to calculate client-side without item details, keeping generic
+                top_selling_product: "N/A",
+                itemCounts: {} 
             };
         }
 
-        // 4. Aggregate Math
         if (receipt.status === 'COMPLETED') {
             groupedData[dateKey].total_revenue += parseFloat(receipt.total || 0);
             groupedData[dateKey].total_orders += 1;
+
+            if (Array.isArray(receipt.items)) {
+                receipt.items.forEach(item => {
+                    const pName = item.product_name || item.name || 'Unknown Item';
+                    const qty = parseFloat(item.quantity || 1);
+                    
+                    if (!groupedData[dateKey].itemCounts[pName]) {
+                        groupedData[dateKey].itemCounts[pName] = 0;
+                    }
+                    groupedData[dateKey].itemCounts[pName] += qty;
+                });
+            }
+
         } else if (receipt.status === 'VOIDED') {
             groupedData[dateKey].voided_orders += 1;
         }
     });
 
-    // Convert object back to array and sort
-    const calculatedReports = Object.values(groupedData).sort((a, b) => 
-        new Date(b.report_date) - new Date(a.report_date)
-    );
+    const calculatedReports = Object.values(groupedData).map(dayReport => {
+        let topProduct = "N/A";
+        let maxCount = 0;
+
+        if (dayReport.itemCounts) {
+            Object.entries(dayReport.itemCounts).forEach(([name, count]) => {
+                if (count > maxCount) {
+                    maxCount = count;
+                    topProduct = name;
+                }
+            });
+            delete dayReport.itemCounts; 
+        }
+
+        return { ...dayReport, top_selling_product: topProduct };
+    }).sort((a, b) => new Date(b.report_date) - new Date(a.report_date));
 
     setReports(calculatedReports);
 
   }, [filterCashier, allReceipts, originalReports]);
-
-  // Re-fetch when admin status is determined
-  useEffect(() => {
-    fetchReports();
-  }, [isAdmin]);
 
   // --- DATA FILTERING (Timeline) ---
   const filteredReports = useMemo(() => {
@@ -218,7 +255,6 @@ export default function SalesAndReports() {
       return filteredReports.map(r => ({
         label: format(parseISO(r.report_date), "MMM dd"),
         revenue: getVal(r.total_revenue),
-        gross_income: getVal(r.total_revenue), 
         orders: r.total_orders || 0
       })).reverse(); 
     }
@@ -228,10 +264,9 @@ export default function SalesAndReports() {
       filteredReports.forEach(r => {
         const monthName = format(parseISO(r.report_date), "MMM");
         if (!monthlyGroups[monthName]) {
-          monthlyGroups[monthName] = { label: monthName, revenue: 0, gross_income: 0, orders: 0 };
+          monthlyGroups[monthName] = { label: monthName, revenue: 0, orders: 0 };
         }
         monthlyGroups[monthName].revenue += getVal(r.total_revenue);
-        monthlyGroups[monthName].gross_income += getVal(r.total_revenue);
         monthlyGroups[monthName].orders += (r.total_orders || 0);
       });
       return Object.values(monthlyGroups); 
@@ -246,7 +281,7 @@ export default function SalesAndReports() {
     
     const sellers = {};
     filteredReports.forEach(r => {
-      if(r.top_selling_product) {
+      if(r.top_selling_product && r.top_selling_product !== "N/A") {
         sellers[r.top_selling_product] = (sellers[r.top_selling_product] || 0) + 1;
       }
     });
@@ -268,11 +303,7 @@ export default function SalesAndReports() {
     let aValue = a[sortConfig.key];
     let bValue = b[sortConfig.key];
 
-    if (sortConfig.key === 'gross_income') {
-        aValue = parseFloat(a.total_revenue || 0);
-        bValue = parseFloat(b.total_revenue || 0);
-    }
-    else if(['total_revenue', 'total_orders', 'voided_orders'].includes(sortConfig.key)) {
+    if(['total_revenue', 'total_orders', 'voided_orders'].includes(sortConfig.key)) {
         aValue = parseFloat(aValue || 0);
         bValue = parseFloat(bValue || 0);
     }
@@ -282,52 +313,69 @@ export default function SalesAndReports() {
     return 0;
   });
 
+  // --- EXPORT FUNCTION ---
   const exportToCSV = () => {
-    // Basic CSV export for timeline view
-    if (viewMode === 'staff') return alert("Please switch to Sales view to export timeline data.");
+    let dataToExport = [];
+    let headers = [];
+    let title = "";
+    let summaryRows = [];
+    let filename = "";
+    const bom = "\uFEFF"; 
 
-    // 1. Add Title and Metadata
-    const title = ['Total Sales Report'];
-    const periodRow = [`Period: ${period}`, `Export Date: ${format(new Date(), 'yyyy-MM-dd')}`];
-    const emptyRow = ['']; // Spacer for visual separation
+    if (viewMode === 'staff') {
+        title = "Staff Performance Report";
+        headers = ['Staff Name', 'Total Orders', 'Total Revenue'];
+        dataToExport = staffReports.map(s => [
+            `"${s.name}"`, 
+            s.orders, 
+            s.revenue.toFixed(2)
+        ]);
+        filename = `staff-report-${format(new Date(), 'yyyy-MM-dd')}`;
+    } else {
+        title = `Sales Report - ${filterCashier === 'ALL' ? 'All Cashiers' : filterCashier}`;
+        headers = ['Date', 'Revenue', 'Orders', 'Voided Orders', 'Top Seller']; 
+        
+        dataToExport = filteredReports.map(r => {
+            const dateStr = r.report_date ? format(parseISO(r.report_date), 'yyyy-MM-dd') : 'N/A';
+            const productName = r.top_selling_product ? `"${r.top_selling_product.replace(/"/g, '""')}"` : 'N/A';
+            
+            return [
+                dateStr,
+                parseFloat(r.total_revenue || 0).toFixed(2),
+                r.total_orders || 0,
+                r.voided_orders || 0,
+                productName
+            ];
+        });
 
-    // 2. Define Headers
-    const headers = ['Date', 'Revenue', 'Gross Income', 'Orders', 'Voided', 'Top Seller'];
+        summaryRows = [
+            ['Total Revenue:', stats.totalRev.toFixed(2)],
+            ['Total Orders:', stats.totalOrders],
+            ['Top Item:', `"${stats.topSellerName}"`],
+            [''] 
+        ];
+        
+        filename = `sales-report-${filterCashier}-${format(selectedDate, 'yyyy-MM-dd')}`;
+    }
 
-    // 3. Map Data (Format Dates & Escape Strings)
-    const rows = filteredReports.map(r => {
-      // Safety check for date formatting to avoid "Hashtags" in Excel
-      const dateStr = r.report_date ? format(parseISO(r.report_date), 'yyyy-MM-dd') : 'N/A';
-      
-      // Escape product name in quotes in case it contains a comma (e.g., "Chicken, Spicy")
-      const productName = r.top_selling_product ? `"${r.top_selling_product}"` : '';
+    const metadata = [
+        [title],
+        [`Generated: ${format(new Date(), 'yyyy-MM-dd HH:mm:ss')}`],
+        [`Period: ${period} (${format(selectedDate, 'MMM yyyy')})`],
+        [''] 
+    ];
 
-      return [
-        dateStr,
-        r.total_revenue,
-        r.total_orders,
-        r.voided_orders,
-        productName
-      ];
-    });
+    const allRows = [...metadata, ...summaryRows, headers, ...dataToExport];
+    const csvContent = bom + allRows.map(e => e.join(",")).join("\n");
 
-    // 4. Combine everything into CSV string
-    // Title -> Metadata -> Empty Row -> Headers -> Data Rows
-    const csvContent = [
-        title.join(','),
-        periodRow.join(','),
-        emptyRow.join(','),
-        headers.join(','),
-        ...rows.map(row => row.join(','))
-    ].join('\n');
-
-    // 5. Download Logic
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `sales-report-${format(selectedDate, 'yyyy-MM-dd')}.csv`;
+    a.download = `${filename}.csv`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
   };
 
@@ -341,7 +389,6 @@ export default function SalesAndReports() {
             {viewMode === 'timeline' ? 'Financial Reports' : 'Staff Performance'}
           </h1>
           <p className="text-gray-600">
-             {/* Dynamic description */}
              {viewMode === 'timeline' 
                 ? (filterCashier === 'ALL' ? 'Daily revenue and gross income tracking' : `Sales history for: ${filterCashier}`)
                 : 'Comparative sales analysis by staff member'}
@@ -349,7 +396,8 @@ export default function SalesAndReports() {
         </div>
         
         <div className="flex gap-2">
-            {/* --- ADMIN TOGGLE: Sales vs Staff --- */}
+            {/* --- ADMIN TOGGLE: Cashier Filter --- */}
+            {/* We show this if isAdmin is true, regardless of superuser status */}
             {isAdmin && viewMode === 'timeline' && (
                 <div className="flex items-center bg-white border border-gray-300 rounded-lg px-2">
                     <span className="text-xs text-gray-500 mr-2 font-medium uppercase">Filter:</span>
@@ -366,12 +414,10 @@ export default function SalesAndReports() {
                 </div>
             )}
 
-            {/* ... Admin View Mode Toggles ... */}
             {isAdmin && (
                 <div className="bg-white border border-gray-300 rounded-lg p-1 flex mr-2">
-                {/* ... existing buttons ... */}
                     <button 
-                        onClick={() => { setViewMode('timeline'); setFilterCashier('ALL'); }} // Reset filter when switching
+                        onClick={() => { setViewMode('timeline'); setFilterCashier('ALL'); }} 
                         className={`px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all ${viewMode === 'timeline' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
                     >
                         <BarChart3 size={16}/> Sales
@@ -433,17 +479,10 @@ export default function SalesAndReports() {
                     <PhilippinePesoIcon className="text-blue-800" size={24} />
                 </div>
                 <p className="text-blue-800 font-bold text-3xl">₱ {stats.totalRev.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
-                <p className="text-xs text-gray-400 mt-1">For selected period</p>
+                <p className="text-xs text-gray-400 mt-1">
+                    {filterCashier === 'ALL' ? 'Global Revenue' : `Rev. by ${filterCashier}`}
+                </p>
                 </div>
-
-                {/* <div className="bg-white shadow-lg rounded-xl p-5 border-l-4 border-green-500">
-                <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-gray-600 font-medium text-sm">Gross Income</h3>
-                    <PhilippinePesoIcon className="text-green-500" size={24} />
-                </div>
-                <p className="text-green-500 font-bold text-3xl">₱ {stats.totalRev.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
-                <p className="text-xs text-gray-400 mt-1">Total Income Generated</p>
-                </div> */}
 
                 <div className="bg-white shadow-lg rounded-xl p-5 border-l-4 border-orange-500">
                 <div className="flex items-center justify-between mb-2">
@@ -459,14 +498,18 @@ export default function SalesAndReports() {
                     <TrendingUp className="text-purple-500" size={24} />
                 </div>
                 <p className="text-purple-500 font-bold text-xl truncate">{stats.topSellerName}</p>
-                <p className="text-xs text-gray-400 mt-1">Most frequent top seller</p>
+                <p className="text-xs text-gray-400 mt-1">
+                     {filterCashier === 'ALL' ? 'Most frequent' : `Top item for ${filterCashier}`}
+                </p>
                 </div>
             </div>
 
             {/* CHARTS */}
             <div className="bg-white p-6 rounded-xl shadow-lg mb-6">
                 <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-semibold text-gray-800">Financial Performance</h3>
+                <h3 className="text-lg font-semibold text-gray-800">
+                    {filterCashier === 'ALL' ? 'Financial Performance' : `Performance: ${filterCashier}`}
+                </h3>
                 <div className="flex gap-2">
                     {chartTypes.map(type => (
                     <button key={type} onClick={() => setChartType(type)} className={`px-3 py-1 rounded-md text-xs font-medium border ${chartType === type ? "bg-gray-800 text-white border-gray-800" : "bg-white text-gray-600 border-gray-200"}`}>
@@ -485,7 +528,6 @@ export default function SalesAndReports() {
                         <Tooltip formatter={(v) => `₱ ${v.toLocaleString()}`} />
                         <Legend />
                         <Bar dataKey="revenue" name="Revenue" fill="#1e40af" radius={[4, 4, 0, 0]} />
-                        {/* <Bar dataKey="gross_income" name="Gross Income" fill="#22c55e" radius={[4, 4, 0, 0]} /> */}
                     </BarChart>
                     ) : chartType === "Line" ? (
                     <LineChart data={chartData}>
@@ -495,7 +537,6 @@ export default function SalesAndReports() {
                         <Tooltip formatter={(v) => `₱ ${v.toLocaleString()}`} />
                         <Legend />
                         <Line type="monotone" dataKey="revenue" name="Revenue" stroke="#1e40af" strokeWidth={3} dot={{ r: 3 }} />
-                        {/* <Line type="monotone" dataKey="gross_income" name="Gross Income" stroke="#22c55e" strokeWidth={3} dot={{ r: 3 }} /> */}
                     </LineChart>
                     ) : (
                     <AreaChart data={chartData}>
@@ -505,7 +546,6 @@ export default function SalesAndReports() {
                         <Tooltip formatter={(v) => `₱ ${v.toLocaleString()}`} />
                         <Legend />
                         <Area type="monotone" dataKey="revenue" name="Revenue" stackId="1" stroke="#1e40af" fill="#93c5fd" />
-                        <Area type="monotone" dataKey="gross_income" name="Gross Income" stackId="2" stroke="#22c55e" fill="#86efac" />
                     </AreaChart>
                     )}
                 </ResponsiveContainer>
@@ -520,7 +560,6 @@ export default function SalesAndReports() {
                         <th onClick={() => handleSort('report_date')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Date {sortConfig.key === 'report_date' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
                         <th onClick={() => handleSort('total_orders')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Orders {sortConfig.key === 'total_orders' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
                         <th onClick={() => handleSort('total_revenue')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Revenue {sortConfig.key === 'total_revenue' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                        {/* <th onClick={() => handleSort('gross_income')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Gross Income {sortConfig.key === 'gross_income' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th> */}
                         <th onClick={() => handleSort('top_selling_product')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Top Seller {sortConfig.key === 'top_selling_product' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
                         <th onClick={() => handleSort('voided_orders')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Voided {sortConfig.key === 'voided_orders' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
                     </tr>
@@ -531,7 +570,6 @@ export default function SalesAndReports() {
                         <td className="py-3 px-4 text-sm font-medium text-gray-900">{report.report_date}</td>
                         <td className="py-3 px-4 text-sm text-gray-600">{report.total_orders}</td>
                         <td className="py-3 px-4 text-sm font-semibold text-blue-700">₱ {parseFloat(report.total_revenue).toLocaleString()}</td>
-                        {/* <td className="py-3 px-4 text-sm font-bold text-green-600">₱ {parseFloat(report.total_revenue).toLocaleString()}</td> */}
                         <td className="py-3 px-4 text-sm text-gray-600">
                             <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs font-medium">
                                 {report.top_selling_product || "N/A"}
@@ -541,7 +579,7 @@ export default function SalesAndReports() {
                         </tr>
                     )) : (
                         <tr>
-                            <td colSpan="6" className="text-center py-8 text-gray-500">
+                            <td colSpan="5" className="text-center py-8 text-gray-500">
                                 {loading ? "Loading data..." : "No sales reports found."}
                             </td>
                         </tr>

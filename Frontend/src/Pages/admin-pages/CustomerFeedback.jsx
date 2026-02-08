@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Star, MessageSquare, TrendingUp, Eye, Trash2, Search } from 'lucide-react';
+import api from '../../api';
 
 const CustomerFeedback = () => {
   const [activeTab, setActiveTab] = useState('customer'); // 'customer' or 'food'
@@ -21,36 +22,43 @@ const CustomerFeedback = () => {
 
   
   useEffect(() => {
-    const loadFeedbacks = () => {
+    const loadFeedbacks = async () => {
       try {
         setLoading(true);
 
-        // Customer feedback
-        const storedFeedbacks = localStorage.getItem('customer_feedbacks');
-        if (storedFeedbacks) {
-          const data = JSON.parse(storedFeedbacks);
-          const sortedData = data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-          setFeedbacks(sortedData);
-          setFilteredFeedbacks(sortedData);
-        } else {
-          const sampleFeedbacks = [
-            { id: 1, customer_name: 'Juan Dela Cruz', rating: 5, comment: 'Excellent service! The chicken adobo was amazing. Will definitely come back!', order_id: 1023, created_at: new Date().toISOString() },
-            { id: 2, customer_name: 'Maria Santos', rating: 4, comment: 'Good food, but the waiting time was a bit long. Overall satisfied with the meal.', order_id: 1024, created_at: new Date(Date.now() - 86400000).toISOString() },
-            { id: 3, customer_name: 'Pedro Garcia', rating: 5, comment: 'Best silog meal in town! Great value for money.', order_id: 1025, created_at: new Date(Date.now() - 172800000).toISOString() }
-          ];
-          setFeedbacks(sampleFeedbacks);
-          setFilteredFeedbacks(sampleFeedbacks);
-          localStorage.setItem('customer_feedbacks', JSON.stringify(sampleFeedbacks));
-        }
+        // 1. Fetch reviews from Django
+        const response = await api.get('/firstapp/reviews/');
+        const allReviews = response.data;
 
-        // Food feedback 
-        const sampleFoodFeedbacks = [
-          { id: 1, food_name: 'Chicken Adobo', rating: 5, comment: 'Perfectly cooked and tasty!', created_at: new Date().toISOString() },
-          { id: 2, food_name: 'Pancit Canton', rating: 4, comment: 'Good flavor, but a bit oily.', created_at: new Date(Date.now() - 86400000).toISOString() },
-          { id: 3, food_name: 'Lechon Kawali', rating: 5, comment: 'Crispy and delicious!', created_at: new Date(Date.now() - 172800000).toISOString() }
-        ];
-        setFoodFeedbacks(sampleFoodFeedbacks);
-        setFilteredFoodFeedbacks(sampleFoodFeedbacks);
+        // 2. Separate them into Shop (Customer) and Food reviews
+        const shopReviews = allReviews.filter(r => r.review_type === 'shop').map(r => ({
+           id: r.id,
+           customer_name: r.username || 'Anonymous',
+           rating: r.rating,
+           comment: r.comment,
+           order_id: r.id, // Using ID as order_id for now
+           created_at: r.created_at,
+           image: r.image // API will return full URL
+        }));
+
+        const productReviews = allReviews.filter(r => r.review_type === 'food').map(r => ({
+           id: r.id,
+           food_name: r.product_name || 'Unknown Item', // From serializer
+           rating: r.rating,
+           comment: r.comment,
+           created_at: r.created_at,
+           image: r.image
+        }));
+
+        // 3. Update State
+        setFeedbacks(shopReviews);
+        setFilteredFeedbacks(shopReviews); // Initialize filter
+
+        setFoodFeedbacks(productReviews);
+        setFilteredFoodFeedbacks(productReviews);
+
+        // Remove localStorage logic since we are now live
+        localStorage.removeItem('customer_feedbacks'); 
 
       } catch (err) {
         console.error('Error loading feedbacks:', err);

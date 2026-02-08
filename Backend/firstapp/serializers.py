@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 from django.db import transaction
 
-from .models import Product, Receipt, ReceiptItem, Coupon, Feedback, HomePage, AboutPage, ContactPage, DailySalesReport, CouponCriteria
+from .models import Product, Receipt, ReceiptItem, Coupon, Feedback, HomePage, AboutPage, ContactPage, DailySalesReport, CouponCriteria, Review
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -101,7 +101,7 @@ class ReceiptItemSerializer(serializers.ModelSerializer):
 
 class ReceiptSerializer(serializers.ModelSerializer):
     items = ReceiptItemSerializer(many=True)
-    cashier_name = serializers.CharField(source='cashier.username', read_only=True)
+    cashier_name = serializers.SerializerMethodField()
     
     coupon = serializers.PrimaryKeyRelatedField(
         queryset=Coupon.objects.all(), 
@@ -124,6 +124,9 @@ class ReceiptSerializer(serializers.ModelSerializer):
             'void_reason',
             'cashier_name'
         ]
+
+    def get_cashier_name(self, obj):
+        return obj.cashier.username if obj.cashier else "Unknown"
 
     def create(self, validated_data):
         items_data = validated_data.pop("items") 
@@ -150,6 +153,24 @@ class DailySalesReportSerializer(serializers.ModelSerializer):
             'top_selling_product', 'updated_at'
         ]
         read_only_fields = fields
+
+class ReviewSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+    product_name = serializers.CharField(source='product.product_name', read_only=True)
+
+    class Meta:
+        model = Review
+        fields = [
+            'id', 'user', 'username', 'review_type', 
+            'product', 'product_name', 
+            'rating', 'comment', 'image', 'created_at'
+        ]
+        read_only_fields = ['user', 'created_at']
+
+    def create(self, validated_data):
+        # Automatically assign the user from the request
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
 
 class StaffPerformanceSerializer(serializers.Serializer):
     name = serializers.CharField(read_only=True)

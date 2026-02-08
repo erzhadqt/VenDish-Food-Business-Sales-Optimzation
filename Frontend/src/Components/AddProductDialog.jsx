@@ -21,12 +21,6 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
   const [category, setCategory] = useState("");
   const [price, setPrice] = useState("");
   
-  // NEW: State for Stock Quantity
-  const [stockQuantity, setStockQuantity] = useState(0);
-
-  const [trackStock, setTrackStock] = useState(false); // Default false
-  
-  const [isAvailable, setIsAvailable] = useState(true);
   const [loading, setLoading] = useState(false);
   const [image, setImage] = useState(null);
   const [error, setError] = useState("");
@@ -68,12 +62,10 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
       formData.append("category", category);
       formData.append("price", parseFloat(price));
 
-      formData.append("track_stock", trackStock);
-      
-      // NEW: Append stock quantity
-      formData.append("stock_quantity", parseInt(stockQuantity) || 0);
-
-      formData.append("is_available", isAvailable); 
+      // Defaults for the new "No Stock" system
+      formData.append("is_available", true); 
+      formData.append("stock_quantity", 0);
+      formData.append("track_stock", false);
       
       if (image) formData.append("image", image);
 
@@ -89,8 +81,6 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
       setProductName("");
       setCategory("");
       setPrice("");
-      setStockQuantity(0); // Reset Stock
-      setIsAvailable(true);
       setImage(null);
       setError("");
     } catch (err) {
@@ -151,82 +141,18 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
             </select>
           </div>
 
-          <div className="flex items-center gap-2">
-                <input 
-                    type="checkbox" 
-                    id="trackStock"
-                    checked={trackStock}
-                    onChange={(e) => setTrackStock(e.target.checked)}
-                    className="w-4 h-4 text-blue-600 rounded"
-                />
-                <Label htmlFor="trackStock" className="font-semibold">Track Stock Quantity?</Label>
-            </div>
-
-            {trackStock ? (
-                // OPTION A: Show Quantity Input
-                <div className="animate-in slide-in-from-top-2">
-                    <Label>Stock Quantity</Label>
-                    <Input 
-                        type="number" 
-                        value={stockQuantity} 
-                        onChange={e => setStockQuantity(e.target.value)} 
-                    />
-                </div>
-            ) : (
-                // OPTION B: Show Simple Availability Toggle
-                <div className="animate-in slide-in-from-top-2 flex items-center gap-2">
-                    <input 
-                        type="checkbox" 
-                        id="avail"
-                        checked={isAvailable}
-                        onChange={(e) => setIsAvailable(e.target.checked)}
-                        className="w-4 h-4 text-green-600 rounded"
-                    />
-                    <Label htmlFor="avail">Product is Available</Label>
-                </div>
-            )}
-
-          <div className="grid grid-cols-2 gap-4">
-             {/* Price Input */}
-            <div className="grid gap-2">
-                <Label htmlFor="price">Price (₱)</Label>
-                <Input
-                id="price"
-                type="number"
-                step="0.01"
-                min="0"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                required
-                />
-            </div>
-
-            {/* NEW: Stock Quantity Input */}
-            <div className="grid gap-2">
-                <Label htmlFor="stock">Stock Quantity</Label>
-                <Input
-                id="stock"
-                type="number"
-                min="0"
-                value={stockQuantity}
-                onChange={(e) => setStockQuantity(e.target.value)}
-                required
-                />
-            </div>
-          </div>
-
-          {/* Availability Checkbox */}
-          <div className="flex items-center gap-3 p-2 border rounded-md bg-gray-50">
-            <input
-              id="is_available"
-              type="checkbox"
-              checked={isAvailable}
-              onChange={(e) => setIsAvailable(e.target.checked)}
-              className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 border-gray-300"
-            />
-            <Label htmlFor="is_available" className="cursor-pointer font-medium text-gray-700">
-              Mark as Available (Manual Override)
-            </Label>
+          {/* Price Input */}
+          <div className="grid gap-2">
+              <Label htmlFor="price">Price (₱)</Label>
+              <Input
+              id="price"
+              type="number"
+              step="0.01"
+              min="0"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              required
+              />
           </div>
 
           {/* Image Input */}

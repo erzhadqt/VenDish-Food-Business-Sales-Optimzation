@@ -1,5 +1,5 @@
 from django.urls import path, include
-from .views import ProductViewSet, FeedbackViewSet, ReceiptViewSet, CouponViewSet, HomePageViewSet, AboutPageViewSet, ContactPageViewSet, UserViewSet, DailySalesReportViewSet, CouponCriteriaViewSet
+from .views import ProductViewSet, FeedbackViewSet, ReceiptViewSet, CouponViewSet, HomePageViewSet, AboutPageViewSet, ContactPageViewSet, UserViewSet, DailySalesReportViewSet, CouponCriteriaViewSet, ReviewViewSet
 from rest_framework.routers import DefaultRouter
 
 router = DefaultRouter()
@@ -10,6 +10,8 @@ router.register(r'feedback', FeedbackViewSet)
 router.register(r'home', HomePageViewSet)
 router.register(r'about', AboutPageViewSet)
 router.register(r'contact', ContactPageViewSet)
+
+router.register(r'reviews', ReviewViewSet)
 
 router.register(r'users', UserViewSet)
 router.register(r'receipt', ReceiptViewSet)

@@ -157,7 +157,8 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
+    "https://plagihedral-asuncion-tumidly.ngrok-free.dev",
 ]
 
 
-CSRF_TRUSTED_ORIGINS = ['https://unfluvial-epicontinental-jeffery.ngrok-free.dev']
+CSRF_TRUSTED_ORIGINS = ['https://unfluvial-epicontinental-jeffery.ngrok-free.dev',]

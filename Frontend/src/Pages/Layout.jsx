@@ -12,7 +12,7 @@ const Layout = () => {
 
   return (
     <div className="h-screen flex flex-col">
-      <header className="h-16 shrink-0 bg-black flex items-center z-20 relative">
+      <header className="h-12 shrink-0 bg-black flex items-center z-20 relative">
         <Header />
       </header>
 

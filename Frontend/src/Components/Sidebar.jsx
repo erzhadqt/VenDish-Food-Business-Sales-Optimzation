@@ -57,6 +57,7 @@ const Sidebar = ({ isExpanded, toggleSidebar }) => {
         <Icon className="w-5 h-5 shrink-0" />
         {!isMinimized && <span>{item.label}</span>}
 
+        {/* Custom tooltip - Note: might be clipped by overflow-hidden, but native title attr (above) serves as backup */}
         {isMinimized && (
           <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 
                           group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-200">
@@ -68,10 +69,13 @@ const Sidebar = ({ isExpanded, toggleSidebar }) => {
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-gray-100 border-r border-gray-200 shadow-sm">
+    <div className="flex flex-col h-full w-full bg-gray-100 border-r border-gray-200 shadow-sm transition-all duration-300">
       
-      <div className="flex-1 overflow-y-auto">
-        <div className="px-4 py-5 border-b border-gray-200 flex items-center justify-between">
+      {/* Added overflow-x-hidden to prevent horizontal scrolling when minimized */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden">
+        
+        {/* Adjusted padding for minimized state */}
+        <div className={`border-b border-gray-200 flex items-center justify-between transition-all duration-300 ${isMinimized ? 'p-3 flex-col gap-2' : 'px-4 py-5'}`}>
           {!isMinimized && (
             <div className="flex items-center gap-3">
               <div className="p-2 bg-gray-100 rounded-lg">
@@ -88,17 +92,17 @@ const Sidebar = ({ isExpanded, toggleSidebar }) => {
 
           <button
             onClick={toggleSidebar}
-            className={`p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200 ${isMinimized ? 'mx-auto' : ''}`}
+            className={`p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200 ${isMinimized ? '' : ''}`}
           >
             {isMinimized ? <ChevronRight className="w-5 h-5 text-gray-600" /> : <ChevronLeft className="w-5 h-5 text-gray-600" />}
           </button>
         </div>
 
-        <nav className="px-3 py-4 space-y-1">
+        <nav className={`py-4 space-y-1 transition-all ${isMinimized ? 'px-2' : 'px-3'}`}>
           {/* 1. Render Main Menu Items */}
           {visibleMenu.map(renderNavItem)}
 
-          {/* 2. Divider (Only shows if there are CMS items to show) */}
+          {/* 2. Divider */}
           {visibleCMS.length > 0 && (
              <div className="my-2 border-t border-gray-300/50 mx-2" />
           )}
@@ -108,12 +112,13 @@ const Sidebar = ({ isExpanded, toggleSidebar }) => {
         </nav>
       </div>
 
-      <div className="p-4 border-t border-gray-200">
+      {/* Footer / Logout Section - Adjusted padding to fit minimized width */}
+      <div className={`border-t border-gray-200 transition-all duration-300 ${isMinimized ? 'p-2' : 'p-4'}`}>
         <AlertDialog onConfirm={logout} title="Confirm Logout" description="Are you sure you want to Logout?">
           <button
             className={`w-full flex items-center gap-2 px-4 py-2.5 bg-gray-900 hover:bg-gray-800 text-white 
                         rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm group relative
-                        ${isMinimized ? 'justify-center' : 'justify-center'}`}
+                        ${isMinimized ? 'justify-center px-0' : 'justify-center'}`}
             title={isMinimized ? 'Logout' : ''}
           >
             <LogOut className="w-4 h-4" />

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { LockKeyhole, AlertTriangle, CheckSquare, Trash2, Square } from "lucide-react";
+import React, { useState } from "react";
+import { LockKeyhole, AlertTriangle, Trash2, Minus, Plus } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -20,24 +20,22 @@ const VoidConfirmDialog = ({ onConfirm, trigger, cartItems }) => {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   
-  // Selection State
-  const [selectedIds, setSelectedIds] = useState([]);
+  // Selection State: { [productId]: quantityToVoid }
+  const [selections, setSelections] = useState({});
   const [loading, setLoading] = useState(false);
 
   // Reset state when dialog opens/closes
   const handleOpenChange = (newOpen) => {
     setOpen(newOpen);
     if (!newOpen) {
-      // Reset everything on close
       setTimeout(() => {
         setCode("");
         setError("");
         setStep("auth");
-        setSelectedIds([]);
-      }, 300); // Slight delay for animation
+        setSelections({});
+      }, 300);
     } else {
-        // Pre-select nothing when opening
-        setSelectedIds([]);
+        setSelections({});
     }
   };
 
@@ -52,32 +50,64 @@ const VoidConfirmDialog = ({ onConfirm, trigger, cartItems }) => {
     }
   };
 
-  const toggleSelection = (itemId) => {
-    if (selectedIds.includes(itemId)) {
-      setSelectedIds(selectedIds.filter(id => id !== itemId));
-    } else {
-      setSelectedIds([...selectedIds, itemId]);
-    }
+  const handleIncrement = (item) => {
+    setSelections(prev => {
+        const currentVoidQty = prev[item.id] || 0;
+        if (currentVoidQty < item.qty) {
+            return { ...prev, [item.id]: currentVoidQty + 1 };
+        }
+        return prev;
+    });
+  };
+
+  const handleDecrement = (item) => {
+    setSelections(prev => {
+        const currentVoidQty = prev[item.id] || 0;
+        if (currentVoidQty > 0) {
+            const next = currentVoidQty - 1;
+            // If 0, remove key to keep object clean
+            if (next === 0) {
+                const copy = { ...prev };
+                delete copy[item.id];
+                return copy;
+            }
+            return { ...prev, [item.id]: next };
+        }
+        return prev;
+    });
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === cartItems.length) {
-      setSelectedIds([]);
+    // If all items are fully selected for voiding, clear selections.
+    // Otherwise, select max quantity for all.
+    const allFullySelected = cartItems.every(item => (selections[item.id] || 0) === item.qty);
+    
+    if (allFullySelected) {
+      setSelections({});
     } else {
-      setSelectedIds(cartItems.map(item => item.id));
+      const newSelections = {};
+      cartItems.forEach(item => {
+        newSelections[item.id] = item.qty;
+      });
+      setSelections(newSelections);
     }
   };
 
   const handleVoidConfirm = async () => {
-    if (selectedIds.length === 0) {
-        setError("Please select at least one item.");
+    // Convert selections object to array of { id, qty }
+    const itemsToVoid = Object.entries(selections).map(([idStr, qty]) => ({
+        id: parseInt(idStr),
+        qty: qty
+    })).filter(i => i.qty > 0);
+
+    if (itemsToVoid.length === 0) {
+        setError("Please select quantities to void.");
         return;
     }
 
     try {
       setLoading(true);
-      // Pass the selected IDs back to parent
-      await onConfirm(selectedIds); 
+      await onConfirm(itemsToVoid); 
       setOpen(false);
     } catch (err) {
       console.error("Action failed", err);
@@ -86,6 +116,9 @@ const VoidConfirmDialog = ({ onConfirm, trigger, cartItems }) => {
       setLoading(false);
     }
   };
+
+  // Calculate total items selected for voiding
+  const totalVoidCount = Object.values(selections).reduce((a, b) => a + b, 0);
 
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
@@ -138,27 +171,27 @@ const VoidConfirmDialog = ({ onConfirm, trigger, cartItems }) => {
           </>
         )}
 
-        {/* --- STEP 2: SELECT ITEMS --- */}
+        {/* --- STEP 2: SELECT QUANTITIES --- */}
         {step === "select" && (
            <>
             <AlertDialogHeader>
               <div className="flex items-center gap-2 text-red-600 mb-2">
                 <Trash2 size={20} />
-                <AlertDialogTitle>Select Items to Void</AlertDialogTitle>
+                <AlertDialogTitle>Void Items</AlertDialogTitle>
               </div>
               <AlertDialogDescription>
-                Select the specific items you want to remove from the cart.
+                Adjust the quantity to remove for each item.
               </AlertDialogDescription>
             </AlertDialogHeader>
 
             <div className="py-2">
                 <div className="flex justify-between items-center mb-2 px-1">
-                    <span className="text-xs text-gray-500">{selectedIds.length} items selected</span>
+                    <span className="text-xs text-gray-500">{totalVoidCount} items marked</span>
                     <button 
                         onClick={toggleSelectAll} 
                         className="text-xs font-bold text-blue-600 hover:underline"
                     >
-                        {selectedIds.length === cartItems.length ? "Deselect All" : "Select All"}
+                        {totalVoidCount > 0 ? "Clear All" : "Void All"}
                     </button>
                 </div>
 
@@ -167,26 +200,44 @@ const VoidConfirmDialog = ({ onConfirm, trigger, cartItems }) => {
                         <div className="p-4 text-center text-sm text-gray-400">Cart is empty</div>
                     ) : (
                         cartItems.map((item) => {
-                            const isSelected = selectedIds.includes(item.id);
+                            const voidQty = selections[item.id] || 0;
+                            const isFullyVoided = voidQty === item.qty;
+                            
                             return (
                                 <div 
                                     key={item.id} 
-                                    onClick={() => toggleSelection(item.id)}
-                                    className={`flex items-center gap-3 p-3 border-b last:border-0 cursor-pointer transition-colors ${isSelected ? 'bg-red-50' : 'hover:bg-gray-100'}`}
+                                    className={`flex items-center justify-between p-3 border-b last:border-0 transition-colors ${voidQty > 0 ? 'bg-red-50' : 'hover:bg-gray-100'}`}
                                 >
-                                    <div className={`text-gray-400 ${isSelected ? 'text-red-600' : ''}`}>
-                                        {isSelected ? <CheckSquare size={18} /> : <Square size={18} />}
-                                    </div>
                                     <div className="flex-1">
-                                        <div className={`font-medium text-sm ${isSelected ? 'text-red-700' : 'text-gray-700'}`}>
+                                        <div className={`font-medium text-sm ${voidQty > 0 ? 'text-red-700' : 'text-gray-700'}`}>
                                             {item.product_name}
                                         </div>
                                         <div className="text-xs text-gray-500">
-                                            Qty: {item.qty} × ₱{item.price}
+                                            In Cart: <span className="font-bold">{item.qty}</span>
                                         </div>
                                     </div>
-                                    <div className="font-bold text-sm">
-                                        ₱{(item.qty * item.price).toFixed(2)}
+
+                                    {/* Quantity Controls */}
+                                    <div className="flex items-center gap-3 bg-white rounded-md border border-gray-200 px-2 py-1 shadow-sm">
+                                        <button 
+                                            onClick={() => handleDecrement(item)}
+                                            disabled={voidQty === 0}
+                                            className={`p-1 rounded hover:bg-gray-100 ${voidQty === 0 ? 'text-gray-300' : 'text-gray-600'}`}
+                                        >
+                                            <Minus size={16} />
+                                        </button>
+                                        
+                                        <span className={`font-bold text-sm w-4 text-center ${voidQty > 0 ? 'text-red-600' : 'text-gray-300'}`}>
+                                            {voidQty}
+                                        </span>
+
+                                        <button 
+                                            onClick={() => handleIncrement(item)}
+                                            disabled={voidQty === item.qty}
+                                            className={`p-1 rounded hover:bg-gray-100 ${voidQty === item.qty ? 'text-gray-300' : 'text-gray-600'}`}
+                                        >
+                                            <Plus size={16} />
+                                        </button>
                                     </div>
                                 </div>
                             )
@@ -200,12 +251,12 @@ const VoidConfirmDialog = ({ onConfirm, trigger, cartItems }) => {
               <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
               <button 
                 onClick={handleVoidConfirm}
-                disabled={loading || selectedIds.length === 0}
+                disabled={loading || totalVoidCount === 0}
                 className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 text-white
-                    ${selectedIds.length === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}
+                    ${totalVoidCount === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}
                 `}
               >
-                {loading ? "Processing..." : `Void ${selectedIds.length} Item(s)`}
+                {loading ? "Processing..." : "Confirm Void"}
               </button>
             </AlertDialogFooter>
            </>

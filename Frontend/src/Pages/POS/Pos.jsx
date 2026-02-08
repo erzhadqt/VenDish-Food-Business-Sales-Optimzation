@@ -216,9 +216,7 @@ const Pos = () => {
 
       const coupon = couponData;
 
-      // -------------------------------------------------------------
-      // FIXED: Check usage limit vs times used (Static Limit Logic)
-      // -------------------------------------------------------------
+      // Check usage limit
       const isSoldOut = coupon.usage_limit !== null && coupon.times_used >= coupon.usage_limit;
 
       if (isSoldOut) {
@@ -240,8 +238,7 @@ const Pos = () => {
 
       if (coupon.criteria_details) {
         const criteria = coupon.criteria_details;
-        const baseAmount = subTotal - standardDiscount;
-
+        
         let itemToAutoAdd = null;
         if (criteria.target_product) {
             itemToAutoAdd = criteria.target_product;
@@ -303,32 +300,46 @@ const Pos = () => {
     setCouponError("");
   };
 
-  const handleVoidItems = async (itemsToRemoveIds) => {
-    if (!itemsToRemoveIds || itemsToRemoveIds.length === 0) return;
+  // --- UPDATED VOID LOGIC ---
+  const handleVoidItems = async (itemsToVoid) => {
+    // itemsToVoid structure: [ { id: 1, qty: 1 }, { id: 2, qty: 2 } ]
+    if (!itemsToVoid || itemsToVoid.length === 0) return;
 
-    const itemsToLog = cartItems
-        .filter(item => itemsToRemoveIds.includes(item.id))
-        .map(item => ({
-            product_id: item.id,
-            product_name: item.product_name,
-            price: item.price,
-            quantity: item.qty
-        }));
+    // Map the selection to the actual product details for logging
+    const itemsToLog = itemsToVoid.map(v => {
+        const originalItem = cartItems.find(i => i.id === v.id);
+        return {
+            product_id: originalItem?.id,
+            product_name: originalItem?.product_name || "Unknown",
+            price: originalItem?.price || 0,
+            quantity: v.qty // Log the VOIDED quantity, not total
+        };
+    });
 
     try {
         setLoading(true);
         await api.post('/firstapp/receipt/log-void/', {
             items: itemsToLog,
-            reason: "Manager Void (Cart Selection)"
+            reason: "Manager Void (Partial/Full)"
         });
         
-        const newCart = cartItems.filter(item => !itemsToRemoveIds.includes(item.id));
+        // Update Cart: Subtract voided quantities
+        const newCart = cartItems.map(item => {
+            const voidEntry = itemsToVoid.find(v => v.id === item.id);
+            if (voidEntry) {
+                // Return item with reduced quantity
+                return { ...item, qty: item.qty - voidEntry.qty };
+            }
+            return item;
+        }).filter(item => item.qty > 0); // Remove items that reached 0 qty
+
         setCartItems(newCart);
 
         if (newCart.length === 0) {
             setCash("");
             setAppliedCoupon(null);
             setPromoCode("");
+            setCouponError("");
         }
         alert("Items voided and recorded in history.");
 
@@ -344,9 +355,7 @@ const Pos = () => {
     if (cartItems.length === 0) return alert("Cart is empty!");
     if (!cash || parseFloat(cash) < total) return alert("Insufficient cash!");
     
-    // -------------------------------------------------------------
-    // FIXED: Check limit vs times used before submit
-    // -------------------------------------------------------------
+    // Check limit vs times used before submit
     const isCouponLimitReached = appliedCoupon && 
                                  appliedCoupon.usage_limit !== null && 
                                  appliedCoupon.times_used >= appliedCoupon.usage_limit;
@@ -368,7 +377,7 @@ const Pos = () => {
       coupon: appliedCoupon ? appliedCoupon.id : null, 
       discount_type: selectedDiscount !== "none" ? selectedDiscount : null,
       
-      customer_id: selectedCustomer, // Send selected ID
+      customer_id: selectedCustomer, 
 
       items: cartItems.map((i) => ({
         product: i.id, 
@@ -398,8 +407,6 @@ const Pos = () => {
       setCouponError("");
       setSelectedDiscount(null);
       setReceiptDetails(null);
-      
-      // Reset Customer Selection
       setSelectedCustomer(null); 
       setCustomerSearch("");
 
@@ -521,7 +528,7 @@ const Pos = () => {
 
              <div className="p-5 bg-gray-50 border-t shadow-[0_-5px_15px_rgba(0,0,0,0.05)] z-10 rounded-b-xl">
                 
-                {/* --- UPDATED: SEARCHABLE CUSTOMER INPUT --- */}
+                {/* --- CUSTOMER INPUT --- */}
                 <div className="mb-3 relative" ref={searchRef}>
                     <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Customer (Optional)</label>
                     <div className="relative">
@@ -552,7 +559,6 @@ const Pos = () => {
                         )}
                     </div>
 
-                    {/* Results Dropdown */}
                     {showCustomerResults && (
                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto z-20">
                             {filteredCustomers.length > 0 ? (

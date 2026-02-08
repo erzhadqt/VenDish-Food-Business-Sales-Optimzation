@@ -194,6 +194,26 @@ class DailySalesReport(models.Model):
             report, _ = DailySalesReport.objects.get_or_create(report_date=date)
             report.generate_report()
 
+class Review(models.Model):
+    REVIEW_TYPES = [
+        ('shop', 'Shop Review'),
+        ('food', 'Food Review'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reviews')
+    review_type = models.CharField(max_length=10, choices=REVIEW_TYPES, default='shop')
+    
+    # Optional: If it's a food review, link it to a product
+    product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviews')
+    
+    rating = models.IntegerField()
+    comment = models.TextField()
+    image = models.ImageField(upload_to='review_images/', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username} - {self.rating} stars ({self.review_type})"
+
 class Feedback(models.Model):
     message = models.TextField()
     date_submitted = models.DateTimeField(default=timezone.now)
