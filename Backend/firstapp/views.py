@@ -48,16 +48,19 @@ class CurrentUserView(APIView):
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all().order_by("-id")
     serializer_class = ProductSerializer
-    permission_classes = [IsAdminUser]
+    # Remove the static permission_classes line if it exists at class level
+    # permission_classes = [IsAdminUser] 
 
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     search_fields = ['product_name']
     filterset_fields = ['category']
 
     def get_permissions(self):
+        # Allow anyone (logged in or not) to see the menu
         if self.action in ['list', 'retrieve']:
-            permission_classes = [IsAuthenticated]
+            permission_classes = [AllowAny] # <--- CHANGED THIS from IsAuthenticated
         else:
+            # Only Admins can add/edit/delete products
             permission_classes = [IsAdminUser]
         return [permission() for permission in permission_classes]
     
@@ -416,7 +419,18 @@ class DailySalesReportViewSet(viewsets.ViewSet):
 class ReviewViewSet(viewsets.ModelViewSet):
     queryset = Review.objects.all().order_by('-created_at')
     serializer_class = ReviewSerializer
-    permission_classes = [IsAuthenticated] # Or [AllowAny] for GET if you want public to see them
+    # Remove the static permission_classes line below
+    # permission_classes = [IsAuthenticated] 
+
+    # Add this method to dynamically assign permissions
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            # Allow anyone to read reviews
+            permission_classes = [AllowAny]
+        else:
+            # Require login to post/edit/delete reviews
+            permission_classes = [IsAuthenticated]
+        return [permission() for permission in permission_classes]
 
     def get_queryset(self):
         queryset = Review.objects.all().order_by('-created_at')

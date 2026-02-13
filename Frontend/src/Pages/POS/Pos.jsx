@@ -6,19 +6,29 @@ import api from "../../api";
 import ReceiptModal2 from "../../Components/ReceiptModal2";
 import VoidConfirmDialog from "../../Components/VoidConfirmDialog";
 import { SelectDiscount } from "../../Components/SelectDiscount";
+// 1. Import the new AlertModal
+import AlertModal from "../../Components/AlertModal";
 
 const Pos = () => {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedDiscount, setSelectedDiscount] = useState(null); 
-  const [cartItems, setCartItems] = useState([]);
+  const [cartItems, setCartItems] = useState(() => {
+    try {
+      const savedCart = localStorage.getItem("pos_cartItems");
+      return savedCart ? JSON.parse(savedCart) : [];
+    } catch (error) {
+      console.error("Error loading cart from storage", error);
+      return [];
+    }
+  });
   const [cash, setCash] = useState("");
   const [products, setProducts] = useState([]);
   
   // --- CUSTOMER SEARCH STATES ---
   const [users, setUsers] = useState([]); 
   const [selectedCustomer, setSelectedCustomer] = useState(null); 
-  const [customerSearch, setCustomerSearch] = useState(""); // Input text
-  const [showCustomerResults, setShowCustomerResults] = useState(false); // Dropdown visibility
+  const [customerSearch, setCustomerSearch] = useState(""); 
+  const [showCustomerResults, setShowCustomerResults] = useState(false); 
   const searchRef = useRef(null);
 
   const [receiptDetails, setReceiptDetails] = useState(null);
@@ -31,13 +41,32 @@ const Pos = () => {
 
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
+  // 2. Add state for the Alert Modal
+  const [alertConfig, setAlertConfig] = useState({
+    open: false,
+    title: "",
+    description: ""
+  });
+
+  // 3. Helper function to trigger the modal
+  const triggerAlert = (title, description) => {
+    setAlertConfig({
+      open: true,
+      title,
+      description
+    });
+  };
+
   const discountOptions = [
     { value: "senior", label: "Senior Citizen (20%)" },
     { value: "pwd", label: "PWD (20%)" },
     { value: "none", label: "No Discount" },
   ];
 
-  // Close search dropdown when clicking outside
+  useEffect(() => {
+    localStorage.setItem("pos_cartItems", JSON.stringify(cartItems));
+  }, [cartItems]);
+
   useEffect(() => {
     function handleClickOutside(event) {
       if (searchRef.current && !searchRef.current.contains(event.target)) {
@@ -70,15 +99,14 @@ const Pos = () => {
   const categories = ["All", ...new Set(products.map((p) => p.category))];
   const filteredFoods = selectedCategory === "All" ? products : products.filter((food) => food.category === selectedCategory);
 
-  // --- FILTER CUSTOMERS LOGIC ---
   const filteredCustomers = useMemo(() => {
-    if (!customerSearch) return users.slice(0, 5); // Show first 5 if empty
+    if (!customerSearch) return users.slice(0, 5); 
     const lowerQ = customerSearch.toLowerCase();
     return users.filter(u => 
         u.username.toLowerCase().includes(lowerQ) ||
         (u.first_name && u.first_name.toLowerCase().includes(lowerQ)) ||
         (u.last_name && u.last_name.toLowerCase().includes(lowerQ))
-    ).slice(0, 10); // Limit results
+    ).slice(0, 10); 
   }, [users, customerSearch]);
 
   const handleSelectCustomer = (user) => {
@@ -95,30 +123,22 @@ const Pos = () => {
 
   const handleFoodClick = (food) => {
     if (!food.track_stock && !food.is_available) {
-        return alert("This product is currently unavailable!");
+        // 4. Replace alert with triggerAlert
+        return triggerAlert("Unavailable", "This product is currently unavailable!");
     }
     if (food.track_stock && food.stock_quantity <= 0) {
-        return alert("This item is currently Out of Stock.");
+        return triggerAlert("Out of Stock", "This item is currently Out of Stock.");
     }
 
     const exist = cartItems.find((item) => item.id === food.id);
 
     if (exist) {
       if (food.track_stock && exist.qty + 1 > food.stock_quantity) {
-          return alert(`Cannot add more. Only ${food.stock_quantity} units available.`);
+          return triggerAlert("Stock Limit", `Cannot add more. Only ${food.stock_quantity} units available.`);
       }
       setCartItems(cartItems.map((item) => item.id === food.id ? { ...item, qty: item.qty + 1 } : item));
     } else {
       setCartItems([...cartItems, { ...food, qty: 1 }]);
-    }
-  };
-
-  const handleRemove = (food) => {
-    const exist = cartItems.find((item) => item.id === food.id);
-    if (exist.qty === 1) {
-      setCartItems(cartItems.filter((item) => item.id !== food.id));
-    } else {
-      setCartItems(cartItems.map((item) => item.id === food.id ? { ...item, qty: item.qty - 1 } : item));
     }
   };
 
@@ -215,8 +235,6 @@ const Pos = () => {
       }
 
       const coupon = couponData;
-
-      // Check usage limit
       const isSoldOut = coupon.usage_limit !== null && coupon.times_used >= coupon.usage_limit;
 
       if (isSoldOut) {
@@ -238,7 +256,6 @@ const Pos = () => {
 
       if (coupon.criteria_details) {
         const criteria = coupon.criteria_details;
-        
         let itemToAutoAdd = null;
         if (criteria.target_product) {
             itemToAutoAdd = criteria.target_product;
@@ -300,19 +317,16 @@ const Pos = () => {
     setCouponError("");
   };
 
-  // --- UPDATED VOID LOGIC ---
   const handleVoidItems = async (itemsToVoid) => {
-    // itemsToVoid structure: [ { id: 1, qty: 1 }, { id: 2, qty: 2 } ]
     if (!itemsToVoid || itemsToVoid.length === 0) return;
 
-    // Map the selection to the actual product details for logging
     const itemsToLog = itemsToVoid.map(v => {
         const originalItem = cartItems.find(i => i.id === v.id);
         return {
             product_id: originalItem?.id,
             product_name: originalItem?.product_name || "Unknown",
             price: originalItem?.price || 0,
-            quantity: v.qty // Log the VOIDED quantity, not total
+            quantity: v.qty 
         };
     });
 
@@ -323,15 +337,13 @@ const Pos = () => {
             reason: "Manager Void (Partial/Full)"
         });
         
-        // Update Cart: Subtract voided quantities
         const newCart = cartItems.map(item => {
             const voidEntry = itemsToVoid.find(v => v.id === item.id);
             if (voidEntry) {
-                // Return item with reduced quantity
                 return { ...item, qty: item.qty - voidEntry.qty };
             }
             return item;
-        }).filter(item => item.qty > 0); // Remove items that reached 0 qty
+        }).filter(item => item.qty > 0); 
 
         setCartItems(newCart);
 
@@ -341,28 +353,30 @@ const Pos = () => {
             setPromoCode("");
             setCouponError("");
         }
-        alert("Items voided and recorded in history.");
+        // Replace void success alert
+        triggerAlert("Void Success", "Items voided and recorded in history.");
 
     } catch (error) {
         console.error("Failed to log void:", error);
-        alert("Failed to record void transaction.");
+        // Replace void error alert
+        triggerAlert("Void Error", "Failed to record void transaction.");
     } finally {
         setLoading(false);
     }
   };
 
   const handleSubmitOrder = async () => {
-    if (cartItems.length === 0) return alert("Cart is empty!");
-    if (!cash || parseFloat(cash) < total) return alert("Insufficient cash!");
+    // Replace validation alerts
+    if (cartItems.length === 0) return triggerAlert("Empty Cart", "Cart is empty!");
+    if (!cash || parseFloat(cash) < total) return triggerAlert("Insufficient Cash", "The cash provided is less than the total amount!");
     
-    // Check limit vs times used before submit
     const isCouponLimitReached = appliedCoupon && 
                                  appliedCoupon.usage_limit !== null && 
                                  appliedCoupon.times_used >= appliedCoupon.usage_limit;
 
     if (appliedCoupon && (appliedCoupon.status === 'Redeemed' || isCouponLimitReached)) {
         if (!selectedCustomer) {
-            alert("This coupon is sold out. You MUST select a registered customer who claimed it to proceed.");
+            triggerAlert("Coupon Limit", "This coupon is sold out. You MUST select a registered customer who claimed it to proceed.");
             return;
         }
     }
@@ -376,9 +390,7 @@ const Pos = () => {
       change,
       coupon: appliedCoupon ? appliedCoupon.id : null, 
       discount_type: selectedDiscount !== "none" ? selectedDiscount : null,
-      
       customer_id: selectedCustomer, 
-
       items: cartItems.map((i) => ({
         product: i.id, 
         product_name: i.product_name, 
@@ -393,7 +405,8 @@ const Pos = () => {
 
     } catch (error) {
       console.error("Submit failed:", error);
-      alert(error.response?.data?.error || "Failed to submit order.");
+      // Replace submit error alert
+      triggerAlert("Order Failed", error.response?.data?.error || "Failed to submit order.");
     } finally {
         setLoading(false);
     }
@@ -416,8 +429,17 @@ const Pos = () => {
 
   return (
     <div className="font-poppins bg-zinc-300 min-h-screen flex flex-col lg:flex-row gap-4 p-4">
+        {/* 5. Render the AlertModal */}
+        <AlertModal 
+            open={alertConfig.open} 
+            onOpenChange={(isOpen) => setAlertConfig(prev => ({ ...prev, open: isOpen }))}
+            title={alertConfig.title}
+            description={alertConfig.description}
+        />
+
         {/* LEFT: MENU */}
         <div className="flex-1 bg-gray-100 rounded-xl shadow-md flex flex-col h-[calc(100vh-2rem)]">
+            {/* ... Rest of your UI code (Menu, Categories, Food List) ... */}
             <div className="p-4 border-b bg-white rounded-t-xl">
              <h3 className="text-2xl font-bold text-gray-800">Menu</h3>
              <div className="flex gap-2 mt-3 overflow-x-auto pb-2 custom-scrollbar">
@@ -515,7 +537,6 @@ const Pos = () => {
                                 <div className="flex items-center gap-3">
                                     <span className="font-bold">₱{(item.price * item.qty).toFixed(2)}</span>
                                     <div className="flex items-center gap-2 bg-white border rounded px-2">
-                                        <button onClick={() => handleRemove(item)} className="text-red-500 font-bold px-1 hover:bg-red-200 rounded">-</button>
                                         <span className="text-sm font-bold">{item.qty}</span>
                                         <button onClick={() => handleFoodClick(item)} className="text-green-600 font-bold px-1 hover:bg-green-200 rounded">+</button>
                                     </div>
@@ -616,6 +637,7 @@ const Pos = () => {
                            onChange={(e) => setCash(e.target.value)} 
                            className="w-full pl-6 pr-2 py-2 border rounded-md text-right font-bold focus:ring-2 focus:ring-green-500 outline-none" 
                            placeholder="CASH"
+                           maxLength={20}
                          />
                       </div>
                 </div>
@@ -626,6 +648,7 @@ const Pos = () => {
                       onChange={(e) => setPromoCode(e.target.value.toUpperCase())} 
                       onKeyPress={(e) => e.key === 'Enter' && !appliedCoupon && handleApplyPromo()}
                       placeholder="PROMO CODE" 
+                      maxLength={50}
                       className={`flex-1 border rounded-md px-3 py-2 uppercase text-sm outline-none focus:ring-2 transition ${couponError ? 'border-red-300 focus:ring-red-200' : 'focus:ring-blue-200'}`} 
                       disabled={!!appliedCoupon}
                     />

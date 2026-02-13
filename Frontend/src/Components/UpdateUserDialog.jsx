@@ -12,15 +12,19 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
 
 export default function UpdateUserDialog({ user, onClose, onSaved }) {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   // Initialize isStaff state from the prop
   const [isStaff, setIsStaff] = useState(user.is_staff);
 
   const handleSave = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError(null); // Clear previous errors
 
     const formData = new FormData(e.target);
     const values = Object.fromEntries(formData.entries());
@@ -42,15 +46,30 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
       onClose(); // Close the modal
     } catch (err) {
       console.error("Update User Error:", err.response?.data || err);
-      const errorDetail = err.response?.data ? JSON.stringify(err.response.data) : "Please check console for details.";
-      alert(`Failed to update user: ${errorDetail}`);
+      
+      // Format the error message
+      let errorMessage = "Failed to update user.";
+      if (err.response?.data) {
+        errorMessage = typeof err.response.data === 'object' 
+          ? JSON.stringify(err.response.data) 
+          : String(err.response.data);
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    setLoading(false);
+  const handleClose = () => {
+    setError(null);
+    onClose();
   };
 
   return (
-    <Dialog open={true} onOpenChange={onClose}>
+    <Dialog open={true} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[450px]">
         <DialogHeader>
           <DialogTitle>Edit User</DialogTitle>
@@ -59,21 +78,47 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
           </DialogDescription>
         </DialogHeader>
 
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription className="break-words">
+              {error}
+            </AlertDescription>
+          </Alert>
+        )}
+
         <form onSubmit={handleSave} className="grid gap-4">
 
           <div className="grid gap-2">
             <Label htmlFor="username">Username</Label>
-            <Input name="username" id="username" defaultValue={user.username} required />
+            <Input 
+              name="username" 
+              id="username" 
+              defaultValue={user.username} 
+              required 
+              maxLength={50} 
+            />
           </div>
 
           <div className="grid gap-2">
             <Label htmlFor="first_name">First Name</Label>
-            <Input name="first_name" id="first_name" defaultValue={user.first_name} />
+            <Input 
+              name="first_name" 
+              id="first_name" 
+              defaultValue={user.first_name} 
+              maxLength={50} 
+            />
           </div>
 
           <div className="grid gap-2">
             <Label htmlFor="last_name">Last Name</Label>
-            <Input name="last_name" id="last_name" defaultValue={user.last_name} />
+            <Input 
+              name="last_name" 
+              id="last_name" 
+              defaultValue={user.last_name} 
+              maxLength={50} 
+            />
           </div>
 
           <div className="grid gap-2">
@@ -84,6 +129,7 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
               type="email"
               defaultValue={user.email}
               required
+              maxLength={50}
             />
           </div>
 
@@ -95,6 +141,7 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
               type="password"
               defaultValue={user.password}
               required
+              maxLength={50}
             />
           </div>
 
@@ -107,14 +154,14 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
               checked={isStaff}
               // Updates the state when clicked
               onChange={(e) => setIsStaff(e.target.checked)}
-              className="h-4 w-4 rounded text-blue-600 focus:ring-blue-500"
+              className="h-4 w-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
             />
-            <Label htmlFor="is_staff">Staff Access (Can use POS)</Label>
+            <Label htmlFor="is_staff" className="cursor-pointer select-none">Staff Access (Can use POS)</Label>
           </div>
 
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline" disabled={loading}>
+              <Button variant="outline" disabled={loading} onClick={handleClose}>
                 Cancel
               </Button>
             </DialogClose>

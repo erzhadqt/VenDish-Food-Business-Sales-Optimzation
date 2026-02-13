@@ -23,18 +23,22 @@ const ReceiptPrintContent = forwardRef(({ transactionData }, ref) => {
     <div ref={ref} id="receipt" className="bg-white text-black">
       <style>{`
         @media print {
-          @page { size: 58mm auto; margin: 0; }
+          @page { size: 58mm auto; margin: 15px; }
           body { margin: 0; padding: 0; }
 
           #receipt { 
             width: 58mm; 
             margin: 0;
             padding: 0;
+            text-shadow: 0.1px 0 0 #000;
+            -webkit-font-smoothing: none;
+            -moz-osx-font-smoothing: grayscale;
           }
 
           #receipt * {
             font-family: 'Courier New', monospace;
-            font-size: 11px;
+            font-size: 12px;
+            font-weight: 600;
             line-height: 1.2;
           }
 

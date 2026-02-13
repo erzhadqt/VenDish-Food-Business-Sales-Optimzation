@@ -7,7 +7,7 @@ const TextAnimations = () => (
 
     <ReactTyped
       strings={[
-        "Availabe Foods",
+        "Available Foods",
         "Promos",
         "Discounts",
       ]}

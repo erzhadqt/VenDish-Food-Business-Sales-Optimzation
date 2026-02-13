@@ -13,16 +13,20 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
 
 export default function AddUserDialog({ onSaved, children }) {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [error, setError] = useState(null);
   
   const [isStaff, setIsStaff] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError(null); // Clear previous errors
 
     const formData = new FormData(e.target);
     const values = Object.fromEntries(formData);
@@ -39,21 +43,37 @@ export default function AddUserDialog({ onSaved, children }) {
       setIsStaff(false);
       onSaved();        
       setOpen(false);   
-    } catch (error) {
-      console.error("Failed to add user:", error.response?.data || error);
-      const errorDetail = error.response?.data ? JSON.stringify(error.response.data) : "Please check console for details.";
-      alert(`Failed to add user: ${errorDetail}`);
+      setError(null);
+    } catch (err) {
+      console.error("Failed to add user:", err.response?.data || err);
+      
+      // Format the error message
+      let errorMessage = "An unexpected error occurred.";
+      if (err.response?.data) {
+        errorMessage = typeof err.response.data === 'object' 
+          ? JSON.stringify(err.response.data) 
+          : String(err.response.data);
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    setLoading(false);
+  const handleOpenChange = (newOpen) => {
+    if (!newOpen) setError(null);
+    setOpen(newOpen);
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{children}</DialogTrigger>
 
       {/* Increased max-width to accommodate extra fields comfortably */}
-      <DialogContent className="sm:max-w-[550px]">
+      <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add New User</DialogTitle>
           <DialogDescription>
@@ -61,27 +81,60 @@ export default function AddUserDialog({ onSaved, children }) {
           </DialogDescription>
         </DialogHeader>
 
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription className="break-words">
+              {error}
+            </AlertDescription>
+          </Alert>
+        )}
+
         <form onSubmit={handleSubmit} className="grid gap-4 mt-2">
           
           {/* Username */}
           <div className="grid gap-2">
             <Label htmlFor="username">Username</Label>
-            <Input name="username" id="username" required placeholder="johndoe" />
+            <Input 
+              name="username" 
+              id="username" 
+              required 
+              placeholder="johndoe" 
+              maxLength={50} 
+            />
           </div>
 
           {/* Full Name Row */}
           <div className="grid grid-cols-3 gap-3">
             <div className="grid gap-2">
                 <Label htmlFor="first_name">First Name</Label>
-                <Input name="first_name" id="first_name" required placeholder="John" />
+                <Input 
+                  name="first_name" 
+                  id="first_name" 
+                  required 
+                  placeholder="John" 
+                  maxLength={50} 
+                />
             </div>
             <div className="grid gap-2">
                 <Label htmlFor="middle_name">Middle Name</Label>
-                <Input name="middle_name" id="middle_name" placeholder="Optional" />
+                <Input 
+                  name="middle_name" 
+                  id="middle_name" 
+                  placeholder="Optional" 
+                  maxLength={50} 
+                />
             </div>
             <div className="grid gap-2">
                 <Label htmlFor="last_name">Last Name</Label>
-                <Input name="last_name" id="last_name" required placeholder="Doe" />
+                <Input 
+                  name="last_name" 
+                  id="last_name" 
+                  required 
+                  placeholder="Doe" 
+                  maxLength={50} 
+                />
             </div>
           </div>
 
@@ -89,24 +142,49 @@ export default function AddUserDialog({ onSaved, children }) {
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
                 <Label htmlFor="email">Email</Label>
-                <Input name="email" id="email" type="email" required placeholder="john@example.com" />
+                <Input 
+                  name="email" 
+                  id="email" 
+                  type="email" 
+                  required 
+                  placeholder="john@example.com" 
+                  maxLength={50} 
+                />
             </div>
             <div className="grid gap-2">
                 <Label htmlFor="phone">Phone Number</Label>
-                <Input name="phone" id="phone" required placeholder="0912 345 6789" />
+                <Input 
+                  name="phone" 
+                  id="phone" 
+                  required 
+                  placeholder="0912 345 6789" 
+                  maxLength={20} 
+                />
             </div>
           </div>
 
           {/* Address */}
           <div className="grid gap-2">
             <Label htmlFor="address">Address</Label>
-            <Input name="address" id="address" required placeholder="Complete Address" />
+            <Input 
+              name="address" 
+              id="address" 
+              required 
+              placeholder="Complete Address" 
+              maxLength={50} 
+            />
           </div>
 
           {/* Password */}
           <div className="grid gap-2">
             <Label htmlFor="password">Password</Label>
-            <Input name="password" id="password" type="password" required />
+            <Input 
+              name="password" 
+              id="password" 
+              type="password" 
+              required 
+              maxLength={50} 
+            />
           </div>
 
           {/* Staff Checkbox */}

@@ -62,10 +62,10 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
       formData.append("category", category);
       formData.append("price", parseFloat(price));
 
-      // Defaults for the new "No Stock" system
-      formData.append("is_available", true); 
+      // ✅ FIX: Send boolean values as explicit strings to ensure backend parses them correctly
+      formData.append("is_available", "true"); 
+      formData.append("track_stock", "false");
       formData.append("stock_quantity", 0);
-      formData.append("track_stock", false);
       
       if (image) formData.append("image", image);
 

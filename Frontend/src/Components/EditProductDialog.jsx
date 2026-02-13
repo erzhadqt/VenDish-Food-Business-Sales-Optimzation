@@ -12,9 +12,16 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
 
 export default function EditProductDialog({ product, onClose, onSaved }) {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Controlled states for inputs to enforce limits
+  const [productName, setProductName] = useState(product.product_name || "");
+  const [price, setPrice] = useState(product.price || "");
   const [category, setCategory] = useState(product.category || "");
   // Initialize availability from the existing product data
   const [isAvailable, setIsAvailable] = useState(product.is_available ?? true);
@@ -34,13 +41,12 @@ export default function EditProductDialog({ product, onClose, onSaved }) {
   const handleSave = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError(null);
 
     const formData = new FormData();
-    const productName = e.target.product_name.value;
-    const price = parseFloat(e.target.price.value);
-
+    
     formData.append("product_name", productName);
-    formData.append("price", price);
+    formData.append("price", parseFloat(price));
     formData.append("category", category);
     // Send availability status instead of stock
     formData.append("is_available", isAvailable); 
@@ -56,19 +62,33 @@ export default function EditProductDialog({ product, onClose, onSaved }) {
       onClose();
     } catch (err) {
       console.error("Update error:", err.response?.data || err);
-      alert("Failed to update product. Check the console for details.");
+      setError("Failed to update product. Please check your inputs and try again.");
     } finally {
       setLoading(false);
     }
   };
 
+  // Helper for number inputs to limit length
+  const handlePriceChange = (e) => {
+    const val = e.target.value;
+    if (val.length <= 20) {
+      setPrice(val);
+    }
+  };
+
+  // Wrapper for closing to clear errors
+  const handleClose = () => {
+    setError(null);
+    onClose();
+  };
+
   return (
-    <Dialog open={true} onOpenChange={onClose}>
+    <Dialog open={true} onOpenChange={handleClose}>
       {/* Custom blurred backdrop */}
       <div
         className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
         aria-hidden="true"
-        onClick={onClose} 
+        onClick={handleClose} 
       />
 
       {/* Modal content (above backdrop) */}
@@ -80,10 +100,24 @@ export default function EditProductDialog({ product, onClose, onSaved }) {
           </DialogDescription>
         </DialogHeader>
 
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
         <form onSubmit={handleSave} className="grid gap-4">
           <div className="grid gap-2">
             <Label>Product Name</Label>
-            <Input name="product_name" defaultValue={product.product_name} required />
+            <Input 
+              name="product_name" 
+              value={productName}
+              onChange={(e) => setProductName(e.target.value)}
+              required 
+              maxLength={50} // Limit to 50 characters
+            />
           </div>
 
           <div className="grid gap-2">
@@ -113,7 +147,8 @@ export default function EditProductDialog({ product, onClose, onSaved }) {
               name="price"
               type="number"
               step="0.01"
-              defaultValue={product.price}
+              value={price}
+              onChange={handlePriceChange} // Enforce 20 digit limit
               required
             />
           </div>
@@ -144,7 +179,7 @@ export default function EditProductDialog({ product, onClose, onSaved }) {
 
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline" disabled={loading}>
+              <Button variant="outline" disabled={loading} onClick={handleClose}>
                 Cancel
               </Button>
             </DialogClose>

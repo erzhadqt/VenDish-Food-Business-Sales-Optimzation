@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Wand2, Tag, CalendarClock, Hash } from "lucide-react"; 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Wand2, Tag, CalendarClock, Hash, AlertCircle } from "lucide-react"; 
 import api from "../api"; 
 
 export default function AddDiscountDialog({ open, onOpenChange, onSaved, products = [] }) {
@@ -21,10 +22,10 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
   const [targetProductId, setTargetProductId] = useState("all"); 
 
   // --- Date State ---
-  // "Valid From" removed - it will be set automatically to now() on save
   const [validTo, setValidTo] = useState("");
 
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const generateRandomCode = () => {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -36,10 +37,24 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
   };
 
   const handleSave = async () => {
-    if(!code) return alert("Please enter a Coupon Code");
-    if(!ruleName) return alert("Please name this promotion rule");
-    if(discountType !== 'free_item' && !discountValue) return alert("Please enter a discount value");
-    if(discountType === 'free_item' && !selectedFreeProduct) return alert("Please select a free product");
+    setError(null); // Clear previous errors
+
+    if(!code) {
+      setError("Please enter a Coupon Code");
+      return;
+    }
+    if(!ruleName) {
+      setError("Please name this promotion rule");
+      return;
+    }
+    if(discountType !== 'free_item' && !discountValue) {
+      setError("Please enter a discount value");
+      return;
+    }
+    if(discountType === 'free_item' && !selectedFreeProduct) {
+      setError("Please select a free product");
+      return;
+    }
 
     setLoading(true);
 
@@ -81,64 +96,108 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
       setSelectedFreeProduct("");
       setTargetProductId("all");
       setValidTo("");
+      setError(null);
 
     } catch (err) {
       console.error(err);
-      alert("Error creating coupon. Code might already exist.");
+      setError("Error creating coupon. Code might already exist.");
     } finally {
       setLoading(false);
     }
   };
 
+  const handleOpenChange = (openState) => {
+    if (!openState) setError(null);
+    onOpenChange(openState);
+  };
+
+  // Helper for number inputs
+  const handleNumberChange = (setter) => (e) => {
+    const val = e.target.value;
+    if (val.length <= 20) {
+      setter(val);
+    }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Coupon</DialogTitle>
           <DialogDescription>Define code, discount rules, and usage limits.</DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-6 py-4">
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
           
-          {/* SECTION 1: THE CODE & LIMIT */}
-          <div className="p-4 bg-gray-50 rounded-lg border border-gray-100 space-y-3">
-             <div className="flex items-center gap-2 mb-2">
-                <Tag className="w-4 h-4 text-blue-600"/>
-                <h3 className="font-semibold text-sm text-gray-700">1. Coupon Details</h3>
-             </div>
-             
-             <div className="grid grid-cols-2 gap-4">
-                {/* Code Input */}
-                <div className="space-y-1">
-                    <Label>Code</Label>
-                    <div className="flex gap-2">
-                        <Input 
-                            placeholder="CODE123" 
-                            value={code} 
-                            onChange={(e) => setCode(e.target.value.toUpperCase())} 
-                            className="uppercase font-mono tracking-widest"
-                        />
-                        <Button variant="outline" size="icon" onClick={generateRandomCode} title="Generate">
-                            <Wand2 className="h-4 w-4" />
-                        </Button>
-                    </div>
-                </div>
+          {/* LEFT COLUMN: Code, Limit, and Validity */}
+          <div className="space-y-6">
+            {/* SECTION 1: THE CODE & LIMIT */}
+            <div className="p-4 bg-gray-50 rounded-lg border border-gray-100 space-y-3">
+               <div className="flex items-center gap-2 mb-2">
+                  <Tag className="w-4 h-4 text-blue-600"/>
+                  <h3 className="font-semibold text-sm text-gray-700">1. Coupon Details</h3>
+               </div>
+               
+               <div className="grid gap-4">
+                  {/* Code Input */}
+                  <div className="space-y-1">
+                      <Label>Code</Label>
+                      <div className="flex gap-2">
+                          <Input 
+                              placeholder="CODE123" 
+                              maxLength={50} // Limit letters to 50
+                              value={code} 
+                              onChange={(e) => setCode(e.target.value.toUpperCase())} 
+                              className="uppercase font-mono tracking-widest"
+                          />
+                          <Button variant="outline" size="icon" onClick={generateRandomCode} title="Generate">
+                              <Wand2 className="h-4 w-4" />
+                          </Button>
+                      </div>
+                  </div>
 
-                {/* Usage Limit Input */}
-                <div className="space-y-1">
-                    <Label className="flex items-center gap-1">Usage Limit <Hash size={12}/></Label>
-                    <Input 
-                        type="number"
-                        placeholder="e.g. 50" 
-                        value={usageLimit} 
-                        onChange={(e) => setUsageLimit(e.target.value)} 
-                    />
-                    <p className="text-[10px] text-gray-400">Leave blank for unlimited</p>
-                </div>
-             </div>
-          </div>  
+                  {/* Usage Limit Input */}
+                  <div className="space-y-1">
+                      <Label className="flex items-center gap-1">Usage Limit <Hash size={12}/></Label>
+                      <Input 
+                          type="number"
+                          placeholder="e.g. 50" 
+                          value={usageLimit} 
+                          onChange={handleNumberChange(setUsageLimit)} 
+                      />
+                      <p className="text-[10px] text-gray-400">Leave blank for unlimited</p>
+                  </div>
+               </div>
+            </div>  
 
-          {/* SECTION 2: THE RULES */}
+            {/* SECTION 3: VALIDITY */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 border-b pb-2">
+                  <CalendarClock className="w-4 h-4 text-orange-600"/>
+                  <h3 className="font-semibold text-sm text-gray-700">3. Validity Period</h3>
+              </div>
+              
+              <div className="grid gap-2">
+                  <Label>Valid Until</Label>
+                  <Input 
+                      type="datetime-local" 
+                      value={validTo} 
+                      onChange={(e) => setValidTo(e.target.value)} 
+                  />
+                  <p className="text-[10px] text-gray-400">Coupon is valid starting immediately upon creation.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT COLUMN: Discount Rules */}
           <div className="space-y-4">
             <div className="flex items-center gap-2 border-b pb-2">
                 <h3 className="font-semibold text-sm text-gray-700">2. Discount Rules</h3>
@@ -146,7 +205,12 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
 
             <div className="grid gap-2">
                 <Label>Promotion Name</Label>
-                <Input placeholder="e.g., Summer Sale" value={ruleName} onChange={(e) => setRuleName(e.target.value)}/>
+                <Input 
+                  placeholder="e.g., Summer Sale" 
+                  maxLength={50} // Limit letters to 50
+                  value={ruleName} 
+                  onChange={(e) => setRuleName(e.target.value)}
+                />
             </div>
 
             <div className="grid gap-2">
@@ -187,7 +251,12 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                             </SelectContent>
                         </Select>
                     ) : (
-                        <Input type="number" placeholder="10" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} />
+                        <Input 
+                          type="number" 
+                          placeholder="10" 
+                          value={discountValue} 
+                          onChange={handleNumberChange(setDiscountValue)} 
+                        />
                     )}
                 </div>
             </div>
@@ -196,26 +265,13 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                 <Label>Minimum Spend</Label>
                 <div className="relative">
                     <span className="absolute left-3 top-2.5 text-gray-500">₱</span>
-                    <Input type="number" className="pl-7" value={minSpend} onChange={(e) => setMinSpend(e.target.value)}/>
+                    <Input 
+                      type="number" 
+                      className="pl-7" 
+                      value={minSpend} 
+                      onChange={handleNumberChange(setMinSpend)}
+                    />
                 </div>
-            </div>
-          </div>
-
-          {/* SECTION 3: VALIDITY */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 border-b pb-2">
-                <CalendarClock className="w-4 h-4 text-orange-600"/>
-                <h3 className="font-semibold text-sm text-gray-700">3. Validity Period</h3>
-            </div>
-            
-            <div className="grid gap-2">
-                <Label>Valid Until</Label>
-                <Input 
-                    type="datetime-local" 
-                    value={validTo} 
-                    onChange={(e) => setValidTo(e.target.value)} 
-                />
-                <p className="text-[10px] text-gray-400">Coupon is valid starting immediately upon creation.</p>
             </div>
           </div>
 
