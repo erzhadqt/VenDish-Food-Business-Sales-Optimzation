@@ -6,7 +6,6 @@ import api from "../../api";
 import ReceiptModal2 from "../../Components/ReceiptModal2";
 import VoidConfirmDialog from "../../Components/VoidConfirmDialog";
 import { SelectDiscount } from "../../Components/SelectDiscount";
-// 1. Import the new AlertModal
 import AlertModal from "../../Components/AlertModal";
 
 const Pos = () => {
@@ -35,20 +34,19 @@ const Pos = () => {
   const [loading, setLoading] = useState(false);
   
   const [promoCode, setPromoCode] = useState("");
-  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  
+  const [appliedCoupons, setAppliedCoupons] = useState([]);
   const [couponError, setCouponError] = useState("");
   const [couponLoading, setCouponLoading] = useState(false);
 
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
-  // 2. Add state for the Alert Modal
   const [alertConfig, setAlertConfig] = useState({
     open: false,
     title: "",
     description: ""
   });
 
-  // 3. Helper function to trigger the modal
   const triggerAlert = (title, description) => {
     setAlertConfig({
       open: true,
@@ -123,7 +121,6 @@ const Pos = () => {
 
   const handleFoodClick = (food) => {
     if (!food.track_stock && !food.is_available) {
-        // 4. Replace alert with triggerAlert
         return triggerAlert("Unavailable", "This product is currently unavailable!");
     }
     if (food.track_stock && food.stock_quantity <= 0) {
@@ -154,14 +151,12 @@ const Pos = () => {
                 setCartItems(prev => [...prev, { ...product, qty: 1 }]);
             } else {
                 setCouponError(`Cannot apply coupon: Free item (${product.product_name}) is out of stock.`);
-                setAppliedCoupon(null);
             }
        } else {
            if (product.is_available) {
                setCartItems(prev => [...prev, { ...product, qty: 1 }]);
            } else {
                setCouponError(`Cannot apply coupon: The required item (${product.product_name}) is unavailable.`);
-               setAppliedCoupon(null);
            }
        }
     }
@@ -175,40 +170,57 @@ const Pos = () => {
       return 0;
   }, [selectedDiscount, subTotal]);
 
+  // [FIXED] Updated Logic: Prioritize discount_type to ensure free_item is always caught
   const couponDiscountAmount = useMemo(() => {
-    if (!appliedCoupon || !appliedCoupon.criteria_details) return 0;
-    const criteria = appliedCoupon.criteria_details;
-    let discount = 0;
-    const targetId = criteria.target_product; 
-    
-    if (targetId) {
-        const targetItem = cartItems.find(item => item.id === targetId);
-        if (!targetItem) return 0;
-        const itemTotal = targetItem.price * targetItem.qty;
-        if (criteria.discount_type === 'percentage') {
-             const val = parseFloat(criteria.discount_value);
-             discount = itemTotal * (val / 100);
-        } else if (criteria.discount_type === 'fixed') {
-             const val = parseFloat(criteria.discount_value);
-             discount = val > itemTotal ? itemTotal : val;
+    if (appliedCoupons.length === 0) return 0;
+
+    let totalDiscount = 0;
+
+    appliedCoupons.forEach(coupon => {
+        if (!coupon.criteria_details) return;
+        const criteria = coupon.criteria_details;
+        let currentDiscount = 0;
+        
+        // 1. FREE ITEM LOGIC (Highest Priority)
+        // We check this first so it doesn't get swallowed by target_product checks
+        if (criteria.discount_type === 'free_item' && criteria.free_product) {
+             const freeItemInCart = cartItems.find(item => item.id === criteria.free_product);
+             if (freeItemInCart) {
+                 // Discount is the price of ONE unit of the free item
+                 currentDiscount = parseFloat(freeItemInCart.price);
+             }
         }
-    } else {
-        const baseAmount = subTotal - standardDiscount;
-        if (criteria.discount_type === 'percentage') {
-            const val = parseFloat(criteria.discount_value);
-            discount = baseAmount * (val / 100);
+        // 2. TARGET PRODUCT LOGIC (Percentage / Fixed)
+        else if (criteria.target_product) {
+            const targetItem = cartItems.find(item => item.id === criteria.target_product);
+            if (targetItem) {
+                const itemTotal = targetItem.price * targetItem.qty;
+                if (criteria.discount_type === 'percentage') {
+                    const val = parseFloat(criteria.discount_value);
+                    currentDiscount = itemTotal * (val / 100);
+                } else if (criteria.discount_type === 'fixed') {
+                    const val = parseFloat(criteria.discount_value);
+                    currentDiscount = val > itemTotal ? itemTotal : val;
+                }
+            }
         } 
-        else if (criteria.discount_type === 'fixed') {
-            discount = parseFloat(criteria.discount_value);
-        } 
-        else if (criteria.discount_type === 'free_item' && criteria.free_product) {
-            const freeItemInCart = cartItems.find(item => item.id === criteria.free_product);
-            if (freeItemInCart) discount = parseFloat(freeItemInCart.price);
+        // 3. GENERAL LOGIC (Order-wide)
+        else {
+            const baseAmount = subTotal - standardDiscount;
+            if (criteria.discount_type === 'percentage') {
+                const val = parseFloat(criteria.discount_value);
+                currentDiscount = baseAmount * (val / 100);
+            } 
+            else if (criteria.discount_type === 'fixed') {
+                currentDiscount = parseFloat(criteria.discount_value);
+            } 
         }
-    }
+        totalDiscount += currentDiscount;
+    });
+
     const remainingTotal = subTotal - standardDiscount;
-    return discount > remainingTotal ? remainingTotal : discount;
-  }, [appliedCoupon, subTotal, cartItems, standardDiscount]);
+    return totalDiscount > remainingTotal ? remainingTotal : totalDiscount;
+  }, [appliedCoupons, subTotal, cartItems, standardDiscount]);
 
   const tempTotal = subTotal - standardDiscount - couponDiscountAmount;
   const total = tempTotal > 0 ? tempTotal : 0;
@@ -229,7 +241,12 @@ const Pos = () => {
 
       if (!couponData) {
         setCouponError("Invalid Coupon Code");
-        setAppliedCoupon(null);
+        setCouponLoading(false);
+        return;
+      }
+
+      if (appliedCoupons.some(c => c.id === couponData.id)) {
+        setCouponError("This coupon is already applied!");
         setCouponLoading(false);
         return;
       }
@@ -240,7 +257,6 @@ const Pos = () => {
       if (isSoldOut) {
           if (!selectedCustomer) {
               setCouponError("Coupon limit reached (Sold Out). Only reserved users allowed.");
-              setAppliedCoupon(null);
               setCouponLoading(false);
               return;
           }
@@ -249,18 +265,22 @@ const Pos = () => {
       const validStatuses = ['Active', 'active', 'Redeemed', 'redeemed'];
       if (!validStatuses.includes(coupon.status)) {
         setCouponError(`Coupon is ${coupon.status}`);
-        setAppliedCoupon(null);
         setCouponLoading(false);
         return;
       }
 
+      // Handle Auto-Add Items
       if (coupon.criteria_details) {
         const criteria = coupon.criteria_details;
         let itemToAutoAdd = null;
-        if (criteria.target_product) {
-            itemToAutoAdd = criteria.target_product;
-        } else if (criteria.discount_type === 'free_item' && criteria.free_product) {
+        
+        // If it's a free item coupon, auto-add the free product
+        if (criteria.discount_type === 'free_item' && criteria.free_product) {
             itemToAutoAdd = criteria.free_product;
+        } 
+        // If it's a targeted discount, auto-add the target product (convenience)
+        else if (criteria.target_product) {
+            itemToAutoAdd = criteria.target_product;
         }
 
         if (itemToAutoAdd) {
@@ -268,52 +288,50 @@ const Pos = () => {
         }
       }
 
-      setAppliedCoupon(coupon);
+      setAppliedCoupons(prev => [...prev, coupon]); 
       setPromoCode(""); 
       setCouponError("");
       
     } catch (error) {
       console.error("Promo check failed", error);
       setCouponError("Error validating coupon");
-      setAppliedCoupon(null);
     } finally {
       setCouponLoading(false);
     }
   };
 
   useEffect(() => {
-    if (appliedCoupon && appliedCoupon.criteria_details) {
-        const criteria = appliedCoupon.criteria_details;
-        
+    if (appliedCoupons.length === 0) return;
+
+    const validCoupons = appliedCoupons.filter(coupon => {
+        if (!coupon.criteria_details) return true;
+        const criteria = coupon.criteria_details;
+
         if (criteria.min_spend > 0 && subTotal < parseFloat(criteria.min_spend)) {
-            setAppliedCoupon(null);
-            setCouponError(`Coupon removed: Spend fell below ₱${criteria.min_spend}`);
-            return;
+            return false;
         }
         
         if (criteria.discount_type === 'free_item') {
              const hasItem = cartItems.some(i => i.id === criteria.free_product);
-             if(!hasItem) {
-                 setAppliedCoupon(null);
-                 setCouponError("Coupon removed: Free item was removed from cart.");
-                 return;
-             }
+             if(!hasItem) return false;
         }
 
         if (criteria.target_product) {
             const hasItem = cartItems.some(i => i.id === criteria.target_product);
-            if(!hasItem) {
-                setAppliedCoupon(null);
-                setCouponError("Coupon removed: Targeted product was removed from cart.");
-                return;
-            }
-       }
-    }
-  }, [subTotal, cartItems, appliedCoupon]);
+            if(!hasItem) return false;
+        }
+        return true;
+    });
 
-  const handleRemoveCoupon = () => {
-    setAppliedCoupon(null);
-    setPromoCode("");
+    if (validCoupons.length !== appliedCoupons.length) {
+        setAppliedCoupons(validCoupons);
+        setCouponError("Some coupons were removed due to cart changes.");
+    }
+
+  }, [subTotal, cartItems]); 
+
+  const handleRemoveCoupon = (couponId) => {
+    setAppliedCoupons(prev => prev.filter(c => c.id !== couponId));
     setCouponError("");
   };
 
@@ -349,16 +367,14 @@ const Pos = () => {
 
         if (newCart.length === 0) {
             setCash("");
-            setAppliedCoupon(null);
+            setAppliedCoupons([]);
             setPromoCode("");
             setCouponError("");
         }
-        // Replace void success alert
         triggerAlert("Void Success", "Items voided and recorded in history.");
 
     } catch (error) {
         console.error("Failed to log void:", error);
-        // Replace void error alert
         triggerAlert("Void Error", "Failed to record void transaction.");
     } finally {
         setLoading(false);
@@ -366,18 +382,16 @@ const Pos = () => {
   };
 
   const handleSubmitOrder = async () => {
-    // Replace validation alerts
     if (cartItems.length === 0) return triggerAlert("Empty Cart", "Cart is empty!");
     if (!cash || parseFloat(cash) < total) return triggerAlert("Insufficient Cash", "The cash provided is less than the total amount!");
     
-    const isCouponLimitReached = appliedCoupon && 
-                                 appliedCoupon.usage_limit !== null && 
-                                 appliedCoupon.times_used >= appliedCoupon.usage_limit;
-
-    if (appliedCoupon && (appliedCoupon.status === 'Redeemed' || isCouponLimitReached)) {
-        if (!selectedCustomer) {
-            triggerAlert("Coupon Limit", "This coupon is sold out. You MUST select a registered customer who claimed it to proceed.");
-            return;
+    for (const coupon of appliedCoupons) {
+        const isCouponLimitReached = coupon.usage_limit !== null && coupon.times_used >= coupon.usage_limit;
+        if ((coupon.status === 'Redeemed' || isCouponLimitReached)) {
+            if (!selectedCustomer) {
+                triggerAlert("Coupon Limit", `Coupon ${coupon.code} is sold out. Select a customer.`);
+                return;
+            }
         }
     }
 
@@ -388,7 +402,7 @@ const Pos = () => {
       total: total.toFixed(2), 
       cash_given: cash,
       change,
-      coupon: appliedCoupon ? appliedCoupon.id : null, 
+      coupons: appliedCoupons.map(c => c.id), 
       discount_type: selectedDiscount !== "none" ? selectedDiscount : null,
       customer_id: selectedCustomer, 
       items: cartItems.map((i) => ({
@@ -405,7 +419,6 @@ const Pos = () => {
 
     } catch (error) {
       console.error("Submit failed:", error);
-      // Replace submit error alert
       triggerAlert("Order Failed", error.response?.data?.error || "Failed to submit order.");
     } finally {
         setLoading(false);
@@ -415,7 +428,7 @@ const Pos = () => {
   const handleResetOrder = () => {
       setCartItems([]);
       setCash("");
-      setAppliedCoupon(null);
+      setAppliedCoupons([]); 
       setPromoCode("");
       setCouponError("");
       setSelectedDiscount(null);
@@ -429,7 +442,6 @@ const Pos = () => {
 
   return (
     <div className="font-poppins bg-zinc-300 min-h-screen flex flex-col lg:flex-row gap-4 p-4">
-        {/* 5. Render the AlertModal */}
         <AlertModal 
             open={alertConfig.open} 
             onOpenChange={(isOpen) => setAlertConfig(prev => ({ ...prev, open: isOpen }))}
@@ -439,7 +451,6 @@ const Pos = () => {
 
         {/* LEFT: MENU */}
         <div className="flex-1 bg-gray-100 rounded-xl shadow-md flex flex-col h-[calc(100vh-2rem)]">
-            {/* ... Rest of your UI code (Menu, Categories, Food List) ... */}
             <div className="p-4 border-b bg-white rounded-t-xl">
              <h3 className="text-2xl font-bold text-gray-800">Menu</h3>
              <div className="flex gap-2 mt-3 overflow-x-auto pb-2 custom-scrollbar">
@@ -615,9 +626,9 @@ const Pos = () => {
                         <span>-₱{standardDiscount.toFixed(2)}</span>
                       </div>
                     )}
-                    {appliedCoupon && (
+                    {appliedCoupons.length > 0 && (
                       <div className="flex justify-between text-blue-600 font-medium bg-blue-50 p-1 rounded">
-                        <span className="flex items-center gap-1"><Tag size={12}/> {appliedCoupon.code}</span>
+                        <span className="flex items-center gap-1"><Tag size={12}/> Promos ({appliedCoupons.length})</span>
                         <span>-₱{couponDiscountAmount.toFixed(2)}</span>
                       </div>
                     )}
@@ -646,21 +657,12 @@ const Pos = () => {
                     <input 
                       value={promoCode} 
                       onChange={(e) => setPromoCode(e.target.value.toUpperCase())} 
-                      onKeyPress={(e) => e.key === 'Enter' && !appliedCoupon && handleApplyPromo()}
+                      onKeyPress={(e) => e.key === 'Enter' && handleApplyPromo()}
                       placeholder="PROMO CODE" 
                       maxLength={50}
                       className={`flex-1 border rounded-md px-3 py-2 uppercase text-sm outline-none focus:ring-2 transition ${couponError ? 'border-red-300 focus:ring-red-200' : 'focus:ring-blue-200'}`} 
-                      disabled={!!appliedCoupon}
                     />
-                    {appliedCoupon ? (
-                      <button 
-                        onClick={handleRemoveCoupon} 
-                        className="bg-red-100 text-red-600 px-3 py-2 rounded text-xs font-bold uppercase hover:bg-red-200 transition"
-                      >
-                        Remove
-                      </button>
-                    ) : (
-                      <button 
+                    <button 
                         onClick={handleApplyPromo}
                         disabled={couponLoading || !promoCode.trim()}
                         className={`px-3 py-2 rounded text-xs font-bold uppercase transition ${
@@ -669,19 +671,31 @@ const Pos = () => {
                             : 'bg-gray-800 text-white hover:bg-gray-900'
                         }`}
                       >
-                        {couponLoading ? 'Loading...' : 'Apply'}
-                      </button>
-                    )}
+                        {couponLoading ? '...' : 'Apply'}
+                    </button>
                 </div>
+                
+                {appliedCoupons.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-2">
+                        {appliedCoupons.map((coupon, index) => (
+                            <div key={coupon.id} className="bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-200 text-xs font-bold flex items-center gap-2">
+                                <span className="flex items-center gap-1">
+                                    <Tag size={10}/> {coupon.code}
+                                </span>
+                                <button 
+                                    onClick={() => handleRemoveCoupon(coupon.id)}
+                                    className="hover:text-red-500 rounded-full hover:bg-blue-100 p-0.5"
+                                >
+                                    <X size={12} />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
 
                 {couponError && (
                   <div className="text-xs text-red-500 flex items-center gap-1 mb-2">
                     <FaExclamationCircle/> {couponError}
-                  </div>
-                )}
-                {appliedCoupon && !couponError && (
-                  <div className="text-xs text-green-600 flex items-center gap-1 mb-2">
-                    <FaCheckCircle/> Applied: {appliedCoupon.criteria_details?.name || appliedCoupon.code}
                   </div>
                 )}
 

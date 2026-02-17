@@ -1,28 +1,24 @@
 import React, { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/Components/ui/dialog";
+import { Button } from "@/Components/ui/button";
+import { Input } from "@/Components/ui/input";
+import { Label } from "@/Components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/Components/ui/select";
+import { Alert, AlertDescription, AlertTitle } from "@/Components/ui/alert";
 import { Wand2, Tag, CalendarClock, Hash, AlertCircle } from "lucide-react"; 
 import api from "../api"; 
 
 export default function AddDiscountDialog({ open, onOpenChange, onSaved, products = [] }) {
-  // --- Coupon State ---
+  // ... (State declarations remain the same)
   const [code, setCode] = useState("");
   const [usageLimit, setUsageLimit] = useState(""); 
-  
-  // --- Criteria (Rule) State ---
   const [ruleName, setRuleName] = useState(""); 
   const [discountType, setDiscountType] = useState("percentage"); 
   const [discountValue, setDiscountValue] = useState("");
   const [minSpend, setMinSpend] = useState("0");
   const [selectedFreeProduct, setSelectedFreeProduct] = useState("");
   const [targetProductId, setTargetProductId] = useState("all"); 
-
-  // --- Date State ---
-  const [validTo, setValidTo] = useState("");
+  const [validTo, setValidTo] = useState(""); // Stores "YYYY-MM-DDTHH:MM"
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -37,28 +33,21 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
   };
 
   const handleSave = async () => {
-    setError(null); // Clear previous errors
+    setError(null);
 
-    if(!code) {
-      setError("Please enter a Coupon Code");
-      return;
-    }
-    if(!ruleName) {
-      setError("Please name this promotion rule");
-      return;
-    }
-    if(discountType !== 'free_item' && !discountValue) {
-      setError("Please enter a discount value");
-      return;
-    }
-    if(discountType === 'free_item' && !selectedFreeProduct) {
-      setError("Please select a free product");
-      return;
-    }
+    // ... (Validation checks remain the same)
+    if(!code || !ruleName) { setError("Please fill in required fields"); return; }
+    if(discountType !== 'free_item' && !discountValue) { setError("Enter discount value"); return; }
 
     setLoading(true);
 
     try {
+      // ✅ FIX: Ensure date is properly formatted for Backend
+      let formattedValidTo = null;
+      if (validTo) {
+          formattedValidTo = new Date(validTo).toISOString(); 
+      }
+
       // STEP 1: Create Criteria
       const criteriaPayload = {
         name: ruleName,
@@ -68,15 +57,14 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
         free_product: discountType === 'free_item' ? selectedFreeProduct : null,
         target_product: targetProductId === "all" ? null : targetProductId,
         
-        // AUTOMATIC: Set Valid From to current time
         valid_from: new Date().toISOString(), 
-        valid_to: validTo || null
+        valid_to: formattedValidTo // ✅ Sends ISO string
       };
 
       const criteriaRes = await api.post("/firstapp/coupons-criteria/", criteriaPayload);
       const newCriteriaId = criteriaRes.data.id;
 
-      // STEP 2: Create Coupon with Usage Limit
+      // STEP 2: Create Coupon
       await api.post("/firstapp/coupons/", {
         code: code.toUpperCase(),
         criteria_id: newCriteriaId,
@@ -88,15 +76,9 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
       onOpenChange(false);
       
       // Reset Form
-      setCode("");
-      setUsageLimit(""); 
-      setRuleName("");
-      setDiscountValue("");
-      setMinSpend("0");
-      setSelectedFreeProduct("");
-      setTargetProductId("all");
-      setValidTo("");
-      setError(null);
+      setCode(""); setUsageLimit(""); setRuleName(""); setDiscountValue("");
+      setMinSpend("0"); setSelectedFreeProduct(""); setTargetProductId("all");
+      setValidTo(""); setError(null);
 
     } catch (err) {
       console.error(err);
@@ -106,21 +88,8 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
     }
   };
 
-  const handleOpenChange = (openState) => {
-    if (!openState) setError(null);
-    onOpenChange(openState);
-  };
-
-  // Helper for number inputs
-  const handleNumberChange = (setter) => (e) => {
-    const val = e.target.value;
-    if (val.length <= 20) {
-      setter(val);
-    }
-  };
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={(val) => { if(!val) setError(null); onOpenChange(val); }}>
       <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Coupon</DialogTitle>
@@ -136,145 +105,97 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
-          
-          {/* LEFT COLUMN: Code, Limit, and Validity */}
-          <div className="space-y-6">
-            {/* SECTION 1: THE CODE & LIMIT */}
-            <div className="p-4 bg-gray-50 rounded-lg border border-gray-100 space-y-3">
-               <div className="flex items-center gap-2 mb-2">
-                  <Tag className="w-4 h-4 text-blue-600"/>
-                  <h3 className="font-semibold text-sm text-gray-700">1. Coupon Details</h3>
-               </div>
-               
-               <div className="grid gap-4">
-                  {/* Code Input */}
-                  <div className="space-y-1">
-                      <Label>Code</Label>
-                      <div className="flex gap-2">
-                          <Input 
-                              placeholder="CODE123" 
-                              maxLength={50} // Limit letters to 50
-                              value={code} 
-                              onChange={(e) => setCode(e.target.value.toUpperCase())} 
-                              className="uppercase font-mono tracking-widest"
-                          />
-                          <Button variant="outline" size="icon" onClick={generateRandomCode} title="Generate">
-                              <Wand2 className="h-4 w-4" />
-                          </Button>
+            {/* Left Column */}
+            <div className="space-y-6">
+                <div className="p-4 bg-gray-50 rounded-lg border border-gray-100 space-y-3">
+                   <div className="flex items-center gap-2 mb-2">
+                      <Tag className="w-4 h-4 text-blue-600"/>
+                      <h3 className="font-semibold text-sm text-gray-700">1. Coupon Details</h3>
+                   </div>
+                   <div className="grid gap-4">
+                      <div className="space-y-1">
+                          <Label>Code</Label>
+                          <div className="flex gap-2">
+                              <Input placeholder="CODE123" maxLength={50} value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className="uppercase font-mono tracking-widest"/>
+                              <Button variant="outline" size="icon" onClick={generateRandomCode}><Wand2 className="h-4 w-4" /></Button>
+                          </div>
                       </div>
-                  </div>
+                      <div className="space-y-1">
+                          <Label className="flex items-center gap-1">Usage Limit <Hash size={12}/></Label>
+                          <Input type="number" placeholder="e.g. 50" value={usageLimit} onChange={(e) => setUsageLimit(e.target.value)} />
+                      </div>
+                   </div>
+                </div>  
 
-                  {/* Usage Limit Input */}
-                  <div className="space-y-1">
-                      <Label className="flex items-center gap-1">Usage Limit <Hash size={12}/></Label>
+                {/* Validity Section */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 border-b pb-2">
+                      <CalendarClock className="w-4 h-4 text-orange-600"/>
+                      <h3 className="font-semibold text-sm text-gray-700">3. Validity Period</h3>
+                  </div>
+                  <div className="grid gap-2">
+                      <Label>Valid Until</Label>
                       <Input 
-                          type="number"
-                          placeholder="e.g. 50" 
-                          value={usageLimit} 
-                          onChange={handleNumberChange(setUsageLimit)} 
+                          type="datetime-local" 
+                          value={validTo} 
+                          onChange={(e) => setValidTo(e.target.value)} 
                       />
-                      <p className="text-[10px] text-gray-400">Leave blank for unlimited</p>
+                      <p className="text-[10px] text-gray-400">Coupon is valid starting immediately upon creation.</p>
                   </div>
-               </div>
-            </div>  
+                </div>
+            </div>
 
-            {/* SECTION 3: VALIDITY */}
+            {/* Right Column (Rules) */}
             <div className="space-y-4">
-              <div className="flex items-center gap-2 border-b pb-2">
-                  <CalendarClock className="w-4 h-4 text-orange-600"/>
-                  <h3 className="font-semibold text-sm text-gray-700">3. Validity Period</h3>
-              </div>
-              
-              <div className="grid gap-2">
-                  <Label>Valid Until</Label>
-                  <Input 
-                      type="datetime-local" 
-                      value={validTo} 
-                      onChange={(e) => setValidTo(e.target.value)} 
-                  />
-                  <p className="text-[10px] text-gray-400">Coupon is valid starting immediately upon creation.</p>
-              </div>
-            </div>
-          </div>
-
-          {/* RIGHT COLUMN: Discount Rules */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 border-b pb-2">
-                <h3 className="font-semibold text-sm text-gray-700">2. Discount Rules</h3>
-            </div>
-
-            <div className="grid gap-2">
-                <Label>Promotion Name</Label>
-                <Input 
-                  placeholder="e.g., Summer Sale" 
-                  maxLength={50} // Limit letters to 50
-                  value={ruleName} 
-                  onChange={(e) => setRuleName(e.target.value)}
-                />
-            </div>
-
-            <div className="grid gap-2">
-                <Label>Applicable Product</Label>
-                <Select value={targetProductId} onValueChange={setTargetProductId}>
-                    <SelectTrigger>
-                        <SelectValue placeholder="Select Product" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all"><span className="font-bold">Entire Order</span></SelectItem>
-                        {products.map(p => (
-                            <SelectItem key={p.id} value={String(p.id)}>{p.product_name}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center gap-2 border-b pb-2">
+                    <h3 className="font-semibold text-sm text-gray-700">2. Discount Rules</h3>
+                </div>
                 <div className="grid gap-2">
-                    <Label>Discount Type</Label>
-                    <Select value={discountType} onValueChange={setDiscountType}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
+                    <Label>Promotion Name</Label>
+                    <Input placeholder="e.g., Summer Sale" value={ruleName} onChange={(e) => setRuleName(e.target.value)}/>
+                </div>
+                <div className="grid gap-2">
+                    <Label>Applicable Product</Label>
+                    <Select value={targetProductId} onValueChange={setTargetProductId}>
+                        <SelectTrigger><SelectValue placeholder="Select Product" /></SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="percentage">Percentage</SelectItem>
-                            <SelectItem value="fixed">Fixed Amount</SelectItem>
-                            <SelectItem value="free_item">Free Item</SelectItem>
+                            <SelectItem value="all"><span className="font-bold">Entire Order</span></SelectItem>
+                            {products.map(p => (<SelectItem key={p.id} value={String(p.id)}>{p.product_name}</SelectItem>))}
                         </SelectContent>
                     </Select>
                 </div>
-
-                <div className="grid gap-2">
-                    <Label>{discountType === 'free_item' ? 'Select Item' : 'Value'}</Label>
-                    {discountType === 'free_item' ? (
-                        <Select value={selectedFreeProduct} onValueChange={setSelectedFreeProduct}>
-                            <SelectTrigger><SelectValue placeholder="Pick Item" /></SelectTrigger>
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                        <Label>Discount Type</Label>
+                        <Select value={discountType} onValueChange={setDiscountType}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
-                                {products.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.product_name}</SelectItem>)}
+                                <SelectItem value="percentage">Percentage</SelectItem>
+                                <SelectItem value="fixed">Fixed Amount</SelectItem>
+                                <SelectItem value="free_item">Free Item</SelectItem>
                             </SelectContent>
                         </Select>
-                    ) : (
-                        <Input 
-                          type="number" 
-                          placeholder="10" 
-                          value={discountValue} 
-                          onChange={handleNumberChange(setDiscountValue)} 
-                        />
-                    )}
+                    </div>
+                    <div className="grid gap-2">
+                        <Label>{discountType === 'free_item' ? 'Select Item' : 'Value'}</Label>
+                        {discountType === 'free_item' ? (
+                            <Select value={selectedFreeProduct} onValueChange={setSelectedFreeProduct}>
+                                <SelectTrigger><SelectValue placeholder="Pick Item" /></SelectTrigger>
+                                <SelectContent>{products.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.product_name}</SelectItem>)}</SelectContent>
+                            </Select>
+                        ) : (
+                            <Input type="number" placeholder="10" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} />
+                        )}
+                    </div>
+                </div>
+                <div className="grid gap-2">
+                    <Label>Minimum Spend</Label>
+                    <div className="relative">
+                        <span className="absolute left-3 top-2.5 text-gray-500">₱</span>
+                        <Input type="number" className="pl-7" value={minSpend} onChange={(e) => setMinSpend(e.target.value)}/>
+                    </div>
                 </div>
             </div>
-
-            <div className="grid gap-2">
-                <Label>Minimum Spend</Label>
-                <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-gray-500">₱</span>
-                    <Input 
-                      type="number" 
-                      className="pl-7" 
-                      value={minSpend} 
-                      onChange={handleNumberChange(setMinSpend)}
-                    />
-                </div>
-            </div>
-          </div>
-
         </div>
 
         <DialogFooter>

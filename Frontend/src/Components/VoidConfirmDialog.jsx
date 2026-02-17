@@ -9,8 +9,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { Input } from "@/components/ui/input";
+} from "@/Components/ui/alert-dialog";
+import { Input } from "@/Components/ui/input";
 
 const VoidConfirmDialog = ({ onConfirm, trigger, cartItems }) => {
   const [open, setOpen] = useState(false);

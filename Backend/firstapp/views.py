@@ -48,19 +48,14 @@ class CurrentUserView(APIView):
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all().order_by("-id")
     serializer_class = ProductSerializer
-    # Remove the static permission_classes line if it exists at class level
-    # permission_classes = [IsAdminUser] 
-
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     search_fields = ['product_name']
     filterset_fields = ['category']
 
     def get_permissions(self):
-        # Allow anyone (logged in or not) to see the menu
         if self.action in ['list', 'retrieve']:
-            permission_classes = [AllowAny] # <--- CHANGED THIS from IsAuthenticated
+            permission_classes = [AllowAny]
         else:
-            # Only Admins can add/edit/delete products
             permission_classes = [IsAdminUser]
         return [permission() for permission in permission_classes]
     
@@ -93,49 +88,48 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                     # 1. Get Customer (if selected in POS)
                     customer_id = request.data.get('customer_id')
                     target_customer = None
-                    if customer_id and customer_id != 'null': # Handle string 'null' from JS
+                    if customer_id and customer_id != 'null': 
                         try:
                             target_customer = User.objects.get(id=customer_id)
                         except User.DoesNotExist:
                             pass
 
-                    # 2. Save Receipt with Cashier AND Customer
+                    # 2. Save Receipt
                     receipt = serializer.save(
                         cashier=request.user, 
                         customer=target_customer
                     )
 
-                    # 3. UPDATE COUPON
-                    if receipt.coupon:
-                        # Lock the coupon row to prevent race conditions
-                        coupon = Coupon.objects.select_for_update().get(id=receipt.coupon.id)
+                    # 3. UPDATE COUPONS (Loop through all applied)
+                    # FIX: Iterate over receipt.coupons.all()
+                    for coupon_ref in receipt.coupons.all():
+                        # Lock the coupon row
+                        coupon = Coupon.objects.select_for_update().get(id=coupon_ref.id)
                         
                         # --- VALIDATION LOGIC ---
+
+                        if coupon.criteria and coupon.criteria.valid_to and coupon.criteria.valid_to < timezone.now():
+                            raise Exception(f"Coupon {coupon.code} has expired.")
 
                         # RULE A: ONE USE PER USER (If customer is identified)
                         if target_customer:
                             already_used = Receipt.objects.filter(
-                                coupon=coupon,
+                                coupons=coupon, # M2M check
                                 customer=target_customer,
                                 status='COMPLETED'
-                            ).exclude(id=receipt.id).exists() # Exclude current receipt
+                            ).exclude(id=receipt.id).exists()
 
                             if already_used:
-                                raise Exception(f"User {target_customer.username} has already used this coupon.")
+                                raise Exception(f"User {target_customer.username} has already used coupon {coupon.code}.")
 
-                        # RULE B: GLOBAL USAGE LIMIT (Static Limit Check)
-                        # We compare times_used against usage_limit.
+                        # RULE B: GLOBAL USAGE LIMIT
                         if coupon.usage_limit is not None and coupon.times_used >= coupon.usage_limit:
-                            
-                            # If walk-in (no customer), they can't use a sold-out coupon
                             if not target_customer:
-                                raise Exception("This coupon is fully redeemed (Limit Reached). Cannot be applied.")
+                                raise Exception(f"Coupon {coupon.code} is sold out.")
                             
-                            # If registered user, check if they claimed it properly BEFORE it ran out
-                            # (This assumes claims reserve a spot. If claims don't reserve, this block stops everyone)
                             has_claim = coupon.claimed_by.filter(id=target_customer.id).exists()
                             if not has_claim:
-                                raise Exception("This coupon is sold out and you did not claim it beforehand.")
+                                raise Exception(f"Coupon {coupon.code} is sold out and not claimed by user.")
 
                         # --- END VALIDATION ---
 
@@ -214,12 +208,14 @@ class ReceiptViewSet(viewsets.ModelViewSet):
 
         try:
             with transaction.atomic():
-                if receipt.coupon:
-                    coupon = Coupon.objects.select_for_update().get(id=receipt.coupon.id)
+                # FIX: Revert ALL coupons
+                for coupon_ref in receipt.coupons.all():
+                    coupon = Coupon.objects.select_for_update().get(id=coupon_ref.id)
+                    
                     if coupon.times_used > 0:
                         coupon.times_used -= 1
                     
-                    # Revert status to Active if it was Redeemed
+                    # Revert status to Active if space opens up
                     if coupon.usage_limit is not None and coupon.times_used < coupon.usage_limit:
                         coupon.status = 'Active'
                         
@@ -239,6 +235,9 @@ class ReceiptViewSet(viewsets.ModelViewSet):
 class CouponViewSet(viewsets.ModelViewSet):
     queryset = Coupon.objects.all().order_by('-id')
     serializer_class = CouponSerializer
+
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['code']
     
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
@@ -250,8 +249,7 @@ class CouponViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         
-        # Base query for public coupons (Active and Not Sold Out)
-        # We use Q object to compare times_used vs usage_limit
+        # Base query for public coupons
         public_coupons = Coupon.objects.filter(status='Active')
 
         if user.is_authenticated:
@@ -266,11 +264,23 @@ class CouponViewSet(viewsets.ModelViewSet):
             ).distinct().order_by('-id')
         
         return public_coupons.order_by('-id')
+    
+    def destroy(self, request, *args, **kwargs):
+        coupon = self.get_object()
+        # Optional: You can prevent deletion if it's already used
+        if coupon.times_used > 0:
+            return Response({"error": "Cannot delete a coupon that has been used."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        return super().destroy(request, *args, **kwargs)
 
     @action(detail=True, methods=['post'], url_path='claim')
     def claim(self, request, pk=None):
         coupon = self.get_object()
         user = request.user
+
+        # [NEW] Expiration Check
+        if coupon.criteria and coupon.criteria.valid_to and coupon.criteria.valid_to < timezone.now():
+             return Response({"error": "This coupon has expired."}, status=status.HTTP_400_BAD_REQUEST)
 
         if coupon.status != 'Active':
             return Response({"error": "This coupon is no longer active."}, status=status.HTTP_400_BAD_REQUEST)
@@ -278,7 +288,6 @@ class CouponViewSet(viewsets.ModelViewSet):
         if coupon.claimed_by.filter(id=user.id).exists():
             return Response({"message": "You already have this coupon in your wallet."})
 
-        # Check STATIC Usage Limit vs Current Claims
         if coupon.usage_limit is not None and coupon.claimed_by.count() >= coupon.usage_limit:
              return Response({"error": "This coupon is fully claimed (Sold Out)."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -286,11 +295,9 @@ class CouponViewSet(viewsets.ModelViewSet):
             with transaction.atomic():
                 coupon = Coupon.objects.select_for_update().get(id=coupon.id)
                 
-                # Double check inside transaction
                 if coupon.usage_limit is not None and coupon.claimed_by.count() >= coupon.usage_limit:
                      return Response({"error": "Sold Out just now."}, status=400)
 
-                # Add user to claims WITHOUT decrementing usage_limit
                 coupon.claimed_by.add(user)
                 coupon.save() 
 
@@ -310,7 +317,6 @@ class CouponViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(my_coupons, many=True)
         return Response(serializer.data)
 
-# ... [Rest of Views remain unchanged] ...
 class CouponCriteriaViewSet(viewsets.ModelViewSet):
     queryset = CouponCriteria.objects.all().order_by('-id')
     serializer_class = CouponCriteriaSerializer
@@ -419,27 +425,19 @@ class DailySalesReportViewSet(viewsets.ViewSet):
 class ReviewViewSet(viewsets.ModelViewSet):
     queryset = Review.objects.all().order_by('-created_at')
     serializer_class = ReviewSerializer
-    # Remove the static permission_classes line below
-    # permission_classes = [IsAuthenticated] 
-
-    # Add this method to dynamically assign permissions
+    
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
-            # Allow anyone to read reviews
             permission_classes = [AllowAny]
         else:
-            # Require login to post/edit/delete reviews
             permission_classes = [IsAuthenticated]
         return [permission() for permission in permission_classes]
 
     def get_queryset(self):
         queryset = Review.objects.all().order_by('-created_at')
-        
-        # Filter by type if needed ?type=food
         review_type = self.request.query_params.get('type')
         if review_type:
             queryset = queryset.filter(review_type=review_type)
-            
         return queryset
 
 class FeedbackViewSet(viewsets.ModelViewSet):
@@ -450,17 +448,20 @@ class FeedbackViewSet(viewsets.ModelViewSet):
 class HomePageViewSet(viewsets.ModelViewSet):
     queryset = HomePage.objects.all()
     serializer_class = HomePageSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
+    authentication_classes = []
 
 class AboutPageViewSet(viewsets.ModelViewSet):
     queryset = AboutPage.objects.all()
     serializer_class = AboutPageSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
+    authentication_classes = []
 
 class ContactPageViewSet(viewsets.ModelViewSet):
     queryset = ContactPage.objects.all()
     serializer_class = ContactPageSerializer
     permission_classes = [AllowAny]
+    authentication_classes = []
 
     def list(self, request, *args, **kwargs):
         latest = ContactPage.objects.order_by('-id').first()

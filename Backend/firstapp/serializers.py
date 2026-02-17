@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 from django.db import transaction
+from django.utils import timezone
 
 from .models import Product, Receipt, ReceiptItem, Coupon, Feedback, HomePage, AboutPage, ContactPage, DailySalesReport, CouponCriteria, Review
 
@@ -43,7 +44,7 @@ class CouponSerializer(serializers.ModelSerializer):
     rate = serializers.SerializerMethodField()
     description = serializers.SerializerMethodField()
     
-    # NEW: Check if current user has used this coupon
+    # Check if current user has used this coupon
     is_used = serializers.SerializerMethodField()
 
     class Meta:
@@ -52,8 +53,18 @@ class CouponSerializer(serializers.ModelSerializer):
             'id', 'code', 'status', 'usage_limit', 'times_used', 
             'created_at', 'criteria_details', 'criteria_id',
             'name', 'product_name', 'rate', 'description', 
-            'is_used' # Added field
+            'is_used'
         ]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        
+        # If the valid_to date has passed, force the status to 'Expired' in the API response
+        # This ensures the frontend sees it immediately even if the DB record hasn't been saved recently.
+        if instance.criteria and instance.criteria.valid_to and instance.criteria.valid_to < timezone.now():
+            data['status'] = 'Expired'
+            
+        return data
     
     def get_name(self, obj):
         return obj.criteria.name if obj.criteria else "Promo Code"
@@ -66,7 +77,7 @@ class CouponSerializer(serializers.ModelSerializer):
         if obj.criteria.target_product: return obj.criteria.target_product.product_name
         if obj.criteria.free_product: return f"Free {obj.criteria.free_product.product_name}"
         if obj.criteria.target_category: return f"{obj.criteria.target_category} Special"
-        return "Site-wide Deal"
+        return "SWAKNASWAK"
 
     def get_description(self, obj):
         if not obj.criteria: return "Special exclusive discount."
@@ -81,12 +92,12 @@ class CouponSerializer(serializers.ModelSerializer):
     def get_is_used(self, obj):
         """
         Checks if the logged-in user has a COMPLETED receipt with this coupon.
+        FIX: Updated 'coupon' to 'coupons' to match ManyToManyField
         """
         request = self.context.get('request')
         if request and request.user.is_authenticated:
-            # Check Receipt table for (coupon=this, customer=me)
             return Receipt.objects.filter(
-                coupon=obj, 
+                coupons=obj,  # <--- CHANGED from 'coupon' to 'coupons'
                 customer=request.user, 
                 status='COMPLETED'
             ).exists()
@@ -103,14 +114,16 @@ class ReceiptSerializer(serializers.ModelSerializer):
     items = ReceiptItemSerializer(many=True)
     cashier_name = serializers.SerializerMethodField()
     
-    coupon = serializers.PrimaryKeyRelatedField(
+    # FIX: Changed to accept multiple IDs (many=True)
+    coupons = serializers.PrimaryKeyRelatedField(
         queryset=Coupon.objects.all(), 
+        many=True,      # <--- Allow list
         required=False, 
-        allow_null=True, 
         write_only=True
     )
 
-    coupon_details = CouponSerializer(source='coupon', read_only=True)
+    # FIX: Return details for list of coupons
+    coupon_details = CouponSerializer(source='coupons', many=True, read_only=True)
 
     class Meta:
         model = Receipt
@@ -118,7 +131,7 @@ class ReceiptSerializer(serializers.ModelSerializer):
             'id', 'subtotal', 'vat', 'total', 
             'cash_given', 'change', 'created_at', 
             'items', 
-            'coupon',
+            'coupons',          # <--- Renamed from coupon
             'coupon_details',
             'status',
             'void_reason',
@@ -130,11 +143,15 @@ class ReceiptSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         items_data = validated_data.pop("items") 
-        validated_data.get('coupon', None)
+        coupons_data = validated_data.pop("coupons", []) # Extract list
 
         with transaction.atomic():  
-            # Note: cashier and customer are added in ViewSet, not here
+            # Note: cashier and customer are added in ViewSet
             receipt = Receipt.objects.create(**validated_data)
+
+            # Set Many-to-Many relationship
+            if coupons_data:
+                receipt.coupons.set(coupons_data)
 
             items_to_create = []
             for item_data in items_data:
@@ -168,7 +185,6 @@ class ReviewSerializer(serializers.ModelSerializer):
         read_only_fields = ['user', 'created_at']
 
     def create(self, validated_data):
-        # Automatically assign the user from the request
         validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import api from "../api";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/Components/ui/button";
 import {
   Dialog,
   DialogClose,
@@ -9,10 +9,10 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+} from "@/Components/ui/dialog";
+import { Input } from "@/Components/ui/input";
+import { Label } from "@/Components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/Components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
 export default function EditProductDialog({ product, onClose, onSaved }) {

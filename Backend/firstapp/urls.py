@@ -9,7 +9,9 @@ router.register(r'feedback', FeedbackViewSet)
 
 router.register(r'home', HomePageViewSet)
 router.register(r'about', AboutPageViewSet)
-router.register(r'contact', ContactPageViewSet)
+
+# FIX: Changed 'contact' to 'contact-page' to match the frontend API calls
+router.register(r'contact-page', ContactPageViewSet)
 
 router.register(r'reviews', ReviewViewSet)
 
@@ -17,8 +19,6 @@ router.register(r'users', UserViewSet)
 router.register(r'receipt', ReceiptViewSet)
 router.register(r'coupons', CouponViewSet, basename='coupon')
 router.register(r'coupons-criteria', CouponCriteriaViewSet, basename='coupons-criteria')
-
-
 
 urlpatterns = [
     path('', include(router.urls)),

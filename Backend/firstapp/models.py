@@ -90,13 +90,20 @@ class Coupon(models.Model):
         return f"{self.code} - {criteria_name}"
 
     def save(self, *args, **kwargs):
-        # FIX: Updated logic for Static Limit
-        # If usage limit is set and times_used meets/exceeds it, mark as REDEEMED (Sold Out)
-        if self.usage_limit is not None and self.times_used >= self.usage_limit:
+        # 1. CHECK EXPIRATION FIRST
+        # If an expiration date exists and has passed, force status to EXPIRED
+        if self.criteria and self.criteria.valid_to and self.criteria.valid_to < timezone.now():
+            self.status = self.Status.EXPIRED
+            
+        # 2. CHECK USAGE LIMIT (Only if not already expired)
+        elif self.usage_limit is not None and self.times_used >= self.usage_limit:
             self.status = self.Status.REDEEMED
-        # If space frees up (e.g. voided receipt), and it was REDEEMED, open it back up
+            
+        # 3. RE-ACTIVATE (If limit opens up and not expired)
         elif self.usage_limit is not None and self.times_used < self.usage_limit and self.status == self.Status.REDEEMED:
-            self.status = self.Status.ACTIVE
+             # Ensure we don't accidentally reactivate an expired coupon
+            if not (self.criteria and self.criteria.valid_to and self.criteria.valid_to < timezone.now()):
+                self.status = self.Status.ACTIVE
             
         super().save(*args, **kwargs)
 
@@ -106,7 +113,7 @@ class Receipt(models.Model):
         COMPLETED = 'COMPLETED', 'Completed'
         VOIDED = 'VOIDED', 'Voided'
 
-    coupon = models.ForeignKey(Coupon, on_delete=models.CASCADE, null=True, blank=True, related_name='receipt')
+    coupons = models.ManyToManyField(Coupon, blank=True, related_name='receipts')
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
     vat = models.DecimalField(max_digits=10, decimal_places=2)
     total = models.DecimalField(max_digits=10, decimal_places=2)
@@ -145,7 +152,6 @@ class ReceiptItem(models.Model):
     def __str__(self):
         return f"{self.quantity} × {self.product_name}"
 
-# ... [Rest of models (DailySalesReport, Feedback, etc) stay the same] ...
 class DailySalesReport(models.Model):
     report_date = models.DateField(unique=True)
     total_revenue = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
