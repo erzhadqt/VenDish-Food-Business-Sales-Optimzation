@@ -1,7 +1,9 @@
 from django.contrib import admin
-from .models import Product, Receipt, ReceiptItem, Coupon, Feedback, HomePage, AboutPage, ContactPage, DailySalesReport, CouponCriteria, Review
+from .models import Product, Receipt, ReceiptItem, Coupon, Feedback, HomePage, AboutPage, ContactPage, DailySalesReport, CouponCriteria, Review, UserProfile
 
 # Register your models here
+
+admin.site.register(UserProfile)
 admin.site.register(Product)
 admin.site.register(Receipt)
 admin.site.register(ReceiptItem)

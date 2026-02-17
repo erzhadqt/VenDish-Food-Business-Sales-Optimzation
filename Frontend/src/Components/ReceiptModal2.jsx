@@ -22,20 +22,15 @@ export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, 
   const handlePrint = useReactToPrint({
     contentRef: contentRef,
     documentTitle: `Receipt-${receiptDetails?.id || '000'}`,
-    // ----------------------------------------------------
-    // THIS IS THE FIX:
-    // When print dialog closes, we trigger the reset function (onConfirm)
-    // ----------------------------------------------------
     onAfterPrint: () => {
         if (onConfirm) {
-            onConfirm(); // This calls handleResetOrder in Pos.js
+            onConfirm(); 
         }
     }
   });
 
   return (
     <ShadAlertDialog open={open} onOpenChange={onOpenChange}>
-      {/* Note: We removed AlertDialogTrigger because Pos.js controls opening */}
 
       <AlertDialogContent className="max-w-md">
         <AlertDialogHeader>
@@ -70,12 +65,6 @@ export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, 
                             <span className="font-medium text-foreground">
                                 {item.product_name} × {item.quantity}
                             </span>
-                            {item.coupon_details && (
-                                <span className="text-xs text-green-600 flex items-center gap-1">
-                                    <Tag size={10} />
-                                    {item.coupon_details.code} (-₱{item.coupon_details.rate})
-                                </span>
-                            )}
                         </div>
                         <span className="text-foreground">₱{item.price}</span>
                     </div>
@@ -95,12 +84,17 @@ export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, 
                         <span className="font-semibold text-foreground">₱{receiptDetails.vat}</span>
                     </div>
 
-                    {receiptDetails.coupon_details && (
-                        <div className="flex justify-between text-green-600">
-                            <span className="flex items-center gap-1">
-                                <Tag size={14}/> Voucher ({receiptDetails.coupon_details.code})
-                            </span>
-                            <span className="font-semibold">-₱{receiptDetails.coupon_details.rate}</span>
+                    {/* ✅ FIX: Loop through multiple coupons */}
+                    {receiptDetails.coupon_details && receiptDetails.coupon_details.length > 0 && (
+                        <div className="space-y-1">
+                            {receiptDetails.coupon_details.map((coupon, idx) => (
+                                <div key={idx} className="flex justify-between text-green-600">
+                                    <span className="flex items-center gap-1">
+                                        <Tag size={14}/> Voucher ({coupon.code})
+                                    </span>
+                                    <span className="font-semibold">-₱{coupon.rate}</span>
+                                </div>
+                            ))}
                         </div>
                     )}
 
@@ -134,14 +128,13 @@ export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, 
         </AlertDialogHeader>
         
         <AlertDialogFooter>
-          {/* Cancel button manually triggers close without resetting if desired, or can be removed */}
           <AlertDialogCancel onClick={() => onOpenChange(false)}>Close Preview</AlertDialogCancel>
           
           <AlertDialogAction 
             onClick={(e) => {
                 if (receiptDetails) {
-                    e.preventDefault(); // Keep modal open while print dialog is active
-                    handlePrint();      // Trigger print (and reset afterwards)
+                    e.preventDefault(); 
+                    handlePrint();      
                 }
             }} 
             className="bg-gray-900 flex gap-2"

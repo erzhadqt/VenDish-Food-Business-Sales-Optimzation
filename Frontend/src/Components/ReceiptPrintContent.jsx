@@ -4,16 +4,14 @@ const ReceiptPrintContent = forwardRef(({ transactionData }, ref) => {
   
   const items = transactionData?.items || [];
   
-  // ✅ FIX: Use the correct field names from your API/Serializer
   const subtotal = Number(transactionData?.subtotal || 0); 
   const vat = Number(transactionData?.vat || 0);
   const total = Number(transactionData?.total || 0); 
   const cash = Number(transactionData?.cash_given || 0); 
   const change = Number(transactionData?.change || 0);
   
-  // Calculate discount if needed (Total should be Subtotal + VAT - Discount)
-  // Or if backend sends coupon details, use that.
-  const discountVal = transactionData?.coupon_details ? Number(transactionData.coupon_details.rate) : 0;
+  // ✅ FIX: Get all coupons from the array
+  const coupons = transactionData?.coupon_details || [];
 
   const created = transactionData?.created_at
     ? new Date(transactionData.created_at)
@@ -83,10 +81,8 @@ const ReceiptPrintContent = forwardRef(({ transactionData }, ref) => {
                 <td className="align-top py-1 text-center">{item.quantity}</td>
                 <td className="align-top py-1 pr-1 leading-tight">
                   {item.product_name || "Item"} 
-                  {/* Note: Serializer sends 'product_name', not 'product.name' */}
                 </td>
                 <td className="align-top py-1 text-right whitespace-nowrap">
-                  {/* Note: Serializer likely sends 'price' or calculated subtotal per item */}
                   {Number(item.price * item.quantity).toFixed(2)}
                 </td>
               </tr>
@@ -108,15 +104,16 @@ const ReceiptPrintContent = forwardRef(({ transactionData }, ref) => {
             <span>{vat.toFixed(2)}</span>
           </div>
 
-          {/* DISCOUNT */}
-          {discountVal > 0 && (
-            <div className="flex justify-between">
+          {/* DISCOUNT LOOP */}
+          {coupons.length > 0 && coupons.map((coupon, idx) => (
+            <div key={idx} className="flex justify-between">
               <span>
-                Discount {transactionData?.coupon_details ? `(${transactionData.coupon_details.code})` : ""}:
+                Discount ({coupon.code}):
               </span>
-              <span>-{discountVal.toFixed(2)}</span>
+              {/* Note: This assumes rate is the calculated discount value */}
+              <span>-{Number(coupon.rate).toFixed(2)}</span>
             </div>
-          )}
+          ))}
 
           {/* TOTAL */}
           <div className="flex justify-between font-bold text-xs pt-1 mt-1 border-t border-black">

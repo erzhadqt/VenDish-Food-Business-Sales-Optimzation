@@ -31,7 +31,47 @@ class CreateUserView(generics.CreateAPIView):
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by("-id")
     serializer_class = UserSerializer
-    permission_classes = [IsAdminUser]
+    # permission_classes = [IsAdminUser]
+
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny], url_path='register')
+    def register(self, request):
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            # This calls UserSerializer.create(), which saves all fields in 'validated_data'
+            user = serializer.save() 
+            return Response({
+                "user": serializer.data,
+                "message": "User created successfully"
+            }, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    # [NEW] 'Me' Endpoint to fetch current user details
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='me')
+    def me(self, request):
+        serializer = self.get_serializer(request.user)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated], url_path='deactivate')
+    def deactivate_account(self, request):
+        """
+        Deactivates the user account after verifying the password.
+        Sets is_active=False.
+        """
+        user = request.user
+        password = request.data.get('password')
+
+        if not password:
+            return Response({"error": "Password is required to deactivate account."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Verify password
+        if not user.check_password(password):
+            return Response({"error": "Incorrect password."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Deactivate
+        user.is_active = False
+        user.save()
+
+        return Response({"message": "Account deactivated successfully."}, status=status.HTTP_200_OK)
 
 class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = User.objects.all()

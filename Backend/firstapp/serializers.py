@@ -3,17 +3,54 @@ from rest_framework import serializers
 from django.db import transaction
 from django.utils import timezone
 
-from .models import Product, Receipt, ReceiptItem, Coupon, Feedback, HomePage, AboutPage, ContactPage, DailySalesReport, CouponCriteria, Review
+from .models import Product, Receipt, ReceiptItem, Coupon, Feedback, HomePage, AboutPage, ContactPage, DailySalesReport, CouponCriteria, Review, UserProfile
 
 class UserSerializer(serializers.ModelSerializer):
+    # [NEW] Map fields from the Profile relationship
+    middle_name = serializers.CharField(source='profile.middle_name', required=False, allow_blank=True)
+    phone = serializers.CharField(source='profile.phone', required=False, allow_blank=True)
+    address = serializers.CharField(source='profile.address', required=False, allow_blank=True)
+    # profile_pic = serializers.ImageField(source='profile.profile_pic', required=False)
+
     class Meta:
         model = User
-        fields = ["id", "username", "email", "first_name", "last_name", "password", "is_staff", "is_superuser"]
-        extra_kwargs = {"password": {"write_only": True}}
+        # [UPDATED] Add 'middle_name' to fields
+        fields = ["id", "username", "email", "first_name", "last_name", "middle_name", "phone", "address", "password", "is_superuser", "is_staff"]
+        extra_kwargs = {"password": {"write_only": True},
+                        "is_superuser": {"read_only": True},
+                        "is_staff": {"read_only": True}}
 
     def create(self, validated_data):
+        # Extract profile data from the validated data
+        profile_data = validated_data.pop('profile', {})
+        
+        # Create User
         user = User.objects.create_user(**validated_data)
+        
+        # Update the automatically created profile with extra data
+        if profile_data:
+            for attr, value in profile_data.items():
+                setattr(user.profile, attr, value)
+            user.profile.save()
+            
         return user
+
+    def update(self, instance, validated_data):
+        # Handle profile update
+        profile_data = validated_data.pop('profile', {})
+        
+        # Update standard User fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        # Update Profile fields
+        if profile_data:
+            for attr, value in profile_data.items():
+                setattr(instance.profile, attr, value)
+            instance.profile.save()
+            
+        return instance
 
 class ProductSerializer(serializers.ModelSerializer):
     image = serializers.ImageField(required=False)

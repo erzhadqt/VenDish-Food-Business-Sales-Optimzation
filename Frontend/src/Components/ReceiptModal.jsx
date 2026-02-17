@@ -44,7 +44,6 @@ const ReceiptModal = ({ open, onClose, receiptDetails }) => {
                                 <div className="flex items-center gap-2">
                                     <p className="text-lg font-bold text-gray-900">#{receiptDetails.id}</p>
                                     
-                                    {/* --- 1. ADDED STATUS BADGE HERE --- */}
                                     <span className={`px-2 py-0.5 rounded-full text-[12px] uppercase font-bold tracking-wide border ${
                                         receiptDetails.status === 'VOIDED' 
                                         ? 'bg-red-100 text-red-700 border-red-200' 
@@ -89,16 +88,22 @@ const ReceiptModal = ({ open, onClose, receiptDetails }) => {
                                 <span className="text-muted-foreground">VAT</span>
                                 <span className="font-semibold text-foreground font-mono">₱{receiptDetails.vat}</span>
                             </div>
-                            {receiptDetails.coupon_details && (
-                                <div className="flex justify-between text-sm text-green-600">
-                                    <span>Discount ({receiptDetails.coupon_details.code})</span>
-                                    <span>- {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'PHP' }).format(receiptDetails.coupon_details.rate)}</span>
+                            
+                            {/* --- UPDATED COUPON SECTION --- */}
+                            {receiptDetails.coupon_details && receiptDetails.coupon_details.length > 0 && (
+                                <div className="space-y-1 py-1">
+                                    {receiptDetails.coupon_details.map((coupon, idx) => (
+                                        <div key={idx} className="flex justify-between text-sm text-green-600">
+                                            <span>Discount ({coupon.code})</span>
+                                            {/* Note: This assumes 'rate' is the deducted amount. If it's percentage, you might need extra logic */}
+                                            <span>- {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'PHP' }).format(coupon.rate)}</span>
+                                        </div>
+                                    ))}
                                 </div>
                             )}
                             
                             <div className="flex justify-between text-lg font-bold text-gray-900 border-t pt-4">
                                 <span>Total</span>
-                                {/* --- 2. ADDED STRIKETHROUGH LOGIC IF VOIDED --- */}
                                 <span className={`font-mono ${receiptDetails.status === 'VOIDED' ? 'line-through text-gray-400' : ''}`}>
                                     {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'PHP' }).format(receiptDetails.total)}
                                 </span>
@@ -115,7 +120,6 @@ const ReceiptModal = ({ open, onClose, receiptDetails }) => {
                                 </div>
                             </div>
 
-                            {/* --- 3. OPTIONAL: SHOW VOID REASON --- */}
                             {receiptDetails.status === 'VOIDED' && receiptDetails.void_reason && (
                                 <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded text-xs text-red-600">
                                     <strong>Void Reason:</strong> {receiptDetails.void_reason}

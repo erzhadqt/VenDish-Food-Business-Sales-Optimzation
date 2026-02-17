@@ -197,15 +197,22 @@ const Transaction = () => {
                                                         {receipt.status || 'COMPLETED'}  
                                                     </span>  
                                                 </td>  
-                                                <td className="px-6 py-4">  
-                                                    {receipt.coupon_details ? (  
-                                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">  
-                                                            <Tag size={12} />  
-                                                            {receipt.coupon_details.code}  
-                                                        </span>  
-                                                    ) : (  
-                                                        <span className="text-gray-400 text-xs italic">None</span>  
-                                                    )}  
+                                                <td className="px-6 py-4">
+                                                    {receipt.coupon_details && receipt.coupon_details.length > 0 ? (
+                                                        <div className="flex flex-col gap-1 items-start">
+                                                            {receipt.coupon_details.map((coupon, index) => (
+                                                                <span 
+                                                                    key={index} 
+                                                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200"
+                                                                >
+                                                                    <Tag size={12} />
+                                                                    {coupon.code}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-gray-400 text-xs italic">None</span>
+                                                    )}
                                                 </td>  
                                                 <td className={`px-6 py-4 text-right font-bold ${
                                                     receipt.status === 'VOIDED' ? 'text-gray-400 line-through' : 'text-green-600'
