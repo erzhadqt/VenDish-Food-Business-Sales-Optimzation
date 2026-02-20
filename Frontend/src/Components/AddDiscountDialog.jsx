@@ -90,7 +90,12 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
 
   return (
     <Dialog open={open} onOpenChange={(val) => { if(!val) setError(null); onOpenChange(val); }}>
-      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+
+      {open && (
+        <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" aria-hidden="true" />
+      )}
+
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto z-50">
         <DialogHeader>
           <DialogTitle>Create Coupon</DialogTitle>
           <DialogDescription>Define code, discount rules, and usage limits.</DialogDescription>

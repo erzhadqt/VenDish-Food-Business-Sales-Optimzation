@@ -53,59 +53,39 @@ const CMS = () => {
   const [aboutData, setAboutData] = useState(DEFAULT_ABOUT);
   const [contactData, setContactData] = useState(DEFAULT_CONTACT);
 
-  // FIX 1: Track the Database IDs for each section so we can PUT (Update) instead of POST (Create)
-  const [pageIds, setPageIds] = useState({ home: null, services: null, about: null, contact: null });
+  // Only track ID for contact page since it goes to backend
+  const [contactPageId, setContactPageId] = useState(null);
 
   // --- FETCH DATA ---
   useEffect(() => {
     const fetchData = async () => {
+      // 1. Fetch Contact Page from Backend (Kept for React Native App)
       try {
-        // 1. Contact
         const contactRes = await api.get('/firstapp/contact-page/');
         const cData = Array.isArray(contactRes.data) ? contactRes.data[contactRes.data.length - 1] : contactRes.data;
         if (cData && cData.id) {
-           setPageIds(prev => ({ ...prev, contact: cData.id }));
+           setContactPageId(cData.id);
            setContactData({
              header: { highlight: cData.header_highlight, suffix: cData.header_suffix, subtitle: cData.subtitle },
              info: { phone: cData.phone_number, email: cData.email, address: cData.address, facebookLink: cData.fb_page, facebookLabel: cData.fb_label }
            });
         }
-
-        // 2. Home
-        const homeRes = await api.get('/firstapp/home/'); 
-        const hData = Array.isArray(homeRes.data) ? homeRes.data[homeRes.data.length - 1] : homeRes.data;
-        if (hData && hData.id) {
-            setPageIds(prev => ({ ...prev, home: hData.id }));
-            setHomeData({
-                hero: { line1Start: hData.line1_start, line1Highlight: hData.line1_highlight, line1End: hData.line1_end, line2Start: hData.line2_start, line2Highlight: hData.line2_highlight },
-                desc: { brandName: hData.brand_name, cuisineType: hData.cuisine_type, lolaText: hData.lola_text, start: hData.description_start, middle: hData.description_middle, end: hData.description_end, final: hData.description_final }
-            });
-        }
-
-        // 3. Services
-        const servRes = await api.get('/firstapp/services-page/');
-        const sData = Array.isArray(servRes.data) ? servRes.data[servRes.data.length - 1] : servRes.data;
-        if (sData && sData.id) {
-            setPageIds(prev => ({ ...prev, services: sData.id }));
-            setServicesData({
-                header: { titlePrefix: sData.title_prefix, titleHighlight: sData.title_highlight, description: sData.description },
-                s1: { title: sData.s1_title, subtitle: sData.s1_subtitle, desc: sData.s1_desc },
-                s2: { title: sData.s2_title, subtitle: sData.s2_subtitle, desc: sData.s2_desc }
-            });
-        }
-
-        // 4. About
-        const aboutRes = await api.get('/firstapp/about/');
-        const aData = Array.isArray(aboutRes.data) ? aboutRes.data[aboutRes.data.length - 1] : aboutRes.data;
-        if (aData && aData.id) {
-            setPageIds(prev => ({ ...prev, about: aData.id }));
-            setAboutData({
-                header: { line1: aData.line1, line1Highlight: aData.line1_highlight, line1End: aData.line1_end, line1Highlight2: aData.line1_highlight2, line2: aData.line2, line2Highlight: aData.line2_highlight, line2End: aData.line2_end, line2Highlight2: aData.line2_highlight2 },
-                story: { title: aData.story_title, p1: aData.story_p1, p2: aData.story_p2, footer: aData.footer_text }
-            });
-        }
       } catch (error) {
-        console.error("CMS Load Error - using defaults:", error);
+        console.error("Failed to load Contact data from backend:", error);
+      }
+
+      // 2. Fetch Home, Services, and About from Local Storage
+      try {
+        const storedHome = localStorage.getItem('cms_home');
+        if (storedHome) setHomeData(JSON.parse(storedHome));
+
+        const storedServices = localStorage.getItem('cms_services');
+        if (storedServices) setServicesData(JSON.parse(storedServices));
+
+        const storedAbout = localStorage.getItem('cms_about');
+        if (storedAbout) setAboutData(JSON.parse(storedAbout));
+      } catch (error) {
+        console.error("Failed to parse local storage data:", error);
       }
     };
     fetchData();
@@ -117,56 +97,39 @@ const CMS = () => {
     setStatus({ type: '', message: '' });
 
     try {
-        let baseEndpoint = '';
-        let payload = {};
-        const currentId = pageIds[activeTab];
-
         if (activeTab === 'home') {
-            baseEndpoint = '/firstapp/home/';
-            payload = {
-                line1_start: homeData.hero.line1Start, line1_highlight: homeData.hero.line1Highlight, line1_end: homeData.hero.line1End, line2_start: homeData.hero.line2Start, line2_highlight: homeData.hero.line2Highlight,
-                brand_name: homeData.desc.brandName, cuisine_type: homeData.desc.cuisineType, lola_text: homeData.desc.lolaText, description_start: homeData.desc.start, description_middle: homeData.desc.middle, description_end: homeData.desc.end, description_final: homeData.desc.final
-            };
-        } else if (activeTab === 'services') {
-            baseEndpoint = '/firstapp/services-page/';
-            payload = {
-                title_prefix: servicesData.header.titlePrefix, title_highlight: servicesData.header.titleHighlight, description: servicesData.header.description,
-                s1_title: servicesData.s1.title, s1_subtitle: servicesData.s1.subtitle, s1_desc: servicesData.s1.desc,
-                s2_title: servicesData.s2.title, s2_subtitle: servicesData.s2.subtitle, s2_desc: servicesData.s2.desc
-            };
-        } else if (activeTab === 'about') {
-            baseEndpoint = '/firstapp/about/';
-            payload = {
-                line1: aboutData.header.line1, line1_highlight: aboutData.header.line1Highlight, line1_end: aboutData.header.line1End, line1_highlight2: aboutData.header.line1Highlight2,
-                line2: aboutData.header.line2, line2_highlight: aboutData.header.line2Highlight, line2_end: aboutData.header.line2End, line2_highlight2: aboutData.header.line2Highlight2,
-                story_title: aboutData.story.title, story_p1: aboutData.story.p1, story_p2: aboutData.story.p2, footer_text: aboutData.story.footer
-            };
-        } else if (activeTab === 'contact') {
-            baseEndpoint = '/firstapp/contact-page/';
-            payload = {
+            // Save locally
+            localStorage.setItem('cms_home', JSON.stringify(homeData));
+            setStatus({ type: 'success', message: 'Saved HOME locally!' });
+        } 
+        else if (activeTab === 'services') {
+            // Save locally
+            localStorage.setItem('cms_services', JSON.stringify(servicesData));
+            setStatus({ type: 'success', message: 'Saved SERVICES locally!' });
+        } 
+        else if (activeTab === 'about') {
+            // Save locally
+            localStorage.setItem('cms_about', JSON.stringify(aboutData));
+            setStatus({ type: 'success', message: 'Saved ABOUT locally!' });
+        } 
+        else if (activeTab === 'contact') {
+            // Save to Backend
+            const payload = {
                 header_highlight: contactData.header.highlight, header_suffix: contactData.header.suffix, subtitle: contactData.header.subtitle,
                 phone_number: contactData.info.phone, email: contactData.info.email, address: contactData.info.address, fb_page: contactData.info.facebookLink, fb_label: contactData.info.facebookLabel
             };
-        }
 
-        // FIX 2: Check if we have an ID to PUT to, otherwise POST a new one
-        let res;
-        if (currentId) {
-            res = await api.put(`${baseEndpoint}${currentId}/`, payload);
-        } else {
-            res = await api.post(baseEndpoint, payload);
-            // Save the newly generated ID so subsequent saves act as updates (PUT)
-            if (res.data && res.data.id) {
-                setPageIds(prev => ({ ...prev, [activeTab]: res.data.id }));
+            if (contactPageId) {
+                await api.put(`/firstapp/contact-page/${contactPageId}/`, payload);
+            } else {
+                const res = await api.post('/firstapp/contact-page/', payload);
+                if (res.data && res.data.id) setContactPageId(res.data.id);
             }
+            setStatus({ type: 'success', message: 'Saved CONTACT to backend!' });
         }
-
-        setStatus({ type: 'success', message: `Saved ${activeTab.toUpperCase()} successfully!` });
-
     } catch (error) {
         console.error("Save failed", error);
-        // FIX 3: Display exact backend errors if they occur
-        const errorMessage = error.response?.data ? JSON.stringify(error.response.data) : "Failed to save changes. Check your connection.";
+        const errorMessage = error.response?.data ? JSON.stringify(error.response.data) : "Failed to save changes.";
         setStatus({ type: 'error', message: errorMessage });
     } finally {
         setSaving(false);
@@ -197,7 +160,7 @@ const CMS = () => {
             
             {/* Tabs */}
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                {[ {id:'home', icon: Layout, label:'Home'}, {id:'services', icon: Coffee, label:'Services'}, {id:'about', icon: Info, label:'About'}, {id:'contact', icon: Phone, label:'Contact'} ].map(t => (
+                {[ {id:'home', icon: Layout, label:'Home (Local)'}, {id:'services', icon: Coffee, label:'Services (Local)'}, {id:'about', icon: Info, label:'About (Local)'}, {id:'contact', icon: Phone, label:'Contact (Backend)'} ].map(t => (
                     <button key={t.id} onClick={() => setActiveTab(t.id)} className={`px-5 py-2.5 rounded-lg flex items-center gap-2 text-sm font-bold transition-all whitespace-nowrap ${activeTab === t.id ? 'bg-red-50 text-red-600 border border-red-100 shadow-sm' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
                         <t.icon size={16}/> {t.label}
                     </button>
