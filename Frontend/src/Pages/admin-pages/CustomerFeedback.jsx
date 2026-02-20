@@ -36,7 +36,7 @@ const CustomerFeedback = () => {
            customer_name: r.username || 'Anonymous',
            rating: r.rating,
            comment: r.comment,
-           order_id: r.id, // Using ID as order_id for now
+          //  order_id: r.id,
            created_at: r.created_at,
            image: r.image // API will return full URL
         }));
@@ -76,8 +76,8 @@ const CustomerFeedback = () => {
     if (ratingFilter !== 'all') filtered = filtered.filter(f => f.rating === parseInt(ratingFilter));
     if (searchTerm !== '') filtered = filtered.filter(f =>
       f.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      f.comment.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      f.order_id.toString().includes(searchTerm)
+      f.comment.toLowerCase().includes(searchTerm.toLowerCase())
+      // f.order_id.toString().includes(searchTerm)
     );
     setFilteredFeedbacks(filtered);
   }, [searchTerm, ratingFilter, feedbacks]);
@@ -182,7 +182,7 @@ const CustomerFeedback = () => {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
                 <input
                   type="text"
-                  placeholder="Search by customer name, comment, or order ID..."
+                  placeholder="Search by customer name or comment..."
                   value={searchTerm}
                   onChange={(e)=>setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
@@ -208,7 +208,7 @@ const CustomerFeedback = () => {
                           {renderStars(f.rating)}
                         </div>
                         <p className="text-sm text-gray-500">
-                          Order #{f.order_id} • {new Date(f.created_at).toLocaleString()}
+                          {new Date(f.created_at).toLocaleString()}
                         </p>
                       </div>
                       <div className="flex gap-2">

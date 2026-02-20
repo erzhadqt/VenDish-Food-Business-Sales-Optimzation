@@ -487,6 +487,31 @@ class ReviewViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(review_type=review_type)
         return queryset
 
+    def create(self, request, *args, **kwargs):
+        user = request.user
+        review_type = request.data.get('review_type', 'shop')
+
+        if review_type == 'food':
+            product_id = request.data.get('product')
+            if not product_id:
+                return Response({"error": "Product ID is required for food reviews."}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # RULE 1: User can only write a review once per food ever
+            if Review.objects.filter(user=user, review_type='food', product_id=product_id).exists():
+                return Response({"error": "You have already reviewed this food item."}, status=status.HTTP_400_BAD_REQUEST)
+
+        elif review_type == 'shop':
+            # RULE 2: User can only write a shop review once per day
+            today = timezone.now().date()
+            if Review.objects.filter(user=user, review_type='shop', created_at__date=today).exists():
+                return Response({"error": "You can only submit one shop review per day."}, status=status.HTTP_400_BAD_REQUEST)
+
+        return super().create(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        # Automatically attach the authenticated user to the review
+        serializer.save(user=self.request.user)
+
 class FeedbackViewSet(viewsets.ModelViewSet):
     queryset = Feedback.objects.all()
     serializer_class = FeedbackSerializer
