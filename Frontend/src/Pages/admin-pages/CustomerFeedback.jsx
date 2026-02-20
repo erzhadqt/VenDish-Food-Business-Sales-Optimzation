@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Star, MessageSquare, TrendingUp, Eye, Trash2, Search } from 'lucide-react';
 import api from '../../api';
+import DeleteConfirmDialog from '../../Components/DeleteConfirmDialog'; // Add this import (adjust path if needed)
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/Components/ui/dialog";
 
 const CustomerFeedback = () => {
   const [activeTab, setActiveTab] = useState('customer'); // 'customer' or 'food'
@@ -20,7 +22,6 @@ const CustomerFeedback = () => {
   const [selectedFoodFeedback, setSelectedFoodFeedback] = useState(null);
   const [showFoodModal, setShowFoodModal] = useState(false);
 
-  
   useEffect(() => {
     const loadFeedbacks = async () => {
       try {
@@ -36,14 +37,13 @@ const CustomerFeedback = () => {
            customer_name: r.username || 'Anonymous',
            rating: r.rating,
            comment: r.comment,
-          //  order_id: r.id,
            created_at: r.created_at,
-           image: r.image // API will return full URL
+           image: r.image 
         }));
 
         const productReviews = allReviews.filter(r => r.review_type === 'food').map(r => ({
            id: r.id,
-           food_name: r.product_name || 'Unknown Item', // From serializer
+           food_name: r.product_name || 'Unknown Item', 
            rating: r.rating,
            comment: r.comment,
            created_at: r.created_at,
@@ -52,7 +52,7 @@ const CustomerFeedback = () => {
 
         // 3. Update State
         setFeedbacks(shopReviews);
-        setFilteredFeedbacks(shopReviews); // Initialize filter
+        setFilteredFeedbacks(shopReviews); 
 
         setFoodFeedbacks(productReviews);
         setFilteredFoodFeedbacks(productReviews);
@@ -77,7 +77,6 @@ const CustomerFeedback = () => {
     if (searchTerm !== '') filtered = filtered.filter(f =>
       f.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       f.comment.toLowerCase().includes(searchTerm.toLowerCase())
-      // f.order_id.toString().includes(searchTerm)
     );
     setFilteredFeedbacks(filtered);
   }, [searchTerm, ratingFilter, feedbacks]);
@@ -99,12 +98,6 @@ const CustomerFeedback = () => {
   const fiveStarCount = feedbacks.filter(f => f.rating === 5).length;
   const fiveStarPercentage = feedbacks.length > 0 ? ((fiveStarCount / feedbacks.length) * 100).toFixed(0) : 0;
 
-  const ratingDistribution = [5,4,3,2,1].map(rating => ({
-    rating,
-    count: feedbacks.filter(f => f.rating === rating).length,
-    percentage: feedbacks.length>0?((feedbacks.filter(f=>f.rating===rating).length/feedbacks.length)*100).toFixed(0):0
-  }));
-
   const renderStars = (rating) => (
     <div className="flex gap-1">
       {[1,2,3,4,5].map(star => (
@@ -114,9 +107,31 @@ const CustomerFeedback = () => {
   );
 
   const handleViewFeedback = (feedback) => { setSelectedFeedback(feedback); setShowModal(true); };
-  const handleDeleteFeedback = (id) => { if(confirm('Are you sure you want to delete this feedback?')) { const updated = feedbacks.filter(f => f.id !== id); setFeedbacks(updated); localStorage.setItem('customer_feedbacks', JSON.stringify(updated)); } };
+  
+  // UPDATED: Now uses API and no longer uses window.confirm()
+  const handleDeleteFeedback = async (id) => { 
+    try {
+      await api.delete(`/firstapp/reviews/${id}/`); // Delete from DB
+      const updated = feedbacks.filter(f => f.id !== id); 
+      setFeedbacks(updated); 
+    } catch (error) {
+      console.error("Failed to delete customer feedback:", error);
+    }
+  };
+
   const handleViewFoodFeedback = (feedback) => { setSelectedFoodFeedback(feedback); setShowFoodModal(true); };
-  const handleDeleteFoodFeedback = (id) => { const updated = foodFeedbacks.filter(f => f.id !== id); setFoodFeedbacks(updated); setFilteredFoodFeedbacks(updated); };
+  
+  // UPDATED: Now uses API and no longer uses window.confirm()
+  const handleDeleteFoodFeedback = async (id) => { 
+    try {
+      await api.delete(`/firstapp/reviews/${id}/`); // Delete from DB
+      const updated = foodFeedbacks.filter(f => f.id !== id); 
+      setFoodFeedbacks(updated); 
+      setFilteredFoodFeedbacks(updated); 
+    } catch (error) {
+      console.error("Failed to delete food feedback:", error);
+    }
+  };
 
   if (loading) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -213,7 +228,18 @@ const CustomerFeedback = () => {
                       </div>
                       <div className="flex gap-2">
                         <button onClick={()=>handleViewFeedback(f)} className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Eye size={18} /></button>
-                        <button onClick={()=>handleDeleteFeedback(f.id)} className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={18} /></button>
+                        
+                        {/* APPLIED DIALOG HERE */}
+                        <DeleteConfirmDialog
+                          title={`Delete review by ${f.customer_name}?`}
+                          description="Are you sure you want to delete this customer feedback? This action cannot be undone."
+                          onConfirm={() => handleDeleteFeedback(f.id)}
+                        >
+                          <button className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                            <Trash2 size={18} />
+                          </button>
+                        </DeleteConfirmDialog>
+
                       </div>
                     </div>
                     <p className="text-gray-700 leading-relaxed">{f.comment}</p>
@@ -267,7 +293,18 @@ const CustomerFeedback = () => {
                       </div>
                       <div className="flex gap-2">
                         <button onClick={()=>handleViewFoodFeedback(f)} className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Eye size={18} /></button>
-                        <button onClick={()=>handleDeleteFoodFeedback(f.id)} className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={18} /></button>
+                        
+                        {/* APPLIED DIALOG HERE */}
+                        <DeleteConfirmDialog
+                          title={`Delete review for ${f.food_name}?`}
+                          description="Are you sure you want to delete this food review? This action cannot be undone."
+                          onConfirm={() => handleDeleteFoodFeedback(f.id)}
+                        >
+                          <button className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                            <Trash2 size={18} />
+                          </button>
+                        </DeleteConfirmDialog>
+
                       </div>
                     </div>
                     <p className="text-gray-700 leading-relaxed">{f.comment}</p>
@@ -283,6 +320,81 @@ const CustomerFeedback = () => {
             )}
           </>
         )}
+
+        {/* --- CUSTOMER FEEDBACK MODAL --- */}
+        <Dialog open={showModal} onOpenChange={setShowModal}>
+          {showModal && <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" aria-hidden="true" />}
+          <DialogContent className="sm:max-w-[500px] z-50">
+            <DialogHeader>
+              <DialogTitle>Customer Review Details</DialogTitle>
+            </DialogHeader>
+            
+            {selectedFeedback && (
+              <div className="mt-4 space-y-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">{selectedFeedback.customer_name}</h3>
+                    <p className="text-sm text-gray-500">{new Date(selectedFeedback.created_at).toLocaleString()}</p>
+                  </div>
+                  <div>{renderStars(selectedFeedback.rating)}</div>
+                </div>
+                
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <p className="text-gray-700 whitespace-pre-wrap">{selectedFeedback.comment}</p>
+                </div>
+
+                {selectedFeedback.image && (
+                  <div className="mt-4">
+                    <p className="text-sm font-medium text-gray-700 mb-2">Attached Image:</p>
+                    <img 
+                      src={selectedFeedback.image} 
+                      alt="Customer attachment" 
+                      className="w-full max-h-64 object-contain rounded-md border border-gray-200 bg-gray-50" 
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* --- FOOD FEEDBACK MODAL --- */}
+        <Dialog open={showFoodModal} onOpenChange={setShowFoodModal}>
+          {showFoodModal && <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" aria-hidden="true" />}
+          <DialogContent className="sm:max-w-[500px] z-50">
+            <DialogHeader>
+              <DialogTitle>Food Review Details</DialogTitle>
+            </DialogHeader>
+            
+            {selectedFoodFeedback && (
+              <div className="mt-4 space-y-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">{selectedFoodFeedback.food_name}</h3>
+                    <p className="text-sm text-gray-500">{new Date(selectedFoodFeedback.created_at).toLocaleString()}</p>
+                  </div>
+                  <div>{renderStars(selectedFoodFeedback.rating)}</div>
+                </div>
+                
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <p className="text-gray-700 whitespace-pre-wrap">{selectedFoodFeedback.comment}</p>
+                </div>
+
+                {selectedFoodFeedback.image && (
+                  <div className="mt-4">
+                    <p className="text-sm font-medium text-gray-700 mb-2">Attached Image:</p>
+                    <img 
+                      src={selectedFoodFeedback.image} 
+                      alt="Food attachment" 
+                      className="w-full max-h-64 object-contain rounded-md border border-gray-200 bg-gray-50" 
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
       </div>
     </div>
   );

@@ -15,7 +15,8 @@ import { Label } from "@/Components/ui/label";
 import { AlertCircle } from "lucide-react"; 
 import api from "../api";
 
-export default function AddProductDialog({ onSaved, children, existingProducts = [] }) {
+// 🔴 ADDED `categories = []` to the props here
+export default function AddProductDialog({ onSaved, children, existingProducts = [], categories = [] }) {
   const [open, setOpen] = useState(false);
   const [productName, setProductName] = useState("");
   const [category, setCategory] = useState("");
@@ -25,16 +26,7 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
   const [image, setImage] = useState(null);
   const [error, setError] = useState("");
 
-  const categories = [
-    { value: "chicken", label: "Chicken" },
-    { value: "beef", label: "Beef" },
-    { value: "fish", label: "Fish" },
-    { value: "vegetables", label: "Vegetables" },
-    { value: "combo_meal", label: "Combo Meal" },
-    { value: "value_meal", label: "Value Meal" },
-    { value: "add_on", label: "Add-on" },
-    { value: "others", label: "Others" },
-  ];
+  // 🔴 REMOVED THE HARDCODED CATEGORIES ARRAY FROM HERE
 
   const handleOpenChange = (val) => {
     setOpen(val);
@@ -59,10 +51,12 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
     try {
       const formData = new FormData();
       formData.append("product_name", productName);
-      formData.append("category", category);
+      
+      // Because we used SlugRelatedField in Django, sending the name string here is perfectly correct!
+      formData.append("category", category); 
       formData.append("price", parseFloat(price));
 
-      // ✅ FIX: Send boolean values as explicit strings to ensure backend parses them correctly
+      // Send boolean values as explicit strings to ensure backend parses them correctly
       formData.append("is_available", "true"); 
       formData.append("track_stock", "false");
       formData.append("stock_quantity", 0);
@@ -135,9 +129,14 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
               className="px-3 py-2 border rounded-md"
             >
               <option value="" disabled>Select category</option>
-              {categories.map((c) => (
-                <option key={c.value} value={c.value}>{c.label}</option>
-              ))}
+              {/* 🔴 Now mapping over the dynamic categories passed from ProductList */}
+              {categories.length > 0 ? (
+                categories.map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))
+              ) : (
+                <option value="" disabled>Loading categories...</option>
+              )}
             </select>
           </div>
 

@@ -3,7 +3,7 @@ from rest_framework import serializers
 from django.db import transaction
 from django.utils import timezone
 
-from .models import Product, Receipt, ReceiptItem, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, DailySalesReport, CouponCriteria, Review, UserProfile, OTP
+from .models import Product, Category, Receipt, ReceiptItem, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, DailySalesReport, CouponCriteria, Review, UserProfile, OTP
 
 class UserSerializer(serializers.ModelSerializer):
     # [NEW] Map fields from the Profile relationship
@@ -59,11 +59,21 @@ class OTPSerializer(serializers.ModelSerializer):
 
 class ProductSerializer(serializers.ModelSerializer):
     image = serializers.ImageField(required=False)
+
+    category = serializers.SlugRelatedField(
+        queryset=Category.objects.all(),
+        slug_field='name'
+    )
     
     class Meta:
         model = Product
         fields = '__all__'
         extra_kwargs = {'date_added': {'read_only': True}}
+
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ['id', 'name', 'created_at']
 
 class CouponCriteriaSerializer(serializers.ModelSerializer):
     free_product_name = serializers.CharField(source='free_product.product_name', read_only=True)

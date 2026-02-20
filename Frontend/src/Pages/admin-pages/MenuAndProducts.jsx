@@ -2,12 +2,13 @@ import React, { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import Searchbar from "../../Components/Searchbar";
 import api from "../../api";
-import { EditIcon, Trash2Icon, PlusSquareIcon, ListIcon } from "lucide-react";
+import { EditIcon, Trash2Icon, PlusSquareIcon, ListIcon, Settings } from "lucide-react";
 
 import EditProductDialog from "../../Components/EditProductDialog";
 import SuccessAlert from "../../Components/SuccessAlert";
 import DeleteConfirmDialog from "../../Components/DeleteConfirmDialog";
 import AddProductDialog from "../../Components/AddProductDialog";
+import ManageCategoryDialog from "../../Components/ManageCategoryDialog";
 
 function ProductList() {
   const [products, setProducts] = useState([]);
@@ -15,25 +16,36 @@ function ProductList() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showSuccess, setShowSuccess] = useState(false);
 
+  // New states for dynamic categories and the modal
+  const [categories, setCategories] = useState([]);
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+
   const [searchParams, setSearchParams] = useSearchParams();
   const queryParam = searchParams.get("search") || "";
   const categoryParam = searchParams.get("category") || "";
 
-  const categories = [
-    { value: "chicken", label: "Chicken" },
-    { value: "beef", label: "Beef" },
-    { value: "fish", label: "Fish" },
-    { value: "vegetables", label: "Vegetables" },
-    { value: "combo_meal", label: "Combo Meal" },
-    { value: "others", label: "Others" },
-  ];
+  // Fetch dynamic categories from API
+  const fetchCategories = async () => {
+    try {
+      const res = await api.get("/firstapp/categories/");
+      const formattedCategories = res.data.map(c => ({
+        value: c.name, 
+        label: c.name
+      }));
+      setCategories(formattedCategories);
+    } catch (error) {
+      console.error("Failed to fetch categories:", error);
+    }
+  };
 
   // Fetch products from API
   const fetchProducts = (query = "", category = "") => {
     setLoading(true);
 
     let url = `/firstapp/products/?search=${query}`;
-    if (category) url += `&category=${category}`;
+    
+    // 🔴 FIX: Change "&category=" to "&category__name=" to match the backend update
+    if (category) url += `&category__name=${category}`;
 
     api
       .get(url)
@@ -55,12 +67,13 @@ function ProductList() {
     setSearchParams(params);
   };
 
-  // Load products on mount based on URL params
+  // Load products AND categories on mount
   useEffect(() => {
     fetchProducts(queryParam, categoryParam);
+    fetchCategories();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Refresh list + show success alert
+  // Refresh list + show success alert (ONLY FOR PRODUCTS)
   const handleUpdatedProduct = () => {
     fetchProducts(searchParams.get("search") || "", searchParams.get("category") || "");
     setShowSuccess(true);
@@ -85,23 +98,31 @@ function ProductList() {
         <nav className="flex items-center justify-between mb-8">
           <h1 className="flex items-center gap-2 text-3xl font-bold text-gray-900"><ListIcon size={26}/> Product List</h1>
 
-          <div className="flex gap-2" >
-            {/* ---------------------------------------------------- */}
-            {/* CHANGE HERE: Passed existingProducts prop for validation */}
-            {/* ---------------------------------------------------- */}
-            <AddProductDialog 
-                onSaved={handleUpdatedProduct} 
-                existingProducts={products} 
-            >
-              <button className="flex gap-2 items-center bg-gray-900 hover:bg-gray-700 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm">
-                <PlusSquareIcon size={22} /> Product
+          <div className="flex gap-2">
+            <div>
+              <button 
+                onClick={() => setCategoryModalOpen(true)}
+                className="flex gap-2 items-center bg-gray-900 hover:bg-gray-700 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
+              >
+                <Settings size={26}/> Manage Categories
               </button>
-            </AddProductDialog>
+            </div>
+
+            <div>
+              <AddProductDialog 
+                  onSaved={handleUpdatedProduct} 
+                  existingProducts={products}
+                  categories={categories}
+              >
+                <button className="flex gap-2 items-center bg-gray-900 hover:bg-gray-700 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm">
+                  <PlusSquareIcon size={22} /> Product
+                </button>
+              </AddProductDialog>
+            </div>
           </div>
- 
         </nav>
 
-        {/* Searchbar */}
+        {/* Searchbar using dynamic categories */}
         <div className="mb-8">
           <Searchbar
             categories={categories}
@@ -167,7 +188,6 @@ function ProductList() {
                 </div>
                 )}
 
-
               {/* Product info */}
               <div className="flex-1">
                 <h3 className="text-xl font-semibold text-gray-900 mb-2 line-clamp-2">
@@ -199,8 +219,6 @@ function ProductList() {
                     </div>
                   )}
 
-
-                  
                   <div className="flex items-center justify-between pt-2 border-t-3 border-gray-200">
                     <span className="text-gray-500">Status</span>
                     
@@ -215,7 +233,6 @@ function ProductList() {
                           </span>
                       )
                     ) : (
-                    /* LOGIC B: If NOT Tracking Stock, status depends on Manual Toggle */
                       p.is_available ? (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
                             Available
@@ -233,12 +250,24 @@ function ProductList() {
           ))}
         </div>
       </div>
+      
+      {/* Category Manager Dialog */}
+      <ManageCategoryDialog 
+        open={categoryModalOpen}
+        onOpenChange={setCategoryModalOpen}
+        onSaved={() => {
+          fetchCategories(); 
+          fetchProducts(searchParams.get("search") || "", searchParams.get("category") || "");
+        }}
+      />
+
       {/* Edit Dialog */}
       {selectedProduct && (
         <EditProductDialog
           product={selectedProduct}
           onClose={() => setSelectedProduct(null)}
           onSaved={handleUpdatedProduct}
+          categories={categories}
         />
       )}
     </div>

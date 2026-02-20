@@ -15,7 +15,8 @@ import { Label } from "@/Components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/Components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
-export default function EditProductDialog({ product, onClose, onSaved }) {
+// 🔴 ADDED `categories = []` to the props here
+export default function EditProductDialog({ product, onClose, onSaved, categories = [] }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -27,16 +28,7 @@ export default function EditProductDialog({ product, onClose, onSaved }) {
   const [isAvailable, setIsAvailable] = useState(product.is_available ?? true);
   const [image, setImage] = useState(null);
 
-  const categories = [
-    { value: "chicken", label: "Chicken" },
-    { value: "beef", label: "Beef" },
-    { value: "fish", label: "Fish" },
-    { value: "vegetables", label: "Vegetables" },
-    { value: "combo_meal", label: "Combo Meal" },
-    { value: "value_meal", label: "Value Meal" },
-    { value: "add_on", label: "Add-on" },
-    { value: "others", label: "Others" },
-  ];
+  // 🔴 REMOVED THE HARDCODED CATEGORIES ARRAY FROM HERE
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -133,11 +125,16 @@ export default function EditProductDialog({ product, onClose, onSaved }) {
               <option value="" disabled>
                 Select category
               </option>
-              {categories.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
+              {/* 🔴 Now mapping over the dynamic categories passed from ProductList */}
+              {categories.length > 0 ? (
+                categories.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))
+              ) : (
+                <option value="" disabled>Loading categories...</option>
+              )}
             </select>
           </div>
 

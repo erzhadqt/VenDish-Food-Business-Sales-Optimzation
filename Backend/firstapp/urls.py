@@ -1,10 +1,11 @@
 from django.urls import path, include
-from .views import ProductViewSet, FeedbackViewSet, ReceiptViewSet, CouponViewSet, HomePageViewSet, ServicesPageViewSet, AboutPageViewSet, ContactPageViewSet, UserViewSet, DailySalesReportViewSet, CouponCriteriaViewSet, ReviewViewSet
+from .views import ProductViewSet, CategoryViewSet, FeedbackViewSet, ReceiptViewSet, CouponViewSet, HomePageViewSet, ServicesPageViewSet, AboutPageViewSet, ContactPageViewSet, UserViewSet, DailySalesReportViewSet, CouponCriteriaViewSet, ReviewViewSet
 
 from rest_framework.routers import DefaultRouter
 
 router = DefaultRouter()
 router.register(r'products', ProductViewSet)
+router.register(r'categories', CategoryViewSet)
 router.register(r'sales', DailySalesReportViewSet, basename='sales')
 router.register(r'feedback', FeedbackViewSet)
 

@@ -1,3 +1,4 @@
+// src/Components/DeleteConfirmDialog.jsx
 import { Button } from "@/Components/ui/button";
 import { Trash2Icon } from "lucide-react";
 import {
@@ -15,13 +16,19 @@ export default function DeleteConfirmDialog({ onConfirm, title, description, chi
   return (
     <AlertDialog>
         <AlertDialogTrigger asChild>
-            <div className="flex items-center">
-                <button className="ml-2">
-                <Trash2Icon className="text-red-600" />
-                </button>
-            </div>
+            {/* FIX: Use 'children' if provided, otherwise fallback to the Trash icon */}
+            {children ? (
+                children
+            ) : (
+                <div className="flex items-center">
+                    <button className="ml-2">
+                        <Trash2Icon className="text-red-600" />
+                    </button>
+                </div>
+            )}
         </AlertDialogTrigger>
 
+      {/* ... the rest of your component stays the same */}
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title || "Confirm Deletion"}</AlertDialogTitle>
