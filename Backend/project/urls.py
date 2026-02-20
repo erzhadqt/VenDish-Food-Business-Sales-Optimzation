@@ -19,15 +19,17 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path, include
 
-from firstapp.views import CreateUserView, UserViewSet, UserDetailView, HomePageViewSet, AboutPageViewSet, ContactPageViewSet, CurrentUserView
+from rest_framework.permissions import AllowAny
+
+from firstapp.views import CreateUserView, UserViewSet, UserDetailView, HomePageViewSet, AboutPageViewSet, ContactPageViewSet, CurrentUserView, OTPViewSet, VerifyOTPViewSet, ChangePasswordViaToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('firstapp/user/register/', CreateUserView.as_view(), name='register'),
-    path('firstapp/token/', TokenObtainPairView.as_view(), name='get_token'),
-    path('firstapp/token/refresh/', TokenRefreshView.as_view(), name='refresh'),
+    path('firstapp/token/', TokenObtainPairView.as_view(permission_classes=[AllowAny]), name='get_token'),
+    path('firstapp/token/refresh/', TokenRefreshView.as_view(permission_classes=[AllowAny]), name='refresh'),
     path('firstapp-auth/', include('rest_framework.urls')),
 
     path("firstapp/users/<int:pk>/", UserDetailView.as_view(), name="user-detail"),
@@ -38,6 +40,10 @@ urlpatterns = [
     path('firstapp/user/me/', CurrentUserView.as_view(), name='current_user'),
 
     path('firstapp/', include('firstapp.urls')),
+
+    path('request-otp/', OTPViewSet.as_view({'post': 'create'}), name="request-otp"),
+    path('verify-otp/', VerifyOTPViewSet.as_view({'post': 'create'}, name="verify-otp")),
+    path('change-password-token/', ChangePasswordViaToken.as_view({'post': 'create'}, name="change-password-token"))
 ]
 
 if settings.DEBUG:

@@ -19,7 +19,10 @@ export default function UserManagement() {
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [loading, setLoading] = useState(false);
+  
+  // Alert State
   const [showSuccess, setShowSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
   // Filter State
   const [filterRole, setFilterRole] = useState("All");
@@ -63,18 +66,28 @@ export default function UserManagement() {
     setCurrentPage(1);
   };
 
-  const handleUpdated = () => {
-    fetchUsers();
+  // Helper to show dynamic success messages
+  const triggerSuccessAlert = (message) => {
+    setSuccessMessage(message);
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 2500);
+  };
+
+  const handleAdded = () => {
+    fetchUsers();
+    triggerSuccessAlert("New user created successfully!");
+  };
+
+  const handleUpdated = () => {
+    fetchUsers();
+    triggerSuccessAlert("User account updated successfully!");
   };
 
   const handleDelete = async (id) => {
     try {
       await api.delete(`/firstapp/users/${id}/`);
       fetchUsers();
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 2500);
+      triggerSuccessAlert("User deleted successfully!");
     } catch (err) {
       console.error("Delete failed:", err);
       alert("Failed to delete user. Please try again.");
@@ -109,7 +122,7 @@ export default function UserManagement() {
               </select>
             </div>
 
-            <AddUserDialog onSaved={fetchUsers}>
+            <AddUserDialog onSaved={handleAdded}>
               <button className="flex gap-2 items-center bg-gray-900 hover:bg-gray-800 text-white px-4 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm">
                 <UserPlus size={20} /> User
               </button>
@@ -118,8 +131,8 @@ export default function UserManagement() {
         </div>
 
         {showSuccess && (
-          <div className="mb-6">
-            <SuccessAlert />
+          <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-300">
+            <SuccessAlert message={successMessage} />
           </div>
         )}
 
@@ -141,7 +154,6 @@ export default function UserManagement() {
                   <tr>
                     <th className="py-3.5 px-3 text-left text-sm font-semibold text-gray-700">Username</th>
                     <th className="py-3.5 px-3 text-left text-sm font-semibold text-gray-700">Email</th>
-                    {/* Updated Columns */}
                     <th className="py-3.5 px-3 text-left text-sm font-semibold text-gray-700">First Name</th>
                     <th className="py-3.5 px-3 text-left text-sm font-semibold text-gray-700">Middle Name</th>
                     <th className="py-3.5 px-3 text-left text-sm font-semibold text-gray-700">Last Name</th>
@@ -166,8 +178,6 @@ export default function UserManagement() {
                       >
                         <td className="py-3 px-3 text-sm font-medium text-gray-900">{u.username}</td>
                         <td className="py-3 px-3 text-sm text-gray-600">{u.email}</td>
-                        
-                        {/* New Data Cells */}
                         <td className="py-3 px-3 text-sm text-gray-600">{u.first_name}</td>
                         <td className="py-3 px-3 text-sm text-gray-500">{u.middle_name || "N/A"}</td>
                         <td className="py-3 px-3 text-sm text-gray-600">{u.last_name}</td>

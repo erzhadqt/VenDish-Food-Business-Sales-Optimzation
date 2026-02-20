@@ -1,13 +1,31 @@
 from django.db import models
 from django.db.models import Sum
 from django.utils import timezone
+
 from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
+
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from decimal import Decimal
 import uuid
 from django.conf import settings
 
+# Create your models here.
+User = get_user_model()
+
+class OTP(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='otp')
+    otp = models.IntegerField()
+    is_valid = models.BooleanField()
+    expires_at = models.DateTimeField()
+
+
+class PasswordResetToken(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    token = models.CharField(max_length=64, unique=True)
+    expires_at = models.DateTimeField()
+    used = models.BooleanField(default=False)
 
 # User
 class UserProfile(models.Model):
@@ -28,7 +46,10 @@ class UserProfile(models.Model):
 
     @receiver(post_save, sender=User)
     def save_user_profile(sender, instance, **kwargs):
-        instance.profile.save()
+        try:
+            instance.profile.save()
+        except:
+            UserProfile.objects.create(user=instance)
 
 # PRODUCT
 class Product(models.Model):
@@ -248,19 +269,72 @@ class Feedback(models.Model):
     def __str__(self): return f"Feedback #{self.id}"
 
 class HomePage(models.Model):
-    dishes = models.CharField(max_length=50)
-    banner_image = models.ImageField(upload_to="homepage/")
+    # Hero Section
+    line1_start = models.CharField(max_length=100, default="SAVOR THE TASTE OF")
+    line1_highlight = models.CharField(max_length=100, default="LOVE")
+    line1_end = models.CharField(max_length=100, default="AND TRADITION")
+    
+    line2_start = models.CharField(max_length=100, default="IN EVERY")
+    line2_highlight = models.CharField(max_length=100, default="BITE")
+    
+    # Description
+    description_start = models.CharField(max_length=100, default="At")
+    brand_name = models.CharField(max_length=100, default="Kuya Vince Karinderya")
+    description_middle = models.CharField(max_length=100, default=", we take pride in serving the best")
+    cuisine_type = models.CharField(max_length=100, default="Pinoy bayan cuisine")
+    description_end = models.TextField(default="— flavorful, hearty, and made just like how")
+    lola_text = models.CharField(max_length=50, default="lola")
+    description_final = models.CharField(max_length=100, default="used to cook.")
+
     def __str__(self): return "Home Page Content"
 
+class ServicesPage(models.Model):
+    # Header
+    title_prefix = models.CharField(max_length=50, default="OUR")
+    title_highlight = models.CharField(max_length=50, default="SERVICES")
+    description = models.TextField(default="At Kuya Vince Karinderya, we extend our warm Filipino hospitality...")
+
+    # Service 1
+    s1_title = models.CharField(max_length=50, default="DAILY")
+    s1_subtitle = models.CharField(max_length=50, default="SPECIALS")
+    s1_desc = models.TextField(default="Freshly cooked meals prepared daily.")
+
+    # Service 2
+    s2_title = models.CharField(max_length=50, default="AFFORDABLE")
+    s2_subtitle = models.CharField(max_length=50, default="MEAL PLANS")
+    s2_desc = models.TextField(default="Budget-friendly meal packages.")
+    
+    def __str__(self): return "Services Page Content"
+
 class AboutPage(models.Model):
-    story = models.TextField(blank=True)
-    subtitle = models.TextField(blank=True)
-    message = models.ForeignKey(Feedback, on_delete=models.SET_NULL, null=True, blank=True, related_name="about_messages")
+    # Header
+    line1 = models.CharField(max_length=100, default="WE'RE MORE")
+    line1_highlight = models.CharField(max_length=50, default="THAN")
+    line1_end = models.CharField(max_length=50, default="JUST A")
+    line1_highlight2 = models.CharField(max_length=100, default="PLACE TO EAT,")
+    
+    line2 = models.CharField(max_length=50, default="WE'RE A")
+    line2_highlight = models.CharField(max_length=50, default="TASTE")
+    line2_end = models.CharField(max_length=50, default="OF")
+    line2_highlight2 = models.CharField(max_length=50, default="HOME.")
+
+    # Story
+    story_title = models.CharField(max_length=100, default="Our Story")
+    story_p1 = models.TextField(default="Inspired by the warmth...")
+    story_p2 = models.TextField(default="Our journey started...")
+    footer_text = models.CharField(max_length=100, default="Masarap, malasakit, tulad ng pamilya!")
+
     def __str__(self): return "About Page Content"
 
 class ContactPage(models.Model):
+    header_highlight = models.CharField(max_length=50, default="CONTACT")
+    header_suffix = models.CharField(max_length=50, default="US")
+    subtitle = models.CharField(max_length=200, default="We’d love to hear from you!")
+    
     phone_number = models.CharField(max_length=20)
     email = models.EmailField()
-    address = models.CharField(max_length=100)
-    fb_page = models.CharField(max_length=100)
+    address = models.CharField(max_length=200)
+    fb_page = models.CharField(max_length=200)
+    fb_label = models.CharField(max_length=100, default="Kuya Vince Karinderya")
+
     def __str__(self): return "Contact Page Content"

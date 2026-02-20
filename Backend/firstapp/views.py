@@ -1,6 +1,8 @@
 from django.contrib.auth.models import User
+from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.utils import timezone
+from django.conf import settings
 from django.db.models import F
 from rest_framework.decorators import action
 from django_filters.rest_framework import DjangoFilterBackend
@@ -11,11 +13,16 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from datetime import timedelta
 from django.db.models import Sum, Count, Q
 from django.db.models.functions import TruncDate
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.decorators import action
+
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework.permissions import AllowAny
 
 from .serializers import (
-    UserSerializer, FeedbackSerializer, ProductSerializer, ReceiptSerializer, CouponSerializer, HomePageSerializer, AboutPageSerializer, ContactPageSerializer, DailySalesReportSerializer, CouponCriteriaSerializer, StaffPerformanceSerializer, ReviewSerializer
-)
-from .models import Product, Receipt, Coupon, Feedback, HomePage, AboutPage, ContactPage, DailySalesReport, CouponCriteria, ReceiptItem, Review
+    UserSerializer, FeedbackSerializer, ProductSerializer, ReceiptSerializer, CouponSerializer, HomePageSerializer, ServicesPageSerializer, AboutPageSerializer, ContactPageSerializer, DailySalesReportSerializer, CouponCriteriaSerializer, StaffPerformanceSerializer, ReviewSerializer, OTPSerializer
+)   
+from .models import Product, Receipt, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, DailySalesReport, CouponCriteria, ReceiptItem, Review, OTP, PasswordResetToken
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 
 
@@ -491,6 +498,16 @@ class HomePageViewSet(viewsets.ModelViewSet):
     permission_classes = [AllowAny]
     authentication_classes = []
 
+class ServicesPageViewSet(viewsets.ModelViewSet):
+    queryset = ServicesPage.objects.all()
+    serializer_class = ServicesPageSerializer
+    permission_classes = [AllowAny]
+    
+    def list(self, request, *args, **kwargs):
+        latest = ServicesPage.objects.last()
+        if not latest: return Response({})
+        return Response(self.get_serializer(latest).data)
+
 class AboutPageViewSet(viewsets.ModelViewSet):
     queryset = AboutPage.objects.all()
     serializer_class = AboutPageSerializer
@@ -509,3 +526,132 @@ class ContactPageViewSet(viewsets.ModelViewSet):
             return Response([], status=200)
         serializer = self.get_serializer(latest)
         return Response(serializer.data)
+
+import random
+import secrets
+    
+class OTPViewSet(viewsets.ModelViewSet):
+    queryset = OTP.objects.all()
+    serializer_class = OTPSerializer
+    permission_classes = [AllowAny]
+
+    def create(self, request):
+        email = request.data.get('email', '').strip().lower()
+
+        if not email:
+            return Response({'type': 'error', 'label': 'No Email', 'details': 'No email has been sent'}, status=status.HTTP_400_BAD_REQUEST)
+
+        random_otp = int(''.join(map(str, [random.randint(1, 6) for _ in range(6)])))
+        user = None
+        otp = None
+
+        try:
+            # user = User.objects.get(email=email)
+            user = User.objects.filter(email=email).first()
+        except User.DoesNotExist:
+            pass
+        
+        if user:
+            try:
+                otp = OTP.objects.get(user__email=email)
+
+                otp.otp = random_otp
+                otp.is_valid = True
+                otp.expires_at=timezone.localtime() + timedelta(minutes=15)
+                otp.save()
+
+            except OTP.DoesNotExist:
+                otp = OTP.objects.create(
+                    user=user,
+                    otp=random_otp,
+                    is_valid=True,
+                    expires_at=timezone.localtime() + timedelta(minutes=15)
+                )
+                serializer = self.get_serializer(otp)
+                if serializer.is_valid():
+                    serializer.save()
+        
+        return Response({'otp': str(random_otp), 'type': 'success', 'label': 'OTP Sent!', 'details': 'The OTP has been sent! Check your email address for more information'}, status=status.HTTP_200_OK)
+
+
+class VerifyOTPViewSet(viewsets.ModelViewSet):
+    queryset = OTP.objects.all()
+    serializer_class = OTPSerializer
+    permission_classes = [AllowAny]
+
+    def create(self, request):
+        received_otp = request.data.get('otp')
+        email = request.data.get('email')
+
+        print(received_otp, email)
+
+        try:
+            otp = OTP.objects.get(otp=received_otp, user__email__iexact=email)
+            user = User.objects.filter(email=email).first()
+
+            if not otp.is_valid:
+                return Response({'type': 'error', 'label': 'Invalid OTP', 'details': 'The OTP you have sent is no longer valid. Please request another OTP'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+            if otp.expires_at < timezone.localtime():
+                return Response({'type': 'error', 'label': 'Expired OTP', 'details': 'The OTP you have sent has expired. Please request another OTP'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            otp.is_valid = False
+            otp.save(update_fields=['is_valid'])
+
+            token = secrets.token_urlsafe(32)
+
+            PasswordResetToken.objects.create(
+                user=user,
+                token=token,
+                expires_at=timezone.localtime() + timedelta(minutes=5)
+            )
+
+            return Response({'type': 'success', 'label': 'OTP has been verified', 'details': 'Your OTP has now been verified. Please change your password within 5 minutes.', 'token': token}, status=status.HTTP_200_OK)
+
+        except OTP.DoesNotExist:
+            return Response({'type': 'error', 'label': 'Invalid OTP', 'details': 'The OTP you have sent is incorrect.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+
+
+class ChangePasswordViaToken(viewsets.ModelViewSet):
+    queryset = PasswordResetToken.objects.all()
+    permission_classes = [AllowAny]
+
+    def create(self, request):
+        received_token = request.data.get('token')
+        password = request.data.get('password')
+        email = request.data.get('email')
+
+        if not received_token or not password or not email:
+            return Response({'type': 'error', 'label': 'Missing Data', 'details': 'Token, email, and new password are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        print(received_token)
+        print(password)
+        print(email)
+
+        try:
+            token = PasswordResetToken.objects.get(token=received_token)
+
+            if token.expires_at < timezone.localtime():
+                return Response({'type': 'error', 'label': 'Expired Token', 'details': 'Your token has expired. Please redo the process carefully'}, status=status.HTTP_400_BAD_REQUEST)
+
+            user = User.objects.filter(email=email).first()
+
+            print('User is motherfucker: ', user)
+
+            if token.user != user:
+                return Response({'type': 'error', 'label': 'Token Mismatch', 'details': 'This token does not belong to the specified user.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            user.set_password(password)
+            user.save()
+
+            token.used = True
+            token.save(update_fields=['used'])
+
+            return Response({'type': 'success', 'label': 'Password Changed', 'details': 'Your password has been changed successfully. '}, status=status.HTTP_200_OK)
+            
+        except PasswordResetToken.DoesNotExist:
+            return Response({'type': 'error', 'label': 'Missing Token.', 'details': 'You have missing token. Please redo the process carefully'}, status=status.HTTP_400_BAD_REQUEST)
+        except User.DoesNotExist:
+            return Response({'type': 'error', 'label': 'Invalid User', 'details': 'Your credentials does not exist in the system.'}, status=status.HTTP_400_BAD_REQUEST)

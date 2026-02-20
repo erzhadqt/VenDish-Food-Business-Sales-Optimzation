@@ -3,7 +3,7 @@ from rest_framework import serializers
 from django.db import transaction
 from django.utils import timezone
 
-from .models import Product, Receipt, ReceiptItem, Coupon, Feedback, HomePage, AboutPage, ContactPage, DailySalesReport, CouponCriteria, Review, UserProfile
+from .models import Product, Receipt, ReceiptItem, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, DailySalesReport, CouponCriteria, Review, UserProfile, OTP
 
 class UserSerializer(serializers.ModelSerializer):
     # [NEW] Map fields from the Profile relationship
@@ -17,8 +17,7 @@ class UserSerializer(serializers.ModelSerializer):
         # [UPDATED] Add 'middle_name' to fields
         fields = ["id", "username", "email", "first_name", "last_name", "middle_name", "phone", "address", "password", "is_superuser", "is_staff"]
         extra_kwargs = {"password": {"write_only": True},
-                        "is_superuser": {"read_only": True},
-                        "is_staff": {"read_only": True}}
+                        "is_superuser": {"read_only": True}}
 
     def create(self, validated_data):
         # Extract profile data from the validated data
@@ -51,6 +50,12 @@ class UserSerializer(serializers.ModelSerializer):
             instance.profile.save()
             
         return instance
+    
+class OTPSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OTP
+        fields = ['id', 'user', 'otp', 'is_valid']
+        read_only_fields = fields
 
 class ProductSerializer(serializers.ModelSerializer):
     image = serializers.ImageField(required=False)
@@ -235,6 +240,9 @@ class FeedbackSerializer(serializers.ModelSerializer):
 
 class HomePageSerializer(serializers.ModelSerializer):
     class Meta: model = HomePage; fields = '__all__'
+
+class ServicesPageSerializer(serializers.ModelSerializer):
+    class Meta: model = ServicesPage; fields = '__all__'
 
 class AboutPageSerializer(serializers.ModelSerializer):
     class Meta: model = AboutPage; fields = '__all__'
