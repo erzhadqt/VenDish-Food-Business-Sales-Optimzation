@@ -16,13 +16,15 @@ from django.db.models.functions import TruncDate
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.decorators import action
 
+from django.contrib.auth.hashers import make_password, check_password
+
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.permissions import AllowAny
 
 from .serializers import (
     UserSerializer, FeedbackSerializer, ProductSerializer, CategorySerializer, ReceiptSerializer, CouponSerializer, HomePageSerializer, ServicesPageSerializer, AboutPageSerializer, ContactPageSerializer, DailySalesReportSerializer, CouponCriteriaSerializer, StaffPerformanceSerializer, ReviewSerializer, OTPSerializer
 )   
-from .models import Product, Category, Receipt, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, DailySalesReport, CouponCriteria, ReceiptItem, Review, OTP, PasswordResetToken
+from .models import Product, Category, Receipt, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, DailySalesReport, CouponCriteria, ReceiptItem, Review, OTP, PasswordResetToken, StoreSettings
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 
 
@@ -684,3 +686,58 @@ class ChangePasswordViaToken(viewsets.ModelViewSet):
             return Response({'type': 'error', 'label': 'Missing Token.', 'details': 'You have missing token. Please redo the process carefully'}, status=status.HTTP_400_BAD_REQUEST)
         except User.DoesNotExist:
             return Response({'type': 'error', 'label': 'Invalid User', 'details': 'Your credentials does not exist in the system.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+class UpdateVoidPinView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        # Optional: Ensure only superusers/admins can change the global PIN
+        if not request.user.is_superuser:
+            return Response({"error": "Only administrators can change the Void PIN."}, status=status.HTTP_403_FORBIDDEN)
+
+        current_pin = request.data.get('current_pin')
+        new_pin = request.data.get('new_pin')
+
+        if not new_pin or len(str(new_pin)) < 4:
+            return Response({"error": "New PIN must be at least 4 digits."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Get or create the single global settings row (id=1)
+        settings, _ = StoreSettings.objects.get_or_create(id=1)
+
+        # If a PIN already exists in the system, verify the current one first
+        if settings.void_pin:
+            if not current_pin:
+                return Response({"error": "Current PIN is required."}, status=status.HTTP_400_BAD_REQUEST)
+            if not check_password(str(current_pin), settings.void_pin):
+                return Response({"error": "Incorrect current PIN."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Hash the new PIN and save it globally
+        settings.void_pin = make_password(str(new_pin))
+        settings.save()
+
+        return Response({"message": "Global Void PIN updated successfully."}, status=status.HTTP_200_OK)
+
+
+class VerifyVoidPinView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        pin = request.data.get('pin')
+        if not pin:
+            return Response({"error": "PIN is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Grab the single global settings row
+        settings = StoreSettings.objects.filter(id=1).first()
+
+        # If a custom global PIN has been set, check against it
+        if settings and settings.void_pin:
+            if check_password(str(pin), settings.void_pin):
+                return Response({"message": "PIN verified"}, status=status.HTTP_200_OK)
+            else:
+                return Response({"error": "Invalid Manager PIN"}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            # Fallback to 1234 ONLY if the admin has never set a custom PIN
+            if str(pin) == "1234":
+                return Response({"message": "Default PIN verified"}, status=status.HTTP_200_OK)
+            else:
+                return Response({"error": "Invalid Manager PIN"}, status=status.HTTP_400_BAD_REQUEST)

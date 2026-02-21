@@ -9,8 +9,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/Components/ui/alert-dialog";
-import { Input } from "@/Components/ui/input";
+} from "../Components/ui/alert-dialog";
+import { Input } from "../Components/ui/input";
+import api from "../api";
 
 const VoidConfirmDialog = ({ onConfirm, trigger, cartItems }) => {
   const [open, setOpen] = useState(false);
@@ -39,13 +40,20 @@ const VoidConfirmDialog = ({ onConfirm, trigger, cartItems }) => {
     }
   };
 
-  const handleAuthSubmit = (e) => {
+  const handleAuthSubmit = async (e) => {
     e.preventDefault();
-    if (code === "1234") {
+    if (!code) return;
+
+    try {
+      // Ask the backend to verify the PIN
+      await api.post("/verify-void-pin/", { pin: code });
+      
+      // If no error is thrown, the PIN is correct!
       setStep("select");
       setError("");
-    } else {
-      setError("Invalid Manager PIN");
+    } catch (err) {
+      console.error("PIN Verification Failed", err);
+      setError(err.response?.data?.error || "Invalid Manager PIN");
       setCode("");
     }
   };

@@ -6,8 +6,8 @@ import {
   DialogFooter,
   DialogTitle,
   DialogTrigger,
-} from "@/Components/ui/dialog";
-import { Button } from "@/Components/ui/button";
+} from "../Components/ui/dialog";
+import { Button } from "../Components/ui/button";
 
 export default function ConfirmDeleteUserDialog({
   children,

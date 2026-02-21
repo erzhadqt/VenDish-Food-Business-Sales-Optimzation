@@ -21,7 +21,7 @@ from django.urls import path, include
 
 from rest_framework.permissions import AllowAny
 
-from firstapp.views import CreateUserView, UserViewSet, UserDetailView, HomePageViewSet, AboutPageViewSet, ContactPageViewSet, CurrentUserView, OTPViewSet, VerifyOTPViewSet, ChangePasswordViaToken
+from firstapp.views import CreateUserView, UserViewSet, UserDetailView, HomePageViewSet, AboutPageViewSet, ContactPageViewSet, CurrentUserView, OTPViewSet, VerifyOTPViewSet, ChangePasswordViaToken, VerifyVoidPinView, UpdateVoidPinView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 
@@ -43,7 +43,10 @@ urlpatterns = [
 
     path('request-otp/', OTPViewSet.as_view({'post': 'create'}), name="request-otp"),
     path('verify-otp/', VerifyOTPViewSet.as_view({'post': 'create'}, name="verify-otp")),
-    path('change-password-token/', ChangePasswordViaToken.as_view({'post': 'create'}, name="change-password-token"))
+    path('change-password-token/', ChangePasswordViaToken.as_view({'post': 'create'}, name="change-password-token")),
+
+    path('update-void-pin/', UpdateVoidPinView.as_view(), name='update-void-pin'),
+    path('verify-void-pin/', VerifyVoidPinView.as_view(), name='verify-void-pin')
 ]
 
 if settings.DEBUG:

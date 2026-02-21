@@ -1,4 +1,3 @@
-// src/Components/AlertModal.jsx
 import {
   AlertDialog,
   AlertDialogContent,
@@ -7,7 +6,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogAction,
-} from "./ui/alert-dialog"; // Adjust import path if needed, e.g., "@/Components/ui/alert-dialog"
+} from "./ui/alert-dialog";
 
 const AlertModal = ({ open, onOpenChange, title, description }) => {
   return (

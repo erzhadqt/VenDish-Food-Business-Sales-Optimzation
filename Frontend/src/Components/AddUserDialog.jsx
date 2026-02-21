@@ -9,11 +9,11 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
-} from "@/Components/ui/dialog";
-import { Input } from "@/Components/ui/input";
-import { Label } from "@/Components/ui/label";
-import { Button } from "@/Components/ui/button";
-import { Alert, AlertDescription, AlertTitle } from "@/Components/ui/alert";
+} from "../Components/ui/dialog";
+import { Input } from "../Components/ui/input";
+import { Label } from "../Components/ui/label";
+import { Button } from "../Components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "../Components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
 export default function AddUserDialog({ onSaved, children }) {

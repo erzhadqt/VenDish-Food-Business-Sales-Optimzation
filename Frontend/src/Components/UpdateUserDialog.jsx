@@ -1,6 +1,6 @@
 import { useState } from "react";
 import api from "../api";
-import { Button } from "@/Components/ui/button";
+import { Button } from "../Components/ui/button";
 import {
   Dialog,
   DialogClose,
@@ -9,10 +9,10 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/Components/ui/dialog";
-import { Input } from "@/Components/ui/input";
-import { Label } from "@/Components/ui/label";
-import { Alert, AlertDescription, AlertTitle } from "@/Components/ui/alert";
+} from "../Components/ui/dialog";
+import { Input } from "../Components/ui/input";
+import { Label } from "../Components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "../Components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
 export default function UpdateUserDialog({ user, onClose, onSaved }) {

@@ -1,5 +1,5 @@
 // src/Components/DeleteConfirmDialog.jsx
-import { Button } from "@/Components/ui/button";
+import { Button } from "../Components/ui/button";
 import { Trash2Icon } from "lucide-react";
 import {
   AlertDialog,
@@ -10,7 +10,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogCancel,
-} from "@/Components/ui/alert-dialog";
+} from "../Components/ui/alert-dialog";
 
 export default function DeleteConfirmDialog({ onConfirm, title, description, children }) {
   return (

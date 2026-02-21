@@ -51,6 +51,13 @@ class UserProfile(models.Model):
         except:
             UserProfile.objects.create(user=instance)
 
+class StoreSettings(models.Model):
+    # This table will only ever have one row
+    void_pin = models.CharField(max_length=128, blank=True, null=True)
+
+    def __str__(self):
+        return "Global Store Settings"
+
 class Category(models.Model):
     name = models.CharField(max_length=100, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)

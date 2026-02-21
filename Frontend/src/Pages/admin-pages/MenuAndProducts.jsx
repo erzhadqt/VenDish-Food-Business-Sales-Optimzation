@@ -2,13 +2,15 @@ import React, { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import Searchbar from "../../Components/Searchbar";
 import api from "../../api";
-import { EditIcon, Trash2Icon, PlusSquareIcon, ListIcon, Settings } from "lucide-react";
+import { EditIcon, Trash2Icon, PlusSquareIcon, ListIcon, Settings, LockKeyhole } from "lucide-react";
 
 import EditProductDialog from "../../Components/EditProductDialog";
 import SuccessAlert from "../../Components/SuccessAlert";
 import DeleteConfirmDialog from "../../Components/DeleteConfirmDialog";
 import AddProductDialog from "../../Components/AddProductDialog";
 import ManageCategoryDialog from "../../Components/ManageCategoryDialog";
+// 🔴 Import the new Modal
+import ChangeVoidPinDialog from "../../Components/ChangeVoidPinDialog";
 
 function ProductList() {
   const [products, setProducts] = useState([]);
@@ -16,9 +18,11 @@ function ProductList() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showSuccess, setShowSuccess] = useState(false);
 
-  // New states for dynamic categories and the modal
   const [categories, setCategories] = useState([]);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  
+  // 🔴 State to control the Void PIN modal
+  const [pinModalOpen, setPinModalOpen] = useState(false);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const queryParam = searchParams.get("search") || "";
@@ -44,7 +48,6 @@ function ProductList() {
 
     let url = `/firstapp/products/?search=${query}`;
     
-    // 🔴 FIX: Change "&category=" to "&category__name=" to match the backend update
     if (category) url += `&category__name=${category}`;
 
     api
@@ -56,31 +59,25 @@ function ProductList() {
       .catch(() => setLoading(false));
   };
 
-  // Update URL params whenever search or category changes
   const handleSearch = (query, category) => {
     fetchProducts(query, category);
-
     const params = {};
     if (query) params.search = query;
     if (category) params.category = category;
-
     setSearchParams(params);
   };
 
-  // Load products AND categories on mount
   useEffect(() => {
     fetchProducts(queryParam, categoryParam);
     fetchCategories();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Refresh list + show success alert (ONLY FOR PRODUCTS)
   const handleUpdatedProduct = () => {
     fetchProducts(searchParams.get("search") || "", searchParams.get("category") || "");
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 2500);
   };
 
-  // Delete product
   const handleDeleteProduct = async (productId) => {
     try {
       await api.delete(`/firstapp/products/${productId}/`);
@@ -99,6 +96,17 @@ function ProductList() {
           <h1 className="flex items-center gap-2 text-3xl font-bold text-gray-900"><ListIcon size={26}/> Product List</h1>
 
           <div className="flex gap-2">
+
+            <div>
+              {/* 🔴 Added onClick to open the PIN Modal */}
+              <button 
+                onClick={() => setPinModalOpen(true)}
+                className="flex gap-2 items-center bg-gray-900 hover:bg-gray-700 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
+              >
+                <LockKeyhole size={26}/> Change Void Pin
+              </button>
+            </div>
+
             <div>
               <button 
                 onClick={() => setCategoryModalOpen(true)}
@@ -251,6 +259,12 @@ function ProductList() {
         </div>
       </div>
       
+      {/* 🔴 Mount the Change Void PIN Dialog */}
+      <ChangeVoidPinDialog 
+        open={pinModalOpen} 
+        onOpenChange={setPinModalOpen} 
+      />
+
       {/* Category Manager Dialog */}
       <ManageCategoryDialog 
         open={categoryModalOpen}

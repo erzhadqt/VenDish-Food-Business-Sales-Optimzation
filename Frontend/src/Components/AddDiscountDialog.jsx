@@ -1,10 +1,10 @@
 import React, { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/Components/ui/dialog";
-import { Button } from "@/Components/ui/button";
-import { Input } from "@/Components/ui/input";
-import { Label } from "@/Components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/Components/ui/select";
-import { Alert, AlertDescription, AlertTitle } from "@/Components/ui/alert";
+import { Button } from "../Components/ui/button";
+import { Input } from "../Components/ui/input";
+import { Label } from "../Components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../Components/ui/select";
+import { Alert, AlertDescription, AlertTitle } from "../Components/ui/alert";
 import { Wand2, Tag, CalendarClock, Hash, AlertCircle } from "lucide-react"; 
 import api from "../api"; 
 

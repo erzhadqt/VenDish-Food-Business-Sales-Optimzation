@@ -8,7 +8,7 @@ import {
   SelectLabel,
   SelectTrigger,
   SelectValue,
-} from "@/Components/ui/select";
+} from "../Components/ui/select";
 
 export function SelectDiscount({ value, options = [], onSelect }) {
   return (

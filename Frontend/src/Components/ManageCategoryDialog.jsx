@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/Components/ui/dialog";
-import { Button } from "@/Components/ui/button";
-import { Input } from "@/Components/ui/input";
-import { Label } from "@/Components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../Components/ui/dialog";
+import { Button } from "../Components/ui/button";
+import { Input } from "../Components/ui/input";
+import { Label } from "../Components/ui/label";
 import { Plus, Edit, Trash2, ArrowLeft, AlertCircle, CheckCircle2 } from "lucide-react"; 
 import api from "../api"; 
 import DeleteConfirmDialog from "./DeleteConfirmDialog"; 

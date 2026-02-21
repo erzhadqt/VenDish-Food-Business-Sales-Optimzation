@@ -8,7 +8,7 @@ import {
   AlertDialogFooter,
   AlertDialogCancel,
   AlertDialogAction,
-} from "@/Components/ui/alert-dialog";
+} from "../Components/ui/alert-dialog";
 
 import { Separator } from "@/Components/ui/separator";
 import { Tag, Printer } from "lucide-react"; 
