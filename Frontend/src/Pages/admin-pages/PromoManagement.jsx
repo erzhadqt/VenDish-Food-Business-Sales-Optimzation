@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/Components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/Components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../Components/ui/table";
 import { Plus, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react"; 
 import api from "../../api";
 import AddDiscountDialog from "../../Components/AddDiscountDialog"; 

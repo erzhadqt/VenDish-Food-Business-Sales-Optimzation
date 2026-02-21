@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Star, MessageSquare, TrendingUp, Eye, Trash2, Search } from 'lucide-react';
 import api from '../../api';
 import DeleteConfirmDialog from '../../Components/DeleteConfirmDialog'; // Add this import (adjust path if needed)
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/Components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../Components/ui/dialog";
 
 const CustomerFeedback = () => {
   const [activeTab, setActiveTab] = useState('customer'); // 'customer' or 'food'
