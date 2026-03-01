@@ -21,7 +21,6 @@ const DEFAULT_DATA = {
 const ContactPage = () => {
   const [content, setContent] = useState(DEFAULT_DATA);
 
-  // Load from LocalStorage
   useEffect(() => {
     const savedData = localStorage.getItem('contactContent');
     if (savedData) {
@@ -33,7 +32,6 @@ const ContactPage = () => {
     }
   }, []);
 
-  // Map the CMS content to the display array
   const contactInfo = [
     { 
       icon: Phone,
@@ -70,38 +68,44 @@ const ContactPage = () => {
   ];
 
   return (
-    <div className="w-full min-h-screen bg-linear-to-br from-white via-red-50 to-white pt-35">
+    <div className="w-full min-h-screen bg-linear-to-br from-white via-red-50 to-white pt-20 sm:pt-24 md:pt-32 lg:pt-36 flex flex-col justify-between">
       <Navigation />
       
-      <div className="max-w-7xl mx-auto px-6 animate-fade-in">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full animate-fade-in flex-grow">
         
         {/* Header Section */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-3">
+        <div className="text-center mb-10 md:mb-12">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-3">
             <span className="text-red-600">{content.header.highlight}</span> {content.header.suffix}
           </h1>
-          <p className="text-lg text-gray-600 max-w-xl mx-auto">
+          <p className="text-base sm:text-lg text-gray-600 max-w-xl mx-auto">
             {content.header.subtitle}
           </p>
         </div>
 
-        {/* Contact Info Grid */}
-        <div className="grid lg:grid-row-2 gap-10 items-center justify-center mb-16">
-          <div className="space-y-5">
+        {/* Contact Info Form / Grid */}
+        <div className="flex flex-col items-center justify-center mb-10 sm:mb-16 px-2">
+          <div className="w-full max-w-xs sm:max-w-md md:max-w-lg space-y-3 sm:space-y-4 md:space-y-5">
             {contactInfo.map((item, idx) => {
               const Icon = item.icon;
               return (
                 <a 
                   key={idx} 
                   href={item.link}
-                  className="flex items-center space-x-4 group cursor-pointer hover:scale-[1.02] transition-transform duration-300"
+                  className="flex flex-col sm:flex-row items-start sm:items-center gap-4 group cursor-pointer hover:scale-[1.02] transition-transform duration-300 w-full"
                 >
-                  <div className={`${item.color} ${item.iconColor} p-4 rounded-xl border`}>
-                    <Icon size={22} />
+                  <div className={`${item.color} ${item.iconColor} p-4 rounded-xl border shrink-0 hidden sm:flex`}>
+                    <Icon size={24} />
                   </div>
-                  <div className="w-100 bg-white border border-gray-100 p-4 rounded-xl shadow-sm">
-                    <div className="font-semibold text-gray-900">{item.value}</div>
-                    <div className="text-sm text-gray-600 mt-1">{item.label}</div>
+                  <div className="flex-1 w-full bg-white border border-gray-100 p-3 sm:p-4 md:p-5 rounded-xl shadow-sm flex items-center gap-3 sm:gap-4 sm:block">
+                    {/* Mobile icon inside card */}
+                    <div className={`${item.color} ${item.iconColor} p-3 rounded-xl border shrink-0 sm:hidden`}>
+                      <Icon size={20} />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-gray-900 text-sm sm:text-base break-words line-clamp-2">{item.value}</div>
+                      <div className="text-xs sm:text-sm text-gray-600 mt-1">{item.label}</div>
+                    </div>
                   </div>
                 </a>
               );

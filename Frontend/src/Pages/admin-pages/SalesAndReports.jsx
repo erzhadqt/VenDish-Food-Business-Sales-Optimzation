@@ -383,7 +383,7 @@ export default function SalesAndReports() {
     <div className="p-4 md:p-6 bg-linear-to-br from-gray-50 to-gray-100 min-h-screen">
       
       {/* HEADER */}
-      <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-800 mb-1">
             {viewMode === 'timeline' ? 'Financial Reports' : 'Staff Performance'}
@@ -552,9 +552,9 @@ export default function SalesAndReports() {
             </div>
 
             {/* TABLE */}
-            <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+            <div className="bg-white rounded-xl shadow-lg overflow-hidden mt-6">
                 <div className="overflow-x-auto">
-                <table className="min-w-full">
+                <table className="min-w-[800px] w-full">
                     <thead>
                     <tr className="bg-gray-800 text-white">
                         <th onClick={() => handleSort('report_date')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Date {sortConfig.key === 'report_date' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>

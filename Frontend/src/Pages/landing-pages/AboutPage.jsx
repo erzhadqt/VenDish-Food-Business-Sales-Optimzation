@@ -3,14 +3,12 @@ import { Star, Quote, Heart } from 'lucide-react';
 import Navigation from '../../Components/Navigation';
 import Footer from '../../Components/Footer';
 
-// 1. Map Icon Strings to Components
 const ICON_MAP = {
   'Heart': Heart,
   'Star': Star,
   'Quote': Quote
 };
 
-// 2. Default Data
 const DEFAULT_DATA = {
   header: {
     line1: "WE'RE MORE",
@@ -44,7 +42,6 @@ const AboutPage = () => {
   const [currentTestimonial, setCurrentTestimonial] = useState(0);
   const [content, setContent] = useState(DEFAULT_DATA);
 
-  // 3. Load from LocalStorage
   useEffect(() => {
     const savedData = localStorage.getItem('aboutContent');
     if (savedData) {
@@ -57,29 +54,29 @@ const AboutPage = () => {
   }, []);
 
   return (
-    <div className="w-full min-h-screen bg-linear-to-b from-white via-red-50 to-white pt-40">
+    <div className="w-full min-h-screen bg-linear-to-b from-white via-red-50 to-white pt-20 sm:pt-24 md:pt-32 lg:pt-40 pb-16">
       <Navigation />
-      <div className="max-w-7xl mx-auto px-6 animate-fade-in">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 animate-fade-in">
 
-        {/* HEADER SECTION - CMS Controlled */}
-        <div className="text-center space-y-4">
-          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-bold leading-tight">
+        {/* HEADER SECTION */}
+        <div className="text-center space-y-2 sm:space-y-3 md:space-y-4 px-2 sm:px-0">
+          <h1 className="text-2xl xs:text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold leading-tight">
             {content.header.line1} <span className="text-red-600">{content.header.line1Highlight}</span> {content.header.line1End}{" "}
-            <span className="text-red-600">{content.header.line1Highlight2}</span>
+            <span className="text-red-600 block sm:inline">{content.header.line1Highlight2}</span>
           </h1>
-          <h2 className="text-3xl sm:text-5xl lg:text-6xl font-bold">
+          <h2 className="text-xl xs:text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mt-2">
             {content.header.line2} <span className="text-red-600">{content.header.line2Highlight}</span> {content.header.line2End}{" "}
             <span className="text-red-600">{content.header.line2Highlight2}</span>
           </h2>
         </div>
 
-        {/* VALUES SECTION - CMS Controlled */}
-        <div className="max-w-5xl mx-auto text-center pt-20">
-          <div className="grid sm:grid-cols-3 gap-8 mb-12">
+        {/* VALUES SECTION */}
+        <div className="max-w-5xl mx-auto text-center pt-10 sm:pt-16 md:pt-20 px-2 sm:px-0">
+          <div className="grid grid-cols-1 xs:grid-cols-3 sm:grid-cols-3 gap-4 sm:gap-8 mb-8 sm:mb-12">
             {content.values.map((val, i) => {
               const Icon = ICON_MAP[val.iconName] || Heart;
               return (
-                <div key={i} className="space-y-3">
+                <div key={i} className="space-y-3 p-4">
                   <div className="bg-red-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto">
                     <Icon className="text-red-600" size={30} />
                   </div>
@@ -90,9 +87,9 @@ const AboutPage = () => {
             })}
           </div>
 
-          {/* OUR STORY - CMS Controlled */}
-          <div className="bg-white rounded-2xl p-8 sm:p-10 shadow-lg border border-red-200 text-gray-700 text-base sm:text-lg leading-relaxed space-y-5">
-            <h3 className="text-center text-xl sm:text-2xl font-semibold text-gray-900 mb-4">
+          {/* OUR STORY */}
+          <div className="bg-white rounded-2xl p-5 sm:p-8 md:p-10 shadow-lg border border-red-200 text-gray-700 text-sm sm:text-base md:text-lg leading-relaxed space-y-4 sm:space-y-5 mx-0 sm:mx-2 md:mx-0">
+            <h3 className="text-center text-xl sm:text-2xl font-semibold text-gray-900 mb-2 sm:mb-4">
               {content.story.title}
             </h3>
             <p>{content.story.p1}</p>
@@ -103,30 +100,30 @@ const AboutPage = () => {
           </div>
         </div>
 
-        {/* TESTIMONIAL SECTION - CMS Controlled */}
-        <div className="text-center space-y-8 pt-30">
-          <div className="space-y-2">
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold">
-              WHAT <span className="text-red-600">PEOPLE</span> SAY ABOUT US
+        {/* TESTIMONIAL SECTION */}
+        <div className="text-center space-y-5 sm:space-y-6 md:space-y-8 pt-14 sm:pt-20 md:pt-28">
+          <div className="space-y-2 px-2">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold">
+              WHAT <span className="text-red-600">PEOPLE</span> SAY
             </h2>
-            <p className="text-gray-600 text-lg max-w-2xl mx-auto pb-10">
+            <p className="text-gray-600 text-base sm:text-lg max-w-2xl mx-auto pb-6 sm:pb-10">
               Hear from our happy customers who’ve shared meals and memories with us.
             </p>
           </div>
 
           {/* ACTIVE TESTIMONIAL */}
           {content.testimonials.length > 0 && (
-            <div className="bg-white rounded-3xl shadow-xl p-8 sm:p-10 border border-red-200 transition-all duration-300">
-              <div className="text-center space-y-6">
-                <div className="text-6xl text-red-600">"</div>
-                <p className="text-lg sm:text-xl text-gray-700 leading-relaxed italic max-w-3xl mx-auto">
+            <div className="bg-white rounded-3xl shadow-xl p-5 sm:p-8 md:p-10 border border-red-200 transition-all duration-300 mx-0 sm:mx-2 md:mx-0">
+              <div className="text-center space-y-4 sm:space-y-6">
+                <div className="text-5xl sm:text-6xl text-red-600 leading-none h-8 sm:h-12">"</div>
+                <p className="text-base sm:text-xl text-gray-700 leading-relaxed italic max-w-3xl mx-auto">
                   {content.testimonials[currentTestimonial]?.text}
                 </p>
                 <div className="pt-4 border-t border-gray-200">
-                  <div className="font-bold text-red-600 text-lg">
+                  <div className="font-bold text-red-600 text-base sm:text-lg">
                     {content.testimonials[currentTestimonial]?.author}
                   </div>
-                  <div className="text-gray-600 text-sm">
+                  <div className="text-gray-600 text-xs sm:text-sm">
                     {content.testimonials[currentTestimonial]?.role}
                   </div>
                 </div>
@@ -135,21 +132,21 @@ const AboutPage = () => {
           )}
 
           {/* TESTIMONIAL SELECTOR */}
-          <div className="flex flex-wrap justify-center gap-4 max-w-4xl mx-auto mt-6">
+          <div className="flex flex-col xs:flex-row flex-wrap justify-center gap-3 sm:gap-4 max-w-4xl mx-auto mt-4 sm:mt-6 px-2 sm:px-0">
             {content.testimonials.map((t, idx) => (
               <button
                 key={idx}
                 onClick={() => setCurrentTestimonial(idx)}
-                className={`flex-1 min-w-[250px] border rounded-xl p-4 transition-all duration-300 ${
+                className={`flex-1 w-full xs:w-auto sm:min-w-[200px] md:min-w-[250px] border rounded-xl p-3 sm:p-4 transition-all duration-300 ${
                   idx === currentTestimonial
                     ? 'border-red-600 bg-red-50 shadow-md'
                     : 'border-gray-200 bg-white hover:border-red-300'
                 }`}
               >
-                <p className="text-gray-600 text-sm line-clamp-2 mb-2 italic">
+                <p className="text-gray-600 text-xs sm:text-sm line-clamp-2 mb-2 italic">
                   {t.text}
                 </p>
-                <div className={`font-semibold text-sm ${
+                <div className={`font-semibold text-xs sm:text-sm ${
                   idx === currentTestimonial ? 'text-red-600' : 'text-gray-700'
                 }`}>
                   {t.author}
@@ -159,15 +156,15 @@ const AboutPage = () => {
           </div>
 
           {/* DOTS */}
-          <div className="flex justify-center mt-6 space-x-3">
+          <div className="flex justify-center mt-6 space-x-3 pb-10">
             {content.testimonials.map((_, idx) => (
               <button
                 key={idx}
                 onClick={() => setCurrentTestimonial(idx)}
-                className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                className={`h-3 rounded-full transition-all duration-300 ${
                   idx === currentTestimonial
                     ? 'bg-red-600 w-8'
-                    : 'bg-gray-300 hover:bg-red-400'
+                    : 'bg-gray-300 hover:bg-red-400 w-3'
                 }`}
                 aria-label={`View testimonial ${idx + 1}`}
               />

@@ -4,6 +4,10 @@
 
 /* @custom-variant dark (&:is(.dark *)); */
 
+html, body {
+  overflow-x: hidden;
+}
+
 @theme {
   --font-poppins: "Poppins", sans-serif;
   --font-sans: "Poppins", sans-serif; /* if you want Poppins to replace your default sans */

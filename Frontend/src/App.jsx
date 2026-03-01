@@ -43,36 +43,39 @@ function App() {
       
 
   return (
-      <Routes>
-      	<Route path="/" element={<HomePage />} />
-      	<Route path="/services" element={<ServicesPage />} />
-      	<Route path="/contact" element={<ContactPage />} />
-      	<Route path="/about" element={<AboutPage />} />
 
-      
-      	<Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-        	{/* <Route path="/admin" element={<Dashboard />} /> */}
-        	<Route path="/admin/menu" element={<MenuAndProducts />} />
-        	<Route path="/admin/sales" element={<SalesAndReports />} />
-        	<Route path="/admin/customerFeedback" element={<CustomerFeedback />} />
-        	<Route path="/admin/userManagement" element={<UserManagement />} />
-        	<Route path="/admin/transaction" element={<Transaction />} />
-        	<Route path="/admin/cms" element={<CMS />} />
-        	<Route path="/admin/promo-management" element={<PromoManagement />} />
-        	<Route path="/admin/costing-table" element={<CostingTable />} />
-			<Route path="/admin/pos" element={<Pos />} />
-      	</Route>
+		<div className="w-full overflow-x-hidden">
+			<Routes>
+				<Route path="/" element={<HomePage />} />
+				<Route path="/services" element={<ServicesPage />} />
+				<Route path="/contact" element={<ContactPage />} />
+				<Route path="/about" element={<AboutPage />} />
 
-      	<Route path="/kuyavincekarinderya" element={<Login />} />
-      	<Route path="/kuyavincekarinderya-signup" element={<RegisterAndLogout />} />
-      	<Route path="/logout" element={<Logout />} />
-      
-      	
-        
-      	<Route path="/*" element={<NotFound />} />
-      	<Route path="/notadmin" element={<NotAdmin />} />
-          
-    </Routes>
+			
+				<Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+					{/* <Route path="/admin" element={<Dashboard />} /> */}
+					<Route path="/admin/menu" element={<MenuAndProducts />} />
+					<Route path="/admin/sales" element={<SalesAndReports />} />
+					<Route path="/admin/customerFeedback" element={<CustomerFeedback />} />
+					<Route path="/admin/userManagement" element={<UserManagement />} />
+					<Route path="/admin/transaction" element={<Transaction />} />
+					<Route path="/admin/cms" element={<CMS />} />
+					<Route path="/admin/promo-management" element={<PromoManagement />} />
+					<Route path="/admin/costing-table" element={<CostingTable />} />
+					<Route path="/admin/pos" element={<Pos />} />
+				</Route>
+
+				<Route path="/kuyavincekarinderya" element={<Login />} />
+				<Route path="/kuyavincekarinderya-signup" element={<RegisterAndLogout />} />
+				<Route path="/logout" element={<Logout />} />
+			
+				
+				
+				<Route path="/*" element={<NotFound />} />
+				<Route path="/notadmin" element={<NotAdmin />} />
+				
+			</Routes>
+		</div>
   )
 }
 

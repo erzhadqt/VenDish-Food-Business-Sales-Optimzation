@@ -3,7 +3,6 @@ import { Utensils, Users, PartyPopper, Clock, Heart, CheckCircle, Star } from 'l
 import Navigation from '../../Components/Navigation';
 import Footer from '../../Components/Footer';
 
-// 1. Map String Names to Actual Components
 const ICON_MAP = {
   'Clock': Clock,
   'Heart': Heart,
@@ -13,7 +12,6 @@ const ICON_MAP = {
   'Star': Star,
 };
 
-// 2. Default Data (Fallback)
 const DEFAULT_DATA = {
   header: {
     titlePrefix: "OUR",
@@ -52,7 +50,6 @@ const DEFAULT_DATA = {
 const ServicesPage = () => {
   const [content, setContent] = useState(DEFAULT_DATA);
 
-  // 3. Load Data from LocalStorage
   useEffect(() => {
     const savedData = localStorage.getItem('servicesContent');
     if (savedData) {
@@ -65,27 +62,26 @@ const ServicesPage = () => {
   }, []);
 
   return (
-    <div className="w-full min-h-screen bg-linear-to-br from-white via-red-50 to-white pt-40">
+    <div className="w-full min-h-screen bg-linear-to-br from-white via-red-50 to-white pt-20 sm:pt-24 md:pt-32 lg:pt-40 pb-10">
       <Navigation />
-      <div className="max-w-7xl mx-auto px-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
 
         {/* Header Section */}
-        <div className="text-center mb-16 animate-fade-in">
-          <h1 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-4">
+        <div className="text-center mb-10 sm:mb-12 lg:mb-16 animate-fade-in">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-3 sm:mb-4">
             {content.header.titlePrefix} <span className="text-red-600">{content.header.titleHighlight}</span>
           </h1>
-          <p className="text-gray-600 text-lg max-w-3xl mx-auto leading-relaxed">
+          <p className="text-gray-600 text-base md:text-lg max-w-3xl mx-auto leading-relaxed">
             {content.header.description}
           </p>
         </div>
 
         {/* Services Section */}
-        <div className="grid lg:grid-cols-2 gap-12 items-center mb-20 animate-fade-in">
+        <div className="grid lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-12 items-center mb-12 sm:mb-16 lg:mb-20 animate-fade-in">
           
           {/* Service Cards */}
-          <div className="grid sm:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 gap-4 sm:gap-6">
             {content.services.map((service, idx) => {
-              // Get the icon component from the map, fallback to Utensils if not found
               const IconComponent = ICON_MAP[service.iconName] || Utensils;
 
               return (
@@ -97,40 +93,36 @@ const ServicesPage = () => {
                       : 'bg-white border-gray-200 hover:border-red-300 shadow-md'
                   }`}
                 >
-                  {/* Icon */}
-                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 ${
+                  <div className={`w-14 h-14 md:w-16 md:h-16 rounded-2xl flex items-center justify-center mb-4 ${
                     service.featured ? 'bg-white/20' : 'bg-red-100'
                   }`}>
                     <IconComponent 
-                      size={32} 
+                      size={28} 
                       className={service.featured ? 'text-white' : 'text-red-600'} 
                     />
                   </div>
 
-                  {/* Title */}
                   <div className="mb-3">
-                    <h3 className={`font-bold text-xl ${service.featured ? 'text-white' : 'text-gray-900'}`}>
+                    <h3 className={`font-bold text-lg md:text-xl ${service.featured ? 'text-white' : 'text-gray-900'}`}>
                       {service.title}
                     </h3>
-                    <p className={`font-semibold text-lg ${service.featured ? 'text-white/90' : 'text-red-600'}`}>
+                    <p className={`font-semibold text-base md:text-lg ${service.featured ? 'text-white/90' : 'text-red-600'}`}>
                       {service.subtitle}
                     </p>
                   </div>
 
-                  {/* Description */}
                   <p className={`text-sm mb-4 ${service.featured ? 'text-white/80' : 'text-gray-600'}`}>
                     {service.description}
                   </p>
 
-                  {/* Features */}
                   <ul className="space-y-2">
                     {service.features.map((feature, featureIdx) => (
-                      <li key={featureIdx} className="flex items-center space-x-2">
+                      <li key={featureIdx} className="flex items-start space-x-2">
                         <CheckCircle 
                           size={16} 
-                          className={service.featured ? 'text-white' : 'text-red-600'} 
+                          className={`mt-0.5 shrink-0 ${service.featured ? 'text-white' : 'text-red-600'}`} 
                         />
-                        <span className={service.featured ? 'text-white/90 text-xs' : 'text-gray-700 text-xs'}>
+                        <span className={service.featured ? 'text-white/90 text-xs md:text-sm' : 'text-gray-700 text-xs md:text-sm'}>
                           {feature}
                         </span>
                       </li>
@@ -141,29 +133,29 @@ const ServicesPage = () => {
             })}
           </div>
 
-          {/* Experience Highlight Box - Dynamic Data */}
-          <div className="bg-linear-to-br from-red-600 to-red-800 rounded-3xl p-10 text-white shadow-2xl relative overflow-hidden">
+          {/* Experience Highlight Box */}
+          <div className="bg-linear-to-br from-red-600 to-red-800 rounded-3xl p-6 sm:p-8 md:p-10 text-white shadow-2xl relative overflow-hidden mt-6 sm:mt-8 lg:mt-0">
             <div className="relative z-10 text-center space-y-6">
-              <div className="w-20 h-20 bg-white/20 rounded-2xl flex items-center justify-center mx-auto">
-                <Utensils size={40} className="text-white" />
+              <div className="w-14 h-14 sm:w-16 sm:h-16 md:w-20 md:h-20 bg-white/20 rounded-2xl flex items-center justify-center mx-auto">
+                <Utensils size={32} className="text-white md:w-10 md:h-10" />
               </div>
-              <h3 className="text-2xl font-bold">{content.highlightBox.title}</h3>
-              <p className="text-white/90 leading-relaxed max-w-md mx-auto">
+              <h3 className="text-xl md:text-2xl font-bold">{content.highlightBox.title}</h3>
+              <p className="text-white/90 text-sm md:text-base leading-relaxed max-w-md mx-auto">
                 {content.highlightBox.description}
               </p>
 
-              <div className="grid grid-cols-3 gap-4 pt-6 border-t border-white/20">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6 border-t border-white/20">
                 {content.highlightBox.stats.map((stat, idx) => (
-                  <div key={idx} className="text-center">
-                    <div className="text-2xl font-bold">{stat.value}</div>
-                    <div className="text-white/80 text-sm">{stat.label}</div>
+                  <div key={idx} className="text-center py-2 sm:py-0">
+                    <div className="text-xl md:text-2xl font-bold">{stat.value}</div>
+                    <div className="text-white/80 text-xs md:text-sm">{stat.label}</div>
                   </div>
                 ))}
               </div>
             </div>
             
-            <div className="absolute -top-10 -right-10 w-40 h-40 bg-pink-400 opacity-20 blur-3xl rounded-full"></div>
-            <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-yellow-400 opacity-20 blur-3xl rounded-full"></div>
+            <div className="absolute -top-10 -right-10 w-32 h-32 md:w-40 md:h-40 bg-pink-400 opacity-20 blur-3xl rounded-full"></div>
+            <div className="absolute -bottom-10 -left-10 w-32 h-32 md:w-40 md:h-40 bg-yellow-400 opacity-20 blur-3xl rounded-full"></div>
           </div>
         </div>
 
