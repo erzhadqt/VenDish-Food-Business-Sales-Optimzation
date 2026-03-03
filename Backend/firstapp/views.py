@@ -695,7 +695,7 @@ class UpdateVoidPinView(APIView):
         if not request.user.is_superuser:
             return Response({"error": "Only administrators can change the Void PIN."}, status=status.HTTP_403_FORBIDDEN)
 
-        current_pin = request.data.get('current_pin')
+        
         new_pin = request.data.get('new_pin')
 
         if not new_pin or len(str(new_pin)) < 4:
@@ -703,13 +703,6 @@ class UpdateVoidPinView(APIView):
 
         # Get or create the single global settings row (id=1)
         settings, _ = StoreSettings.objects.get_or_create(id=1)
-
-        # If a PIN already exists in the system, verify the current one first
-        if settings.void_pin:
-            if not current_pin:
-                return Response({"error": "Current PIN is required."}, status=status.HTTP_400_BAD_REQUEST)
-            if not check_password(str(current_pin), settings.void_pin):
-                return Response({"error": "Incorrect current PIN."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Hash the new PIN and save it globally
         settings.void_pin = make_password(str(new_pin))

@@ -34,8 +34,20 @@ SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(days=1),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    # It's safer to keep access tokens short and refresh tokens long
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60), 
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    
+    # Enable rotation so they get a new refresh token when they request a new access token
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": False, # Set to True later if you add 'rest_framework_simplejwt.token_blacklist'
+    
+    # Explicitly tell Django to look for "Bearer <token>" in the headers
+    "AUTH_HEADER_TYPES": ("Bearer",),
+    
+    # Standard claims
+    "USER_ID_FIELD": "id",
+    "USER_ID_CLAIM": "user_id",
 }
 
 REST_FRAMEWORK = {

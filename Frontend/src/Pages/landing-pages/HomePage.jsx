@@ -78,7 +78,7 @@ const HomePage = () => {
               {content.hero.descriptionMiddle} 
               <span className="text-red-600 font-semibold"> {content.hero.cuisineType}</span> 
               {content.hero.descriptionEnd} 
-              <span className="font-semibold"> {content.hero.lolaText}</span> 
+              <span className="font-semibold mr-1"> {content.hero.lolaText}</span> 
               {content.hero.descriptionFinal}
             </p>
 

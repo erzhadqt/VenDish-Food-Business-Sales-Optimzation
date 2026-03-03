@@ -7,7 +7,7 @@ import { AlertCircle, CheckCircle2 } from "lucide-react";
 import api from "../api"; 
 
 export default function ChangeVoidPinDialog({ open, onOpenChange }) {
-  const [currentPin, setCurrentPin] = useState("");
+  // Removed currentPin state
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   
@@ -16,7 +16,6 @@ export default function ChangeVoidPinDialog({ open, onOpenChange }) {
   const [success, setSuccess] = useState("");
 
   const resetForm = () => {
-    setCurrentPin("");
     setNewPin("");
     setConfirmPin("");
     setError("");
@@ -45,22 +44,20 @@ export default function ChangeVoidPinDialog({ open, onOpenChange }) {
 
     setLoading(true);
     try {
-      // NOTE: You will need to create this endpoint in your Django backend
+      // Sent only new_pin to the backend
       await api.post("/update-void-pin/", {
-        current_pin: currentPin,
         new_pin: newPin
       });
 
       setSuccess("Void PIN successfully updated!");
       
-      // Auto-close after success
       setTimeout(() => {
         handleClose();
       }, 2000);
 
     } catch (error) {
       console.error("Error updating pin:", error);
-      setError(error.response?.data?.error || "Failed to update PIN. Please verify your current PIN.");
+      setError(error.response?.data?.error || "Failed to update PIN.");
     } finally {
       setLoading(false);
     }
@@ -68,18 +65,16 @@ export default function ChangeVoidPinDialog({ open, onOpenChange }) {
 
   return (
     <Dialog open={open} onOpenChange={(val) => { if (!val) handleClose(); }}>
-      {/* Blurred Backdrop */}
       {open && <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" aria-hidden="true" />}
 
       <DialogContent className="sm:max-w-md z-50">
         <DialogHeader>
           <DialogTitle>Change Void PIN</DialogTitle>
           <DialogDescription>
-            Update the PIN required to authorize voided transactions in the POS.
+            Directly update the PIN required to authorize voided transactions.
           </DialogDescription>
         </DialogHeader>
 
-        {/* Feedback Messages */}
         {error && (
           <div className="bg-red-50 text-red-600 p-3 rounded-md flex items-center gap-2 border border-red-200 text-sm mt-2">
             <AlertCircle size={16} className="shrink-0" />
@@ -94,19 +89,8 @@ export default function ChangeVoidPinDialog({ open, onOpenChange }) {
         )}
 
         <form onSubmit={handleSubmit} className="grid gap-4 py-2">
-          <div className="space-y-2">
-            <Label htmlFor="currentPin">Current PIN</Label>
-            <Input 
-              id="currentPin"
-              type="password"
-              placeholder="Enter current PIN" 
-              value={currentPin} 
-              onChange={(e) => setCurrentPin(e.target.value)} 
-              required
-              autoFocus
-            />
-          </div>
-
+          {/* Current PIN field removed */}
+          
           <div className="space-y-2">
             <Label htmlFor="newPin">New PIN</Label>
             <Input 
@@ -117,6 +101,7 @@ export default function ChangeVoidPinDialog({ open, onOpenChange }) {
               onChange={(e) => setNewPin(e.target.value)} 
               required
               maxLength={6}
+              autoFocus
             />
           </div>
 
@@ -135,7 +120,7 @@ export default function ChangeVoidPinDialog({ open, onOpenChange }) {
 
           <DialogFooter className="mt-4">
             <Button type="button" variant="outline" onClick={handleClose}>Cancel</Button>
-            <Button type="submit" disabled={loading || !currentPin || !newPin || !confirmPin}>
+            <Button type="submit" disabled={loading || !newPin || !confirmPin}>
               {loading ? "Updating..." : "Update PIN"}
             </Button>
           </DialogFooter>
