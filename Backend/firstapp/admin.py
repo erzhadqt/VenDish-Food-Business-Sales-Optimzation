@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Product, Category, Receipt, ReceiptItem, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, DailySalesReport, CouponCriteria, Review, UserProfile, OTP, PasswordResetToken, StoreSettings
+from .models import Product, Category, Receipt, ReceiptItem, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, Review, UserProfile, OTP, PasswordResetToken, StoreSettings
 
 # Register your models here
 
@@ -8,7 +8,6 @@ admin.site.register(Product)
 admin.site.register(Category)
 admin.site.register(Receipt)
 admin.site.register(ReceiptItem)
-admin.site.register(DailySalesReport)
 
 admin.site.register(OTP)
 admin.site.register(PasswordResetToken)

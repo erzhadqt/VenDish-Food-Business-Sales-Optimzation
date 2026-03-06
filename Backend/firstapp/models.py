@@ -197,54 +197,6 @@ class ReceiptItem(models.Model):
     def __str__(self):
         return f"{self.quantity} × {self.product_name}"
 
-class DailySalesReport(models.Model):
-    report_date = models.DateField(unique=True)
-    total_revenue = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
-    total_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
-    net_profit = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
-    total_orders = models.PositiveIntegerField(default=0)
-    voided_orders = models.PositiveIntegerField(default=0)
-    top_selling_product = models.CharField(max_length=100, blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f"Report: {self.report_date} | Profit: {self.net_profit}"
-
-    def generate_report(self):
-        receipts = Receipt.objects.filter(created_at__date=self.report_date)
-        completed_receipts = receipts.filter(status=Receipt.Status.COMPLETED)
-        self.total_revenue = completed_receipts.aggregate(Sum('total'))['total__sum'] or 0.00
-        self.total_orders = completed_receipts.count()
-        self.voided_orders = receipts.filter(status=Receipt.Status.VOIDED).count()
-
-        total_cost_accumulated = 0
-        items_sold = ReceiptItem.objects.filter(receipt__in=completed_receipts)
-
-        for item in items_sold:
-            if item.product and hasattr(item.product, 'costing'):
-                cost_per_unit = item.product.costing.total_cost()
-                total_cost_accumulated += (cost_per_unit * item.quantity)
-        
-        self.total_cost = total_cost_accumulated
-        self.net_profit = float(self.total_revenue) - float(self.total_cost)
-
-        top_item = items_sold.values('product_name').annotate(
-            total_qty=Sum('quantity')
-        ).order_by('-total_qty').first()
-
-        if top_item:
-            self.top_selling_product = top_item['product_name']
-
-        self.save()
-
-    @receiver(post_save, sender=Receipt)
-    def update_sales_report(sender, instance, created, **kwargs):
-        if instance.created_at:
-            date = instance.created_at.date()
-            report, _ = DailySalesReport.objects.get_or_create(report_date=date)
-            report.generate_report()
-
 class Review(models.Model):
     REVIEW_TYPES = [
         ('shop', 'Shop Review'),

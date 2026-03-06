@@ -25,8 +25,6 @@ export default function SalesAndReports() {
   const [reports, setReports] = useState([]); 
   const [staffReports, setStaffReports] = useState([]); 
   const [loading, setLoading] = useState(true);
-  const [allReceipts, setAllReceipts] = useState([]); 
-  const [originalReports, setOriginalReports] = useState([]); 
 
   const [cashierOptions, setCashierOptions] = useState([]); 
   const [filterCashier, setFilterCashier] = useState("ALL"); 
@@ -45,7 +43,6 @@ export default function SalesAndReports() {
     const getUserData = async () => {
       try {
         const response = await api.get('/firstapp/user/me/');
-        // Allow BOTH Staff and Superusers to access admin features
         if (response.data.is_staff || response.data.is_superuser) {
             setIsAdmin(true);
         }
@@ -56,77 +53,35 @@ export default function SalesAndReports() {
     getUserData();
   }, []);
 
-  // 2. FETCH REPORTS
-  const fetchReports = async () => {
+  // 2. FETCH REPORTS DYNAMICALLY
+  const fetchReports = async (cashierFilter = "ALL") => {
     setLoading(true);
     try {
-      // A. Fetch Timeline Data (Global Sales)
-      const timelineRes = await api.get('/firstapp/sales/');
-      setOriginalReports(timelineRes.data); 
+      // 1. Fetch Timeline Data from Backend (Pass the cashier filter directly)
+      const queryParam = cashierFilter !== "ALL" ? `?cashier=${encodeURIComponent(cashierFilter)}` : "";
+      const timelineRes = await api.get(`/firstapp/sales/${queryParam}`);
       setReports(timelineRes.data);         
 
-      // B. Fetch Data for Filters (Receipts & Users)
-      // We check the token/user state here, but we also rely on the API call succeeding
-      try {
-          // Fetch Receipts and Users in parallel
-          const [receiptsRes, usersRes] = await Promise.all([
-            api.get('/firstapp/receipt/'),
-            api.get('/firstapp/users/')
-          ]);
+      // 2. Fetch Staff Data & Users for Filters (Admin Only)
+      if (isAdmin) {
+          // Fetch pre-aggregated staff performance from the backend
+          const staffRes = await api.get('/firstapp/sales/by-staff/');
+          setStaffReports(staffRes.data);
 
-          const receipts = receiptsRes.data;
-          const allUsers = usersRes.data;
-          
-          setAllReceipts(receipts); 
-
-          // 1. Prepare Cashier List & Staff Data
-          const staffMap = {};
+          // Fetch users just to populate the cashier dropdown
+          const usersRes = await api.get('/firstapp/users/');
           const uniqueCashiers = new Set();
-
-          // A. Add ALL Users to the list (Broadened to ensure your accounts show up)
-          if (Array.isArray(allUsers)) {
-             allUsers.forEach(u => {
-                 // Logic: Include if they are staff, superuser, OR have "cashier"/"staff" in name
-                 // OR simply include everyone to be safe for now.
+          
+          if (Array.isArray(usersRes.data)) {
+             usersRes.data.forEach(u => {
                  const isRelevant = u.is_staff || u.is_superuser || 
                                     u.username.toLowerCase().includes('cashier') || 
                                     u.username.toLowerCase().includes('staff');
-                 
-                 if (isRelevant) {
-                     uniqueCashiers.add(u.username);
-                     // Initialize stats
-                     if (!staffMap[u.username]) {
-                         staffMap[u.username] = { name: u.username, revenue: 0, orders: 0 };
-                     }
-                 }
+                 if (isRelevant) uniqueCashiers.add(u.username);
              });
           }
-
-          // B. Process Receipts to calculate Revenue
-          receipts.forEach(receipt => {
-            const cashierName = receipt.cashier_name || 'Unknown';
-            
-            // Ensure this cashier is in our unique list (even if deleted)
-            if (cashierName !== 'Unknown') {
-                uniqueCashiers.add(cashierName);
-            }
-
-            if(receipt.status === 'COMPLETED') {
-                if (!staffMap[cashierName]) {
-                    staffMap[cashierName] = { name: cashierName, revenue: 0, orders: 0 };
-                }
-                staffMap[cashierName].revenue += parseFloat(receipt.total || 0);
-                staffMap[cashierName].orders += 1;
-            }
-          });
-          
-          setStaffReports(Object.values(staffMap).sort((a, b) => b.revenue - a.revenue));
           setCashierOptions(Array.from(uniqueCashiers).sort());
-
-      } catch (err) {
-          console.error("Error fetching detailed filter data (User might not be admin or network error):", err);
       }
-      
     } catch (error) {
       console.error("Failed to fetch reports:", error);
     } finally {
@@ -134,93 +89,22 @@ export default function SalesAndReports() {
     }
   };
 
-  // Trigger fetch when component mounts or admin status changes
+  // Trigger fetch when component mounts or filter changes
   useEffect(() => {
-    fetchReports();
-  }, [isAdmin]);
+    fetchReports(filterCashier);
+  }, [isAdmin, filterCashier]);
 
   const refreshToday = async () => {
     try {
       setLoading(true);
       await api.post('/firstapp/sales/refresh-today/');
-      await fetchReports(); 
+      await fetchReports(filterCashier); 
     } catch (error) {
       console.error("Failed to refresh today's report:", error);
     } finally {
       setLoading(false);
     }
   };
-
-  // 3. HANDLE CASHIER FILTERING LOGIC
-  useEffect(() => {
-    if (filterCashier === 'ALL') {
-        if (originalReports.length > 0) {
-            setReports(originalReports);
-        }
-        return;
-    }
-
-    const groupedData = {};
-
-    allReceipts.forEach(receipt => {
-        const rCashier = receipt.cashier_name || 'Unknown';
-        if (rCashier !== filterCashier) return;
-
-        const dateObj = new Date(receipt.created_at);
-        const dateKey = receipt.created_at ? format(dateObj, 'yyyy-MM-dd') : 'N/A';
-
-        if (!groupedData[dateKey]) {
-            groupedData[dateKey] = {
-                report_date: dateKey,
-                total_revenue: 0,
-                total_orders: 0,
-                voided_orders: 0,
-                top_selling_product: "N/A",
-                itemCounts: {} 
-            };
-        }
-
-        if (receipt.status === 'COMPLETED') {
-            groupedData[dateKey].total_revenue += parseFloat(receipt.total || 0);
-            groupedData[dateKey].total_orders += 1;
-
-            if (Array.isArray(receipt.items)) {
-                receipt.items.forEach(item => {
-                    const pName = item.product_name || item.name || 'Unknown Item';
-                    const qty = parseFloat(item.quantity || 1);
-                    
-                    if (!groupedData[dateKey].itemCounts[pName]) {
-                        groupedData[dateKey].itemCounts[pName] = 0;
-                    }
-                    groupedData[dateKey].itemCounts[pName] += qty;
-                });
-            }
-
-        } else if (receipt.status === 'VOIDED') {
-            groupedData[dateKey].voided_orders += 1;
-        }
-    });
-
-    const calculatedReports = Object.values(groupedData).map(dayReport => {
-        let topProduct = "N/A";
-        let maxCount = 0;
-
-        if (dayReport.itemCounts) {
-            Object.entries(dayReport.itemCounts).forEach(([name, count]) => {
-                if (count > maxCount) {
-                    maxCount = count;
-                    topProduct = name;
-                }
-            });
-            delete dayReport.itemCounts; 
-        }
-
-        return { ...dayReport, top_selling_product: topProduct };
-    }).sort((a, b) => new Date(b.report_date) - new Date(a.report_date));
-
-    setReports(calculatedReports);
-
-  }, [filterCashier, allReceipts, originalReports]);
 
   // --- DATA FILTERING (Timeline) ---
   const filteredReports = useMemo(() => {
@@ -396,8 +280,6 @@ export default function SalesAndReports() {
         </div>
         
         <div className="flex gap-2">
-            {/* --- ADMIN TOGGLE: Cashier Filter --- */}
-            {/* We show this if isAdmin is true, regardless of superuser status */}
             {isAdmin && viewMode === 'timeline' && (
                 <div className="flex items-center bg-white border border-gray-300 rounded-lg px-2">
                     <span className="text-xs text-gray-500 mr-2 font-medium uppercase">Filter:</span>

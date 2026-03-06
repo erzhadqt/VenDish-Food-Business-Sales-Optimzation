@@ -22,9 +22,9 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.permissions import AllowAny
 
 from .serializers import (
-    UserSerializer, FeedbackSerializer, ProductSerializer, CategorySerializer, ReceiptSerializer, CouponSerializer, HomePageSerializer, ServicesPageSerializer, AboutPageSerializer, ContactPageSerializer, DailySalesReportSerializer, CouponCriteriaSerializer, StaffPerformanceSerializer, ReviewSerializer, OTPSerializer
+    UserSerializer, FeedbackSerializer, ProductSerializer, CategorySerializer, ReceiptSerializer, CouponSerializer, HomePageSerializer, ServicesPageSerializer, AboutPageSerializer, ContactPageSerializer, CouponCriteriaSerializer, StaffPerformanceSerializer, ReviewSerializer, OTPSerializer
 )   
-from .models import Product, Category, Receipt, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, DailySalesReport, CouponCriteria, ReceiptItem, Review, OTP, PasswordResetToken, StoreSettings
+from .models import Product, Category, Receipt, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, ReceiptItem, Review, OTP, PasswordResetToken, StoreSettings
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 
 
@@ -386,8 +386,12 @@ class DailySalesReportViewSet(viewsets.ViewSet):
         queryset = Receipt.objects.filter(status='COMPLETED')
         user = request.user
         
+        cashier_filter = request.query_params.get('cashier', None)
+
         if not user.is_superuser:
             queryset = queryset.filter(cashier=user)
+        elif cashier_filter: 
+            queryset = queryset.filter(cashier__username=cashier_filter)
         
         report_data = (
             queryset
@@ -403,6 +407,8 @@ class DailySalesReportViewSet(viewsets.ViewSet):
         void_queryset = Receipt.objects.filter(status='VOIDED')
         if not user.is_superuser:
             void_queryset = void_queryset.filter(cashier=user)
+        elif cashier_filter:
+            void_queryset = void_queryset.filter(cashier__username=cashier_filter)
             
         void_data = (
             void_queryset

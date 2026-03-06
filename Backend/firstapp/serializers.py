@@ -3,7 +3,7 @@ from rest_framework import serializers
 from django.db import transaction
 from django.utils import timezone
 
-from .models import Product, Category, Receipt, ReceiptItem, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, DailySalesReport, CouponCriteria, Review, UserProfile, OTP
+from .models import Product, Category, Receipt, ReceiptItem, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, Review, UserProfile, OTP
 
 class UserSerializer(serializers.ModelSerializer):
     # [NEW] Map fields from the Profile relationship
@@ -211,16 +211,6 @@ class ReceiptSerializer(serializers.ModelSerializer):
             ReceiptItem.objects.bulk_create(items_to_create)
 
         return receipt
-
-class DailySalesReportSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = DailySalesReport
-        fields = [
-            'id', 'report_date', 'total_revenue', 'total_cost', 
-            'net_profit', 'total_orders', 'voided_orders', 
-            'top_selling_product', 'updated_at'
-        ]
-        read_only_fields = fields
 
 class ReviewSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
