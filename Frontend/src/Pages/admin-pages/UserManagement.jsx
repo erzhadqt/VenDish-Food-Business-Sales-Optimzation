@@ -7,17 +7,23 @@ import {
   UserRoundPen, 
   ChevronLeft, 
   ChevronRight,
-  Filter 
+  Filter,
+  EllipsisVertical
 } from "lucide-react";
 
 import UpdateUserDialog from "../../Components/UpdateUserDialog";
 import ConfirmDeleteUserDialog from "../../Components/ConfirmDeleteUserDialog";
 import AddUserDialog from "../../Components/AddUserDialog";
 import SuccessAlert from "../../Components/SuccessAlert";
+import UserDetailsModal from "../../Components/UserDetailsModal";
 
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
+  
+  // State to manage the user whose details are being viewed in the modal
+  const [viewDetailsUser, setViewDetailsUser] = useState(null); 
+  
   const [loading, setLoading] = useState(false);
   
   // Alert State
@@ -154,19 +160,15 @@ export default function UserManagement() {
                   <tr>
                     <th className="py-3.5 px-3 text-left text-sm font-semibold text-gray-700">Username</th>
                     <th className="py-3.5 px-3 text-left text-sm font-semibold text-gray-700">Email</th>
-                    <th className="py-3.5 px-3 text-left text-sm font-semibold text-gray-700">First Name</th>
-                    <th className="py-3.5 px-3 text-left text-sm font-semibold text-gray-700">Middle Name</th>
-                    <th className="py-3.5 px-3 text-left text-sm font-semibold text-gray-700">Last Name</th>
-                    <th className="py-3.5 px-3 text-left text-sm font-semibold text-gray-700">Phone</th>
-                    <th className="py-3.5 px-3 text-left text-sm font-semibold text-gray-700">Address</th>
                     <th className="py-3.5 px-3 text-left text-sm font-semibold text-gray-700">Role</th>
+                    <th className="py-3.5 px-3 text-left text-sm font-semibold text-gray-700">Status</th>
                     <th className="py-3.5 px-3 text-center text-sm font-semibold text-gray-700">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {paginatedUsers.length === 0 ? (
                       <tr>
-                        <td colSpan="9" className="py-8 text-center text-gray-500">
+                        <td colSpan="5" className="py-8 text-center text-gray-500">
                            No users found for this filter.
                         </td>
                       </tr>
@@ -178,12 +180,6 @@ export default function UserManagement() {
                       >
                         <td className="py-3 px-3 text-sm font-medium text-gray-900">{u.username}</td>
                         <td className="py-3 px-3 text-sm text-gray-600">{u.email}</td>
-                        <td className="py-3 px-3 text-sm text-gray-600">{u.first_name}</td>
-                        <td className="py-3 px-3 text-sm text-gray-500">{u.middle_name || "N/A"}</td>
-                        <td className="py-3 px-3 text-sm text-gray-600">{u.last_name}</td>
-                        <td className="py-3 px-3 text-sm text-gray-600">{u.phone || "N/A"}</td>
-                        <td className="py-3 px-3 text-sm text-gray-600 truncate max-w-[150px]" title={u.address}>{u.address || "N/A"}</td>
-
                         <td className="py-3 px-3 text-sm">
                           {u.is_staff ? (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
@@ -195,21 +191,47 @@ export default function UserManagement() {
                             </span>
                           )}
                         </td>
+                        
+                        {/* New Status Column */}
+                        <td className="py-3 px-3 text-sm">
+                          {u.is_active !== false ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 border border-green-200">
+                              Active
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+                              Deactivated
+                            </span>
+                          )}
+                        </td>
+
                         <td className="py-3 px-3">
-                          <div className="flex justify-center gap-1">
+                          <div className="flex justify-center items-center gap-1">
+                            {/* Personal Details Ellipsis Button */}
+                            <button
+                              onClick={() => setViewDetailsUser(u)}
+                              className="p-2 hover:bg-gray-200 rounded-md transition-colors duration-150"
+                              title="View Personal Details"
+                            >
+                              <EllipsisVertical size={20} className="text-gray-500" />
+                            </button>
+
+                            {/* Edit Button */}
                             <button
                               onClick={() => setSelectedUser(u)}
                               className="p-2 hover:bg-gray-100 rounded-md transition-colors duration-150"
+                              title="Edit User"
                             >
                               <UserRoundPen size={20} className="text-green-500" />
                             </button>
   
+                            {/* Delete Button */}
                             <ConfirmDeleteUserDialog
                               title="Delete User"
                               description="Are you sure you want to delete this user? This action cannot be undone."
                               onConfirm={() => handleDelete(u.id)}
                             >
-                              <button className="p-2 hover:bg-red-50 rounded-md transition-colors duration-150">
+                              <button className="p-2 hover:bg-red-50 rounded-md transition-colors duration-150" title="Delete User">
                                 <Trash2Icon size={20} className="text-red-600 hover:text-red-600" />
                               </button>
                             </ConfirmDeleteUserDialog>
@@ -247,6 +269,13 @@ export default function UserManagement() {
           </div>
         )}
       </div>
+
+      {/* Render the extracted details modal */}
+      <UserDetailsModal 
+        isOpen={!!viewDetailsUser} 
+        onClose={() => setViewDetailsUser(null)} 
+        user={viewDetailsUser} 
+      />
 
       {selectedUser && (
         <UpdateUserDialog
