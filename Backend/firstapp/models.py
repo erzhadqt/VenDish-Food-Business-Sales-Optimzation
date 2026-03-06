@@ -92,10 +92,8 @@ class CouponCriteria(models.Model):
     discount_value = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text="Percentage or Fixed Amount")
     
     min_spend = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    min_quantity = models.PositiveIntegerField(default=0, help_text="Min total items in cart or min items of specific category")
     
     target_category = models.CharField(max_length=50, blank=True, null=True, help_text="If set, applies only to this category")
-    is_new_user_only = models.BooleanField(default=False)
     
     free_product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name='criteria_free_product')
     target_product = models.ForeignKey(
@@ -107,7 +105,6 @@ class CouponCriteria(models.Model):
         help_text="If set, the discount applies ONLY to this product, not the total bill."
     )
 
-    valid_from = models.DateTimeField(null=True, blank=True)
     valid_to = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
