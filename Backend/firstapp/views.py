@@ -64,7 +64,7 @@ class UserViewSet(viewsets.ModelViewSet):
     def deactivate_account(self, request):
         """
         Deactivates the user account after verifying the password.
-        Sets is_active=False.
+        Sets is_active=False and records the deactivation timestamp.
         """
         user = request.user
         password = request.data.get('password')
@@ -76,11 +76,15 @@ class UserViewSet(viewsets.ModelViewSet):
         if not user.check_password(password):
             return Response({"error": "Incorrect password."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Deactivate
+        # Deactivate User
         user.is_active = False
         user.save()
 
-        return Response({"message": "Account deactivated successfully."}, status=status.HTTP_200_OK)
+        # [NEW] Record the exact time of deactivation
+        user.profile.deactivated_at = timezone.now()
+        user.profile.save()
+
+        return Response({"message": "Account deactivated successfully. It will be permanently deleted in 30 days."}, status=status.HTTP_200_OK)
 
 class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = User.objects.all()
