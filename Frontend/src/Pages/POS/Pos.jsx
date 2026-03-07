@@ -232,6 +232,11 @@ const Pos = () => {
       return;
     }
 
+    if (appliedCoupons.length >= 2) {
+      setCouponError("Maximum of 2 coupons allowed per order.");
+      return;
+    }
+
     setCouponLoading(true);
     setCouponError("");
     
@@ -267,6 +272,14 @@ const Pos = () => {
         setCouponError(`Coupon is ${coupon.status}`);
         setCouponLoading(false);
         return;
+      }
+
+      if (coupon.criteria_details && parseFloat(coupon.criteria_details.min_spend) > 0) {
+        if (subTotal < parseFloat(coupon.criteria_details.min_spend)) {
+            setCouponError(`Minimum spend of ₱${coupon.criteria_details.min_spend} required.`);
+            setCouponLoading(false);
+            return;
+        }
       }
 
       // Handle Auto-Add Items

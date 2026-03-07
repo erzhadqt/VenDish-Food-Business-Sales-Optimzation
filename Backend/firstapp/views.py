@@ -137,6 +137,13 @@ class ReceiptViewSet(viewsets.ModelViewSet):
     # 1. CREATE RECEIPT (Checkout)
     # ---------------------------------------------------------
     def create(self, request, *args, **kwargs):
+        coupons_data = request.data.get('coupons', [])
+        if isinstance(coupons_data, list) and len(coupons_data) > 2:
+            return Response(
+                {"error": "Maximum of 2 coupons allowed per order."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         serializer = self.get_serializer(data=request.data)
 
         if serializer.is_valid():
@@ -167,6 +174,10 @@ class ReceiptViewSet(viewsets.ModelViewSet):
 
                         if coupon.criteria and coupon.criteria.valid_to and coupon.criteria.valid_to < timezone.now():
                             raise Exception(f"Coupon {coupon.code} has expired.")
+
+                        if coupon.criteria and coupon.criteria.min_spend > 0:
+                            if receipt.subtotal < coupon.criteria.min_spend:
+                                raise Exception(f"Coupon {coupon.code} requires a minimum spend of ₱{coupon.criteria.min_spend}.")
 
                         # RULE A: ONE USE PER USER (If customer is identified)
                         if target_customer:
