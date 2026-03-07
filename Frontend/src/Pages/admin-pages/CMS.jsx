@@ -26,7 +26,8 @@ const InputGroup = ({ label, value, onChange, type = "text" }) => (
 // --- DEFAULT STATES ---
 const DEFAULT_HOME = {
   hero: { line1Start: "SAVOR THE TASTE OF", line1Highlight: "LOVE", line1End: "AND TRADITION", line2Start: "IN EVERY", line2Highlight: "BITE" },
-  desc: { brandName: "Kuya Vince Karinderya", cuisineType: "Pinoy bayan cuisine", lolaText: "lola", start: "At", middle: ", we take pride in serving the best", end: "— flavorful, hearty, and made just like how", final: "used to cook." }
+  desc: { brandName: "Kuya Vince Karinderya", cuisineType: "Pinoy bayan cuisine", lolaText: "lola", start: "At", middle: ", we take pride in serving the best", end: "— flavorful, hearty, and made just like how", final: "used to cook." },
+  popularDishes: ["Chicken Adobo", "Pork Sisig", "Beef Sinigang", "Kare-Kare"],
 };
 const DEFAULT_SERVICES = {
   header: { titlePrefix: "OUR", titleHighlight: "SERVICES", description: "At Kuya Vince Karinderya, we extend our warm Filipino hospitality..." },
@@ -42,6 +43,12 @@ const DEFAULT_CONTACT = {
   info: { phone: "0912 345 6789", email: "kuyavince@example.com", address: "Cagayan de Oro City", facebookLink: "https://facebook.com", facebookLabel: "Kuya Vince Karinderya" }
 };
 
+const getLatestRecord = (data) => {
+  if (Array.isArray(data)) return data[data.length - 1] || null;
+  if (data && typeof data === 'object' && data.id) return data;
+  return null;
+};
+
 const CMS = () => {
   const [activeTab, setActiveTab] = useState('home');
   const [status, setStatus] = useState({ type: '', message: '' });
@@ -53,39 +60,122 @@ const CMS = () => {
   const [aboutData, setAboutData] = useState(DEFAULT_ABOUT);
   const [contactData, setContactData] = useState(DEFAULT_CONTACT);
 
-  // Only track ID for contact page since it goes to backend
-  const [contactPageId, setContactPageId] = useState(null);
+  const [pageIds, setPageIds] = useState({
+    home: null,
+    services: null,
+    about: null,
+    contact: null,
+  });
 
   // --- FETCH DATA ---
   useEffect(() => {
     const fetchData = async () => {
-      // 1. Fetch Contact Page from Backend (Kept for React Native App)
       try {
-        const contactRes = await api.get('/firstapp/contact-page/');
-        const cData = Array.isArray(contactRes.data) ? contactRes.data[contactRes.data.length - 1] : contactRes.data;
-        if (cData && cData.id) {
-           setContactPageId(cData.id);
-           setContactData({
-             header: { highlight: cData.header_highlight, suffix: cData.header_suffix, subtitle: cData.subtitle },
-             info: { phone: cData.phone_number, email: cData.email, address: cData.address, facebookLink: cData.fb_page, facebookLabel: cData.fb_label }
-           });
+        const [homeRes, servicesRes, aboutRes, contactRes] = await Promise.all([
+          api.get('/firstapp/home/'),
+          api.get('/firstapp/services-page/'),
+          api.get('/firstapp/about/'),
+          api.get('/firstapp/contact-page/'),
+        ]);
+
+        const homeApiData = getLatestRecord(homeRes.data);
+        const servicesApiData = getLatestRecord(servicesRes.data);
+        const aboutApiData = getLatestRecord(aboutRes.data);
+        const contactApiData = getLatestRecord(contactRes.data);
+
+        setPageIds({
+          home: homeApiData?.id || null,
+          services: servicesApiData?.id || null,
+          about: aboutApiData?.id || null,
+          contact: contactApiData?.id || null,
+        });
+
+        if (homeApiData) {
+          setHomeData({
+            hero: {
+              line1Start: homeApiData.line1_start,
+              line1Highlight: homeApiData.line1_highlight,
+              line1End: homeApiData.line1_end,
+              line2Start: homeApiData.line2_start,
+              line2Highlight: homeApiData.line2_highlight,
+            },
+            desc: {
+              start: homeApiData.description_start,
+              brandName: homeApiData.brand_name,
+              middle: homeApiData.description_middle,
+              cuisineType: homeApiData.cuisine_type,
+              end: homeApiData.description_end,
+              lolaText: homeApiData.lola_text,
+              final: homeApiData.description_final,
+            },
+            popularDishes: [
+              homeApiData.popular_dish_1,
+              homeApiData.popular_dish_2,
+              homeApiData.popular_dish_3,
+              homeApiData.popular_dish_4,
+            ].filter(Boolean),
+          });
+        }
+
+        if (servicesApiData) {
+          setServicesData({
+            header: {
+              titlePrefix: servicesApiData.title_prefix,
+              titleHighlight: servicesApiData.title_highlight,
+              description: servicesApiData.description,
+            },
+            s1: {
+              title: servicesApiData.s1_title,
+              subtitle: servicesApiData.s1_subtitle,
+              desc: servicesApiData.s1_desc,
+            },
+            s2: {
+              title: servicesApiData.s2_title,
+              subtitle: servicesApiData.s2_subtitle,
+              desc: servicesApiData.s2_desc,
+            },
+          });
+        }
+
+        if (aboutApiData) {
+          setAboutData({
+            header: {
+              line1: aboutApiData.line1,
+              line1Highlight: aboutApiData.line1_highlight,
+              line1End: aboutApiData.line1_end,
+              line1Highlight2: aboutApiData.line1_highlight2,
+              line2: aboutApiData.line2,
+              line2Highlight: aboutApiData.line2_highlight,
+              line2End: aboutApiData.line2_end,
+              line2Highlight2: aboutApiData.line2_highlight2,
+            },
+            story: {
+              title: aboutApiData.story_title,
+              p1: aboutApiData.story_p1,
+              p2: aboutApiData.story_p2,
+              footer: aboutApiData.footer_text,
+            },
+          });
+        }
+
+        if (contactApiData) {
+          setContactData({
+            header: {
+              highlight: contactApiData.header_highlight,
+              suffix: contactApiData.header_suffix,
+              subtitle: contactApiData.subtitle,
+            },
+            info: {
+              phone: contactApiData.phone_number,
+              email: contactApiData.email,
+              address: contactApiData.address,
+              facebookLink: contactApiData.fb_page,
+              facebookLabel: contactApiData.fb_label,
+            },
+          });
         }
       } catch (error) {
-        console.error("Failed to load Contact data from backend:", error);
-      }
-
-      // 2. Fetch Home, Services, and About from Local Storage
-      try {
-        const storedHome = localStorage.getItem('cms_home');
-        if (storedHome) setHomeData(JSON.parse(storedHome));
-
-        const storedServices = localStorage.getItem('cms_services');
-        if (storedServices) setServicesData(JSON.parse(storedServices));
-
-        const storedAbout = localStorage.getItem('cms_about');
-        if (storedAbout) setAboutData(JSON.parse(storedAbout));
-      } catch (error) {
-        console.error("Failed to parse local storage data:", error);
+        console.error("Failed to load CMS data from backend:", error);
       }
     };
     fetchData();
@@ -98,32 +188,103 @@ const CMS = () => {
 
     try {
         if (activeTab === 'home') {
-            // Save locally
-            localStorage.setItem('cms_home', JSON.stringify(homeData));
-            setStatus({ type: 'success', message: 'Saved HOME locally!' });
-        } 
-        else if (activeTab === 'services') {
-            // Save locally
-            localStorage.setItem('cms_services', JSON.stringify(servicesData));
-            setStatus({ type: 'success', message: 'Saved SERVICES locally!' });
-        } 
-        else if (activeTab === 'about') {
-            // Save locally
-            localStorage.setItem('cms_about', JSON.stringify(aboutData));
-            setStatus({ type: 'success', message: 'Saved ABOUT locally!' });
-        } 
-        else if (activeTab === 'contact') {
-            // Save to Backend
             const payload = {
-                header_highlight: contactData.header.highlight, header_suffix: contactData.header.suffix, subtitle: contactData.header.subtitle,
-                phone_number: contactData.info.phone, email: contactData.info.email, address: contactData.info.address, fb_page: contactData.info.facebookLink, fb_label: contactData.info.facebookLabel
+              line1_start: homeData.hero.line1Start,
+              line1_highlight: homeData.hero.line1Highlight,
+              line1_end: homeData.hero.line1End,
+              line2_start: homeData.hero.line2Start,
+              line2_highlight: homeData.hero.line2Highlight,
+              description_start: homeData.desc.start,
+              brand_name: homeData.desc.brandName,
+              description_middle: homeData.desc.middle,
+              cuisine_type: homeData.desc.cuisineType,
+              description_end: homeData.desc.end,
+              lola_text: homeData.desc.lolaText,
+              description_final: homeData.desc.final,
+              popular_dish_1: homeData.popularDishes?.[0] || "",
+              popular_dish_2: homeData.popularDishes?.[1] || "",
+              popular_dish_3: homeData.popularDishes?.[2] || "",
+              popular_dish_4: homeData.popularDishes?.[3] || "",
             };
 
-            if (contactPageId) {
-                await api.put(`/firstapp/contact-page/${contactPageId}/`, payload);
+            if (pageIds.home) {
+              await api.put(`/firstapp/home/${pageIds.home}/`, payload);
+            } else {
+              const res = await api.post('/firstapp/home/', payload);
+              if (res.data?.id) {
+                setPageIds(prev => ({ ...prev, home: res.data.id }));
+              }
+            }
+            setStatus({ type: 'success', message: 'Saved HOME to backend!' });
+        }
+        else if (activeTab === 'services') {
+            const payload = {
+              title_prefix: servicesData.header.titlePrefix,
+              title_highlight: servicesData.header.titleHighlight,
+              description: servicesData.header.description,
+              s1_title: servicesData.s1.title,
+              s1_subtitle: servicesData.s1.subtitle,
+              s1_desc: servicesData.s1.desc,
+              s2_title: servicesData.s2.title,
+              s2_subtitle: servicesData.s2.subtitle,
+              s2_desc: servicesData.s2.desc,
+            };
+
+            if (pageIds.services) {
+              await api.put(`/firstapp/services-page/${pageIds.services}/`, payload);
+            } else {
+              const res = await api.post('/firstapp/services-page/', payload);
+              if (res.data?.id) {
+                setPageIds(prev => ({ ...prev, services: res.data.id }));
+              }
+            }
+            setStatus({ type: 'success', message: 'Saved SERVICES to backend!' });
+        }
+        else if (activeTab === 'about') {
+            const payload = {
+              line1: aboutData.header.line1,
+              line1_highlight: aboutData.header.line1Highlight,
+              line1_end: aboutData.header.line1End,
+              line1_highlight2: aboutData.header.line1Highlight2,
+              line2: aboutData.header.line2,
+              line2_highlight: aboutData.header.line2Highlight,
+              line2_end: aboutData.header.line2End,
+              line2_highlight2: aboutData.header.line2Highlight2,
+              story_title: aboutData.story.title,
+              story_p1: aboutData.story.p1,
+              story_p2: aboutData.story.p2,
+              footer_text: aboutData.story.footer,
+            };
+
+            if (pageIds.about) {
+              await api.put(`/firstapp/about/${pageIds.about}/`, payload);
+            } else {
+              const res = await api.post('/firstapp/about/', payload);
+              if (res.data?.id) {
+                setPageIds(prev => ({ ...prev, about: res.data.id }));
+              }
+            }
+            setStatus({ type: 'success', message: 'Saved ABOUT to backend!' });
+        }
+        else if (activeTab === 'contact') {
+            const payload = {
+                header_highlight: contactData.header.highlight,
+                header_suffix: contactData.header.suffix,
+                subtitle: contactData.header.subtitle,
+                phone_number: contactData.info.phone,
+                email: contactData.info.email,
+                address: contactData.info.address,
+                fb_page: contactData.info.facebookLink,
+                fb_label: contactData.info.facebookLabel,
+            };
+
+            if (pageIds.contact) {
+                await api.put(`/firstapp/contact-page/${pageIds.contact}/`, payload);
             } else {
                 const res = await api.post('/firstapp/contact-page/', payload);
-                if (res.data && res.data.id) setContactPageId(res.data.id);
+                if (res.data?.id) {
+                  setPageIds(prev => ({ ...prev, contact: res.data.id }));
+                }
             }
             setStatus({ type: 'success', message: 'Saved CONTACT to backend!' });
         }
@@ -160,7 +321,7 @@ const CMS = () => {
             
             {/* Tabs */}
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                {[ {id:'home', icon: Layout, label:'Home (Local)'}, {id:'services', icon: Coffee, label:'Services (Local)'}, {id:'about', icon: Info, label:'About (Local)'}, {id:'contact', icon: Phone, label:'Contact (Backend)'} ].map(t => (
+              {[ {id:'home', icon: Layout, label:'Home'}, {id:'services', icon: Coffee, label:'Services'}, {id:'about', icon: Info, label:'About'}, {id:'contact', icon: Phone, label:'Contact'} ].map(t => (
                     <button key={t.id} onClick={() => setActiveTab(t.id)} className={`px-5 py-2.5 rounded-lg flex items-center gap-2 text-sm font-bold transition-all whitespace-nowrap ${activeTab === t.id ? 'bg-red-50 text-red-600 border border-red-100 shadow-sm' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
                         <t.icon size={16}/> {t.label}
                     </button>
@@ -207,6 +368,23 @@ const CMS = () => {
                             <InputGroup label="Final Text" value={homeData.desc.final} onChange={(v) => updateState(setHomeData, homeData, 'desc', 'final', v)} />
                         </div>
                     </section>
+                      <section className="bg-white p-6 border border-gray-200 rounded-xl shadow-sm">
+                        <h2 className="font-bold text-lg mb-6 text-gray-800 flex items-center gap-2"><span className="w-1.5 h-6 bg-red-500 rounded-full"></span>Popular Dishes</h2>
+                        <div className="grid md:grid-cols-2 gap-5">
+                          {[0, 1, 2, 3].map((idx) => (
+                            <InputGroup
+                              key={idx}
+                              label={`Dish ${idx + 1}`}
+                              value={homeData.popularDishes?.[idx] || ''}
+                              onChange={(v) => {
+                                const nextDishes = [...(homeData.popularDishes || [])];
+                                nextDishes[idx] = v;
+                                setHomeData({ ...homeData, popularDishes: nextDishes });
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </section>
                 </div>
             )}
 

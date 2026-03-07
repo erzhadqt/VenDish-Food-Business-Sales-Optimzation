@@ -7,7 +7,7 @@ import {
 } from "recharts";
 import { 
   format, startOfMonth, endOfMonth, isWithinInterval, parseISO, 
-  startOfWeek, endOfWeek, startOfYear, endOfYear 
+  startOfWeek, endOfWeek, startOfYear, endOfYear, startOfDay, endOfDay 
 } from "date-fns";
 import { 
   TrendingUp, Package, CalendarDays, 
@@ -114,7 +114,7 @@ export default function SalesAndReports() {
       
       if (period === "Daily") {
         return isWithinInterval(reportDate, { 
-          start: startOfMonth(selectedDate), end: endOfMonth(selectedDate) 
+          start: startOfDay(selectedDate), end: endOfDay(selectedDate)
         });
       } 
       else if (period === "Weekly") {
@@ -122,7 +122,12 @@ export default function SalesAndReports() {
           start: startOfWeek(selectedDate), end: endOfWeek(selectedDate) 
         });
       }
-      else if (period === "Monthly" || period === "Yearly") {
+      else if (period === "Monthly") {
+         return isWithinInterval(reportDate, {
+          start: startOfMonth(selectedDate), end: endOfMonth(selectedDate)
+        });
+      }
+      else if (period === "Yearly") {
          return isWithinInterval(reportDate, { 
           start: startOfYear(selectedDate), end: endOfYear(selectedDate) 
         });
@@ -135,7 +140,7 @@ export default function SalesAndReports() {
   const chartData = useMemo(() => {
     const getVal = (val) => parseFloat(val || 0);
 
-    if (period === "Daily" || period === "Weekly") {
+    if (period === "Daily" || period === "Weekly" || period === "Monthly") {
       return filteredReports.map(r => ({
         label: format(parseISO(r.report_date), "MMM dd"),
         revenue: getVal(r.total_revenue),
@@ -143,7 +148,7 @@ export default function SalesAndReports() {
       })).reverse(); 
     }
 
-    if (period === "Monthly") {
+    if (period === "Yearly") {
       const monthlyGroups = {};
       filteredReports.forEach(r => {
         const monthName = format(parseISO(r.report_date), "MMM");
@@ -212,7 +217,7 @@ export default function SalesAndReports() {
         dataToExport = staffReports.map(s => [
             `"${s.name}"`, 
             s.orders, 
-            s.revenue.toFixed(2)
+        Number.parseFloat(s.revenue || 0).toFixed(2)
         ]);
         filename = `staff-report-${format(new Date(), 'yyyy-MM-dd')}`;
     } else {
@@ -362,7 +367,7 @@ export default function SalesAndReports() {
                 </div>
                 <p className="text-blue-800 font-bold text-3xl">₱ {stats.totalRev.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
                 <p className="text-xs text-gray-400 mt-1">
-                    {filterCashier === 'ALL' ? 'Global Revenue' : `Rev. by ${filterCashier}`}
+                    {filterCashier === 'ALL' ? 'Overall Revenue' : `Rev. by ${filterCashier}`}
                 </p>
                 </div>
 
@@ -381,7 +386,7 @@ export default function SalesAndReports() {
                 </div>
                 <p className="text-purple-500 font-bold text-xl truncate">{stats.topSellerName}</p>
                 <p className="text-xs text-gray-400 mt-1">
-                     {filterCashier === 'ALL' ? 'Most frequent' : `Top item for ${filterCashier}`}
+                     {filterCashier === 'ALL' ? 'Most bought' : `Top item for ${filterCashier}`}
                 </p>
                 </div>
             </div>

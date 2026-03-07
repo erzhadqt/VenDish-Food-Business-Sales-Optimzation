@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Utensils, Users, PartyPopper, Clock, Heart, CheckCircle, Star } from 'lucide-react';
 import Navigation from '../../Components/Navigation';
 import Footer from '../../Components/Footer';
+import api from '../../api';
 
 const ICON_MAP = {
   'Clock': Clock,
@@ -51,14 +52,43 @@ const ServicesPage = () => {
   const [content, setContent] = useState(DEFAULT_DATA);
 
   useEffect(() => {
-    const savedData = localStorage.getItem('servicesContent');
-    if (savedData) {
+    const fetchServicesContent = async () => {
       try {
-        setContent(JSON.parse(savedData));
+        const response = await api.get('/firstapp/services-page/');
+        const apiData = Array.isArray(response.data)
+          ? response.data[response.data.length - 1]
+          : response.data;
+
+        if (!apiData) return;
+
+        setContent(prev => ({
+          ...prev,
+          header: {
+            titlePrefix: apiData.title_prefix,
+            titleHighlight: apiData.title_highlight,
+            description: apiData.description,
+          },
+          services: [
+            {
+              ...prev.services[0],
+              title: apiData.s1_title,
+              subtitle: apiData.s1_subtitle,
+              description: apiData.s1_desc,
+            },
+            {
+              ...prev.services[1],
+              title: apiData.s2_title,
+              subtitle: apiData.s2_subtitle,
+              description: apiData.s2_desc,
+            },
+          ],
+        }));
       } catch (error) {
-        console.error("CMS Load Error", error);
+        console.error("Error loading services CMS data", error);
       }
-    }
+    };
+
+    fetchServicesContent();
   }, []);
 
   return (

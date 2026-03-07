@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Star, Quote, Heart } from 'lucide-react';
 import Navigation from '../../Components/Navigation';
 import Footer from '../../Components/Footer';
+import api from '../../api';
 
 const ICON_MAP = {
   'Heart': Heart,
@@ -43,14 +44,40 @@ const AboutPage = () => {
   const [content, setContent] = useState(DEFAULT_DATA);
 
   useEffect(() => {
-    const savedData = localStorage.getItem('aboutContent');
-    if (savedData) {
+    const fetchAboutContent = async () => {
       try {
-        setContent(JSON.parse(savedData));
+        const response = await api.get('/firstapp/about/');
+        const apiData = Array.isArray(response.data)
+          ? response.data[response.data.length - 1]
+          : response.data;
+
+        if (!apiData) return;
+
+        setContent(prev => ({
+          ...prev,
+          header: {
+            line1: apiData.line1,
+            line1Highlight: apiData.line1_highlight,
+            line1End: apiData.line1_end,
+            line1Highlight2: apiData.line1_highlight2,
+            line2: apiData.line2,
+            line2Highlight: apiData.line2_highlight,
+            line2End: apiData.line2_end,
+            line2Highlight2: apiData.line2_highlight2,
+          },
+          story: {
+            title: apiData.story_title,
+            p1: apiData.story_p1,
+            p2: apiData.story_p2,
+            footer: apiData.footer_text,
+          },
+        }));
       } catch (e) {
-        console.error("Error loading CMS data", e);
+        console.error("Error loading about CMS data", e);
       }
-    }
+    };
+
+    fetchAboutContent();
   }, []);
 
   return (

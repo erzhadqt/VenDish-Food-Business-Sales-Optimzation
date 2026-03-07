@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Phone, Mail, MapPin, Facebook } from 'lucide-react';
 import Navigation from '../../Components/Navigation';
 import Footer from "../../Components/Footer";
+import api from '../../api';
 
 const DEFAULT_DATA = {
   header: {
@@ -22,14 +23,35 @@ const ContactPage = () => {
   const [content, setContent] = useState(DEFAULT_DATA);
 
   useEffect(() => {
-    const savedData = localStorage.getItem('contactContent');
-    if (savedData) {
+    const fetchContactContent = async () => {
       try {
-        setContent(JSON.parse(savedData));
+        const response = await api.get('/firstapp/contact-page/');
+        const apiData = Array.isArray(response.data)
+          ? response.data[response.data.length - 1]
+          : response.data;
+
+        if (!apiData) return;
+
+        setContent({
+          header: {
+            highlight: apiData.header_highlight,
+            suffix: apiData.header_suffix,
+            subtitle: apiData.subtitle,
+          },
+          info: {
+            phone: apiData.phone_number,
+            email: apiData.email,
+            address: apiData.address,
+            facebookLink: apiData.fb_page,
+            facebookLabel: apiData.fb_label,
+          },
+        });
       } catch (err) {
-        console.error("Failed to parse CMS data", err);
+        console.error("Error loading contact CMS data", err);
       }
-    }
+    };
+
+    fetchContactContent();
   }, []);
 
   const contactInfo = [

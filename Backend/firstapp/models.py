@@ -242,6 +242,11 @@ class HomePage(models.Model):
     lola_text = models.CharField(max_length=50, default="lola")
     description_final = models.CharField(max_length=100, default="used to cook.")
 
+    popular_dish_1 = models.CharField(max_length=100, default="Chicken Adobo")
+    popular_dish_2 = models.CharField(max_length=100, default="Pork Sisig")
+    popular_dish_3 = models.CharField(max_length=100, default="Beef Sinigang")
+    popular_dish_4 = models.CharField(max_length=100, default="Kare-Kare")
+
     def __str__(self): return "Home Page Content"
 
 class ServicesPage(models.Model):

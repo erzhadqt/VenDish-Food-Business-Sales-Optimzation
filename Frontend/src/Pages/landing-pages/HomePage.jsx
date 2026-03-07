@@ -5,6 +5,7 @@ import Navigation from '../../Components/Navigation';
 import Footer from '../../Components/Footer';
 import Carousel from '../../Components/Carousel';
 import TextAnimations from '../../Components/TextAnimations';
+import api from '../../api';
 
 const DEFAULT_CONTENT = {
   hero: {
@@ -29,14 +30,44 @@ const HomePage = () => {
   const [content, setContent] = useState(DEFAULT_CONTENT);
 
   useEffect(() => {
-    const savedData = localStorage.getItem('homepageContent');
-    if (savedData) {
+    const fetchHomeContent = async () => {
       try {
-        setContent(JSON.parse(savedData));
+        const response = await api.get('/firstapp/home/');
+        const apiData = Array.isArray(response.data)
+          ? response.data[response.data.length - 1]
+          : response.data;
+
+        if (!apiData) return;
+
+        setContent(prev => ({
+          ...prev,
+          hero: {
+            line1Start: apiData.line1_start,
+            line1Highlight: apiData.line1_highlight,
+            line1End: apiData.line1_end,
+            line2Start: apiData.line2_start,
+            line2Highlight: apiData.line2_highlight,
+            descriptionStart: apiData.description_start,
+            brandName: apiData.brand_name,
+            descriptionMiddle: apiData.description_middle,
+            cuisineType: apiData.cuisine_type,
+            descriptionEnd: apiData.description_end,
+            lolaText: apiData.lola_text,
+            descriptionFinal: apiData.description_final,
+          },
+          popularDishes: [
+            apiData.popular_dish_1,
+            apiData.popular_dish_2,
+            apiData.popular_dish_3,
+            apiData.popular_dish_4,
+          ].filter(Boolean),
+        }));
       } catch (e) {
-        console.error("Error parsing CMS data", e);
+        console.error("Error loading home CMS data", e);
       }
-    }
+    };
+
+    fetchHomeContent();
   }, []);
 
   const slides = [
