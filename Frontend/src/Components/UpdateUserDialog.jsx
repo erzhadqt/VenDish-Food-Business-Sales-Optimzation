@@ -29,38 +29,65 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
         const formData = new FormData(e.target);
         const values = Object.fromEntries(formData.entries());
 
+        const trimmedPassword = (values.password || "").trim();
+        if (!trimmedPassword) {
+            delete values.password;
+        } else {
+            values.password = trimmedPassword;
+        }
+
         // 1. Convert checkbox state (boolean) to the payload
         values.is_staff = isStaff;
 
     try {
-        console.log("Payload:", values); // Debugging: Log the payload
+        console.log("Payload:", values); 
       
-        // The API endpoint uses PUT/PATCH, which the UserSerializer handles correctly
-        await api.put(`/firstapp/users/${user.id}/`, values, {
+        await api.patch(`/firstapp/users/${user.id}/`, values, {
             headers: {
-            "Content-Type": "application/json", // Ensure JSON content type
+                "Content-Type": "application/json",
             },
         });
 
-        onSaved(); // Refresh the user list
-        onClose(); // Close the modal
-        } catch (err) {
+        onSaved(); 
+        onClose(); 
+    } catch (err) {
         console.error("Update User Error:", err.response?.data || err);
       
-      // Format the error message
+        // Format the error message
         let errorMessage = "Failed to update user.";
+        
         if (err.response?.data) {
-            errorMessage = typeof err.response.data === 'object' 
-            ? JSON.stringify(err.response.data) 
-            : String(err.response.data);
+            const errorData = err.response.data;
+            
+            // Check if there are specific password errors from Django
+            if (errorData.password && Array.isArray(errorData.password)) {
+                // Join multiple password errors with a space or new line
+                errorMessage = errorData.password.join(" ");
+            } 
+            // Handle other specific field errors dynamically
+            else if (typeof errorData === 'object') {
+                const errorMessages = [];
+                for (const [field, messages] of Object.entries(errorData)) {
+                    if (Array.isArray(messages)) {
+                        // Capitalize the field name (e.g., "email" -> "Email") and append the message
+                        const fieldName = field.charAt(0).toUpperCase() + field.slice(1);
+                        errorMessages.push(`${fieldName}: ${messages.join(" ")}`);
+                    } else {
+                        errorMessages.push(`${field}: ${messages}`);
+                    }
+                }
+                errorMessage = errorMessages.join(" | ");
+            } else {
+                errorMessage = String(errorData);
+            }
         } else if (err.message) {
             errorMessage = err.message;
-      }
+        }
       
         setError(errorMessage);
-        } finally {
+    } finally {
         setLoading(false);
-        }
+    }
     };
 
   const handleClose = () => {
@@ -146,8 +173,7 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
                 name="password"
                 id="password"
                 type="password"
-                defaultValue={user.password}
-                required
+                placeholder="Leave blank to keep current password"
                 maxLength={50}
                 />
             </div>

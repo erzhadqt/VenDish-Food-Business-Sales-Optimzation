@@ -1,4 +1,5 @@
 from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from django.db import transaction
 from django.utils import timezone
@@ -18,12 +19,29 @@ class UserSerializer(serializers.ModelSerializer):
         extra_kwargs = {"password": {"write_only": True},
                         "is_superuser": {"read_only": True}}
 
+    def validate_password(self, value):
+        if value is None or value == "":
+            return value
+
+        user = self.instance
+        if user is None:
+            user = User(
+                username=self.initial_data.get("username", ""),
+                email=self.initial_data.get("email", ""),
+                first_name=self.initial_data.get("first_name", ""),
+                last_name=self.initial_data.get("last_name", ""),
+            )
+
+        validate_password(value, user=user)
+        return value
+
     def create(self, validated_data):
         # Extract profile data from the validated data
         profile_data = validated_data.pop('profile', {})
+        password = validated_data.pop('password')
         
         # Create User
-        user = User.objects.create_user(**validated_data)
+        user = User.objects.create_user(password=password, **validated_data)
         
         # Update the automatically created profile with extra data
         if profile_data:
@@ -36,10 +54,15 @@ class UserSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         # Handle profile update
         profile_data = validated_data.pop('profile', {})
+        raw_password = validated_data.pop('password', None)
         
         # Update standard User fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+
+        if raw_password not in (None, ""):
+            instance.set_password(raw_password)
+
         instance.save()
 
         # Update Profile fields
@@ -128,7 +151,7 @@ class CouponSerializer(serializers.ModelSerializer):
         if obj.criteria.target_product: return obj.criteria.target_product.product_name
         if obj.criteria.free_product: return f"Free {obj.criteria.free_product.product_name}"
         if obj.criteria.target_category: return f"{obj.criteria.target_category} Special"
-        return "SWAKNASWAK"
+        return "OFF of any order"
 
     def get_description(self, obj):
         if not obj.criteria: return "Special exclusive discount."

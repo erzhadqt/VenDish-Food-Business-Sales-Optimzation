@@ -47,12 +47,33 @@ export default function AddUserDialog({ onSaved, children }) {
     } catch (err) {
       console.error("Failed to add user:", err.response?.data || err);
       
-      // Format the error message
+      // Format the error message neatly
       let errorMessage = "An unexpected error occurred.";
+      
       if (err.response?.data) {
-        errorMessage = typeof err.response.data === 'object' 
-          ? JSON.stringify(err.response.data) 
-          : String(err.response.data);
+        const errorData = err.response.data;
+        
+        // Check if there are specific password errors from Django
+        if (errorData.password && Array.isArray(errorData.password)) {
+          // Join multiple password errors with a space
+          errorMessage = errorData.password.join(" ");
+        } 
+        // Handle other specific field errors dynamically
+        else if (typeof errorData === 'object') {
+          const errorMessages = [];
+          for (const [field, messages] of Object.entries(errorData)) {
+            if (Array.isArray(messages)) {
+              // Capitalize the field name (e.g., "username" -> "Username")
+              const fieldName = field.charAt(0).toUpperCase() + field.slice(1);
+              errorMessages.push(`${fieldName}: ${messages.join(" ")}`);
+            } else {
+              errorMessages.push(`${field}: ${messages}`);
+            }
+          }
+          errorMessage = errorMessages.join(" | ");
+        } else {
+          errorMessage = String(errorData);
+        }
       } else if (err.message) {
         errorMessage = err.message;
       }

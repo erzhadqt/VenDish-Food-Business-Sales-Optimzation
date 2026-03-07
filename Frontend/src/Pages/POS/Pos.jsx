@@ -8,12 +8,18 @@ import VoidConfirmDialog from "../../Components/VoidConfirmDialog";
 import { SelectDiscount } from "../../Components/SelectDiscount";
 import AlertModal from "../../Components/AlertModal";
 
+const POS_STORAGE_KEYS = {
+  cart: "pos_cartItems",
+  promoCode: "pos_promoCode",
+  appliedCoupons: "pos_appliedCoupons",
+};
+
 const Pos = () => {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedDiscount, setSelectedDiscount] = useState(null); 
   const [cartItems, setCartItems] = useState(() => {
     try {
-      const savedCart = localStorage.getItem("pos_cartItems");
+      const savedCart = localStorage.getItem(POS_STORAGE_KEYS.cart);
       return savedCart ? JSON.parse(savedCart) : [];
     } catch (error) {
       console.error("Error loading cart from storage", error);
@@ -35,9 +41,25 @@ const Pos = () => {
   const [receiptDetails, setReceiptDetails] = useState(null);
   const [loading, setLoading] = useState(false);
   
-  const [promoCode, setPromoCode] = useState("");
+  const [promoCode, setPromoCode] = useState(() => {
+    try {
+      return localStorage.getItem(POS_STORAGE_KEYS.promoCode) || "";
+    } catch (error) {
+      console.error("Error loading promo code from storage", error);
+      return "";
+    }
+  });
   
-  const [appliedCoupons, setAppliedCoupons] = useState([]);
+  const [appliedCoupons, setAppliedCoupons] = useState(() => {
+    try {
+      const savedCoupons = localStorage.getItem(POS_STORAGE_KEYS.appliedCoupons);
+      const parsedCoupons = savedCoupons ? JSON.parse(savedCoupons) : [];
+      return Array.isArray(parsedCoupons) ? parsedCoupons : [];
+    } catch (error) {
+      console.error("Error loading applied coupons from storage", error);
+      return [];
+    }
+  });
   const [couponError, setCouponError] = useState("");
   const [couponLoading, setCouponLoading] = useState(false);
 
@@ -64,8 +86,16 @@ const Pos = () => {
   ];
 
   useEffect(() => {
-    localStorage.setItem("pos_cartItems", JSON.stringify(cartItems));
+    localStorage.setItem(POS_STORAGE_KEYS.cart, JSON.stringify(cartItems));
   }, [cartItems]);
+
+  useEffect(() => {
+    localStorage.setItem(POS_STORAGE_KEYS.promoCode, promoCode);
+  }, [promoCode]);
+
+  useEffect(() => {
+    localStorage.setItem(POS_STORAGE_KEYS.appliedCoupons, JSON.stringify(appliedCoupons));
+  }, [appliedCoupons]);
 
   useEffect(() => {
     function handleClickOutside(event) {
