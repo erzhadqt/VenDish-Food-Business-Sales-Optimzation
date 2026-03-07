@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from "react";
-import { Button } from "@/Components/ui/button";
+import { Button } from "../../Components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../Components/ui/table";
-import { Plus, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react"; 
+import { Plus, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, TimerReset } from "lucide-react"; 
 import api from "../../api";
 import AddDiscountDialog from "../../Components/AddDiscountDialog"; 
-import DeleteConfirmDialog from "../../Components/DeleteConfirmDialog"; //
+import DeleteConfirmDialog from "../../Components/DeleteConfirmDialog";
+
+// +++ IMPORT THE NEW MODAL +++
+import ManagePosLimitDialog from "../../Components/ManagePosLimitDialog";
 
 const PromoManagement = () => {
   const [coupons, setCoupons] = useState([]);
@@ -16,14 +19,24 @@ const PromoManagement = () => {
   
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
+  // --- LIMIT MODAL STATES ---
+  const [isManageLimitOpen, setIsManageLimitOpen] = useState(false);
+  const [maxCouponsLimit, setMaxCouponsLimit] = useState(2);
+
   const fetchData = async () => {
     try {
-        const [couponRes, prodRes] = await Promise.all([
-        api.get("/firstapp/coupons/"),
-        api.get("/firstapp/products/") 
+        const [couponRes, prodRes, settingsRes] = await Promise.all([
+          api.get("/firstapp/coupons/"),
+          api.get("/firstapp/products/"),
+          api.get("/settings/") // Fetch current limit
         ]);
+        
         setCoupons(couponRes.data);
         setProducts(prodRes.data);
+        
+        if (settingsRes.data && settingsRes.data.max_coupons_per_order !== undefined) {
+            setMaxCouponsLimit(settingsRes.data.max_coupons_per_order);
+        }
     } catch (error) {
         console.error("Failed to load promo data:", error);
     }
@@ -34,7 +47,6 @@ const PromoManagement = () => {
   const handleDelete = async (id) => {
     try {
         await api.delete(`/firstapp/coupons/${id}/`);
-        // Remove from local state immediately for responsiveness
         setCoupons((prev) => prev.filter((coupon) => coupon.id !== id));
     } catch (error) {
         console.error("Failed to delete coupon:", error);
@@ -84,10 +96,16 @@ const PromoManagement = () => {
             <h1 className="text-2xl font-bold text-gray-800">Coupon Management</h1>
             <p className="text-gray-500 text-sm">Create and track dynamic discount codes.</p>
         </div>
-        
-        <Button onClick={() => setIsCreateOpen(true)} className="bg-blue-600 hover:bg-blue-700">
-            <Plus className="w-4 h-4 mr-2"/> Create New Coupon
-        </Button>
+
+        <div className="flex gap-2">
+            <Button onClick={() => setIsManageLimitOpen(true)} className="bg-blue-600 hover:bg-blue-700">
+                <TimerReset className="w-4 h-4 mr-1"/> Manage usable Coupons for POS
+            </Button>
+            
+            <Button onClick={() => setIsCreateOpen(true)} className="bg-blue-600 hover:bg-blue-700">
+                <Plus className="w-4 h-4 mr-2"/> Create New Coupon
+            </Button>
+        </div>
       </div>
 
       {/* ACTIVE COUPONS TABLE */}
@@ -135,7 +153,6 @@ const PromoManagement = () => {
                         </div>
                     </TableCell>
 
-                    {/* Expiration Column */}
                     <TableCell className="text-sm text-gray-600">
                         {formatDate(coupon.criteria_details?.valid_to)}
                     </TableCell>
@@ -184,45 +201,19 @@ const PromoManagement = () => {
         {/* PAGINATION CONTROLS */}
         {coupons.length > 0 && (
             <div className="flex items-center justify-end space-x-2 py-4 mt-2 border-t border-gray-100">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    onClick={() => handlePageChange(1)}
-                    disabled={currentPage === 1}
-                >
+                <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => handlePageChange(1)} disabled={currentPage === 1}>
                     <ChevronsLeft className="h-4 w-4" />
                 </Button>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
-                    disabled={currentPage === 1}
-                >
+                <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => handlePageChange(Math.max(1, currentPage - 1))} disabled={currentPage === 1}>
                     <ChevronLeft className="h-4 w-4" />
                 </Button>
                 
-                <span className="text-sm text-gray-600 px-2">
-                    Page {currentPage} of {totalPages}
-                </span>
+                <span className="text-sm text-gray-600 px-2">Page {currentPage} of {totalPages}</span>
 
-                <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
-                    disabled={currentPage === totalPages}
-                >
+                <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages}>
                     <ChevronRight className="h-4 w-4" />
                 </Button>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    onClick={() => handlePageChange(totalPages)}
-                    disabled={currentPage === totalPages}
-                >
+                <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => handlePageChange(totalPages)} disabled={currentPage === totalPages}>
                     <ChevronsRight className="h-4 w-4" />
                 </Button>
             </div>
@@ -234,6 +225,14 @@ const PromoManagement = () => {
         onOpenChange={setIsCreateOpen}
         onSaved={fetchData}
         products={products} 
+      />
+
+      {/* +++ CALL THE SEPARATED MODAL HERE +++ */}
+      <ManagePosLimitDialog 
+        open={isManageLimitOpen} 
+        onOpenChange={setIsManageLimitOpen} 
+        currentLimit={maxCouponsLimit} 
+        onSaved={fetchData} 
       />
 
     </div>

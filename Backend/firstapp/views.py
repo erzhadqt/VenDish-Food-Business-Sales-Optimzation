@@ -137,10 +137,13 @@ class ReceiptViewSet(viewsets.ModelViewSet):
     # 1. CREATE RECEIPT (Checkout)
     # ---------------------------------------------------------
     def create(self, request, *args, **kwargs):
+        settings, _ = StoreSettings.objects.get_or_create(id=1)
+        max_allowed_coupons = settings.max_coupons_per_order
+
         coupons_data = request.data.get('coupons', [])
-        if isinstance(coupons_data, list) and len(coupons_data) > 2:
+        if isinstance(coupons_data, list) and len(coupons_data) > max_allowed_coupons:
             return Response(
-                {"error": "Maximum of 2 coupons allowed per order."}, 
+                {"error": f"Maximum of {max_allowed_coupons} coupons allowed per order."}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -755,3 +758,28 @@ class VerifyVoidPinView(APIView):
                 return Response({"message": "Default PIN verified"}, status=status.HTTP_200_OK)
             else:
                 return Response({"error": "Invalid Manager PIN"}, status=status.HTTP_400_BAD_REQUEST)
+class StoreSettingsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        settings, _ = StoreSettings.objects.get_or_create(id=1)
+        return Response({
+            "max_coupons_per_order": settings.max_coupons_per_order
+        }, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        # Only admins can update the settings
+        if not request.user.is_superuser:
+            return Response({"error": "Only administrators can change store settings."}, status=status.HTTP_403_FORBIDDEN)
+
+        settings, _ = StoreSettings.objects.get_or_create(id=1)
+        
+        max_coupons = request.data.get('max_coupons_per_order')
+        if max_coupons is not None:
+            settings.max_coupons_per_order = int(max_coupons)
+            settings.save()
+
+        return Response({
+            "message": "Settings updated successfully.",
+            "max_coupons_per_order": settings.max_coupons_per_order
+        }, status=status.HTTP_200_OK)

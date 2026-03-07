@@ -22,6 +22,8 @@ const Pos = () => {
   });
   const [cash, setCash] = useState("");
   const [products, setProducts] = useState([]);
+
+  const [maxCoupons, setMaxCoupons] = useState(2);
   
   // --- CUSTOMER SEARCH STATES ---
   const [users, setUsers] = useState([]); 
@@ -79,12 +81,16 @@ const Pos = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [prodRes, userRes] = await Promise.all([
+        const [prodRes, userRes, settingsRes] = await Promise.all([
             api.get("/firstapp/products/"),
-            api.get("/firstapp/users/") 
+            api.get("/firstapp/users/"),
+            api.get("/settings/")
         ]);
         setProducts(prodRes.data);
         setUsers(userRes.data);
+        if (settingsRes.data.max_coupons_per_order !== undefined) {
+             setMaxCoupons(settingsRes.data.max_coupons_per_order);
+        }
       } catch (error) {
         console.error("Failed to fetch data:", error);
       } finally {
@@ -232,8 +238,8 @@ const Pos = () => {
       return;
     }
 
-    if (appliedCoupons.length >= 2) {
-      setCouponError("Maximum of 2 coupons allowed per order.");
+    if (appliedCoupons.length >= maxCoupons) {
+      setCouponError(`Maximum of ${maxCoupons} coupons allowed per order.`);
       return;
     }
 
