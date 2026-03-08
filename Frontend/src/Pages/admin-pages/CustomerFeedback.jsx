@@ -3,6 +3,7 @@ import { Star, MessageSquare, TrendingUp, Eye, Trash2, Search } from 'lucide-rea
 import api from '../../api';
 import DeleteConfirmDialog from '../../Components/DeleteConfirmDialog'; // Add this import (adjust path if needed)
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../Components/ui/dialog";
+import { Skeleton } from '../../Components/ui/skeleton';
 
 const CustomerFeedback = () => {
   const [activeTab, setActiveTab] = useState('customer'); // 'customer' or 'food'
@@ -134,13 +135,55 @@ const CustomerFeedback = () => {
   };
 
   if (loading) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+    <div className="min-h-screen">
+      <div className="container mx-auto p-6 space-y-6">
+        <div className="flex gap-4">
+          <Skeleton className="h-10 w-36 rounded-lg" />
+          <Skeleton className="h-10 w-28 rounded-lg" />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+              <Skeleton className="h-4 w-1/2 mb-3" />
+              <Skeleton className="h-8 w-2/3" />
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-4">
+          <Skeleton className="h-12 flex-1 rounded-lg" />
+          <div className="flex gap-2">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <Skeleton key={index} className="h-10 w-16 rounded-lg" />
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="flex justify-between items-start mb-4">
+                <div className="space-y-2 w-full">
+                  <Skeleton className="h-5 w-48" />
+                  <Skeleton className="h-4 w-32" />
+                </div>
+                <div className="flex gap-2">
+                  <Skeleton className="h-9 w-9 rounded-lg" />
+                  <Skeleton className="h-9 w-9 rounded-lg" />
+                </div>
+              </div>
+              <Skeleton className="h-4 w-full mb-2" />
+              <Skeleton className="h-4 w-5/6" />
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen">
       <div className="container mx-auto p-6">
         
         {/* Tabs */}

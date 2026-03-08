@@ -14,6 +14,7 @@ import { Input } from "../Components/ui/input";
 import { Label } from "../Components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "../Components/ui/alert";
 import { AlertCircle } from "lucide-react";
+import { Skeleton } from "../Components/ui/skeleton";
 
 // 🔴 ADDED `categories = []` to the props here
 export default function EditProductDialog({ product, onClose, onSaved, categories = [] }) {
@@ -21,11 +22,11 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
   const [error, setError] = useState(null);
 
   // Controlled states for inputs to enforce limits
-  const [productName, setProductName] = useState(product.product_name || "");
-  const [price, setPrice] = useState(product.price || "");
-  const [category, setCategory] = useState(product.category || "");
+  const [productName, setProductName] = useState(product?.product_name || "");
+  const [price, setPrice] = useState(product?.price || "");
+  const [category, setCategory] = useState(product?.category || "");
   // Initialize availability from the existing product data
-  const [isAvailable, setIsAvailable] = useState(product.is_available ?? true);
+  const [isAvailable, setIsAvailable] = useState(product?.is_available ?? true);
   const [image, setImage] = useState(null);
 
   // 🔴 REMOVED THE HARDCODED CATEGORIES ARRAY FROM HERE
@@ -91,6 +92,33 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
             Modify the product details and click save.
           </DialogDescription>
         </DialogHeader>
+
+        {!product ? (
+          <div className="grid gap-4 py-1">
+            <div className="grid gap-2">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+            <div className="grid gap-2">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+            <div className="grid gap-2">
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+            <Skeleton className="h-12 w-full" />
+            <div className="grid gap-2">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+            <DialogFooter>
+              <Skeleton className="h-10 w-24" />
+              <Skeleton className="h-10 w-28" />
+            </DialogFooter>
+          </div>
+        ) : (
+        <>
 
         {error && (
           <Alert variant="destructive">
@@ -186,6 +214,8 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
             </Button>
           </DialogFooter>
         </form>
+        </>
+        )}
       </DialogContent>
     </Dialog>
   );

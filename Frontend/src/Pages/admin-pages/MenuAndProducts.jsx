@@ -11,6 +11,7 @@ import AddProductDialog from "../../Components/AddProductDialog";
 import ManageCategoryDialog from "../../Components/ManageCategoryDialog";
 // 🔴 Import the new Modal
 import ChangeVoidPinDialog from "../../Components/ChangeVoidPinDialog";
+import { Skeleton } from "../../Components/ui/skeleton";
 
 function ProductList() {
   const [products, setProducts] = useState([]);
@@ -141,7 +142,29 @@ function ProductList() {
         </div>
 
         {/* Loading */}
-        {loading && <p className="text-gray-500 text-center py-8">Loading...</p>}
+        {loading && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <div
+                key={index}
+                className="bg-white rounded-lg shadow-sm p-3 border border-gray-200 flex flex-col"
+              >
+                <div className="flex justify-end mb-2 gap-2">
+                  <Skeleton className="h-6 w-6 rounded-md" />
+                  <Skeleton className="h-6 w-6 rounded-md" />
+                </div>
+                <Skeleton className="w-full h-40 rounded-md mb-3" />
+                <Skeleton className="h-6 w-3/4 mb-2" />
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-2/3" />
+                  <Skeleton className="h-7 w-1/3 rounded-full mt-2" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* No products */}
         {!loading && products.length === 0 && (

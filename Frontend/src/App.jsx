@@ -2,7 +2,6 @@ import React from "react"
 import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./Pages/Layout";
-import Dashboard from "./Pages/admin-pages/Dashboard";
 
 import Login from "./Pages/login-signup/Login";
 import Signup from "./Pages/login-signup/Signup";
@@ -24,7 +23,6 @@ import CMS from "./Pages/admin-pages/CMS";
 import Pos from "./Pages/POS/Pos";
 import PromoManagement from "./Pages/admin-pages/PromoManagement";
 import Transaction from "./Pages/admin-pages/Transaction";
-import CostingTable from './Pages/admin-pages/CostingTable';
 
 
 
@@ -53,7 +51,6 @@ function App() {
 
 			
 				<Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-					{/* <Route path="/admin" element={<Dashboard />} /> */}
 					<Route path="/admin/menu" element={<MenuAndProducts />} />
 					<Route path="/admin/sales" element={<SalesAndReports />} />
 					<Route path="/admin/customerFeedback" element={<CustomerFeedback />} />
@@ -61,7 +58,6 @@ function App() {
 					<Route path="/admin/transaction" element={<Transaction />} />
 					<Route path="/admin/cms" element={<CMS />} />
 					<Route path="/admin/promo-management" element={<PromoManagement />} />
-					<Route path="/admin/costing-table" element={<CostingTable />} />
 					<Route path="/admin/pos" element={<Pos />} />
 				</Route>
 

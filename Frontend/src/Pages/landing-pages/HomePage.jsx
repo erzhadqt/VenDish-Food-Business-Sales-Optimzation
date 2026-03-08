@@ -20,9 +20,30 @@ const DEFAULT_CONTENT = {
     cuisineType: "Pinoy bayan cuisine",
     descriptionEnd: "— flavorful, hearty, and made just like how",
     lolaText: "lola",
-    descriptionFinal: "used to cook."
+    descriptionFinal: "used to cook.",
+    heroImage: ""
   },
+  carouselImages: [],
   popularDishes: ["Chicken Adobo", "Pork Sisig", "Beef Sinigang", "Kare-Kare"]
+};
+
+const DEFAULT_CAROUSEL_SLIDES = [
+  "/pic1.jpg", "/pic2.jpg", "/pic3.jpg", "/pic4.jpg", "/pic6.jpg",
+  "/pic7.jpg", "/pic8.jpg", "/pic9.jpg", "/pic10.jpg", "/pic11.jpg",
+];
+
+const resolveImageUrl = (path) => {
+  if (!path) return "/icon.jpeg";
+  if (path.startsWith('http')) return path;
+  const baseUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+  return `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
+};
+
+const resolveMediaUrl = (path) => {
+  if (!path) return "";
+  if (path.startsWith('http')) return path;
+  const baseUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+  return `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
 };
 
 const HomePage = () => {
@@ -54,7 +75,9 @@ const HomePage = () => {
             descriptionEnd: apiData.description_end,
             lolaText: apiData.lola_text,
             descriptionFinal: apiData.description_final,
+            heroImage: apiData.hero_image || "",
           },
+          carouselImages: Array.from({ length: 10 }, (_, index) => apiData[`carousel_image_${index + 1}`] || "").filter(Boolean),
           popularDishes: [
             apiData.popular_dish_1,
             apiData.popular_dish_2,
@@ -70,10 +93,9 @@ const HomePage = () => {
     fetchHomeContent();
   }, []);
 
-  const slides = [
-    "/pic1.jpg", "/pic2.jpg", "/pic3.jpg", "/pic4.jpg", "/pic6.jpg",
-    "/pic7.jpg", "/pic8.jpg", "/pic9.jpg", "/pic10.jpg", "/pic11.jpg",
-  ];
+  const slides = content.carouselImages.length > 0
+    ? content.carouselImages.map(resolveMediaUrl).filter(Boolean)
+    : DEFAULT_CAROUSEL_SLIDES;
 
   const features = [
     { icon: Utensils, title: "Authentic Recipes", description: "Traditional Filipino dishes passed down through generations" },
@@ -155,7 +177,7 @@ const HomePage = () => {
           <div className="flex-1 flex justify-center lg:justify-end animate-fade-in w-full">
             <div className="relative w-48 h-48 xs:w-56 xs:h-56 sm:w-72 sm:h-72 md:w-80 md:h-80 lg:w-96 lg:h-96">
               <div className="absolute inset-0 bg-red-200 rounded-full"></div>
-              <div className="animate-bounce relative w-full h-full bg-linear-to-r from-red-500 to-red-700 rounded-full items-center justify-center shadow-2xl border-4 sm:border-8 border-white text-white bg-cover bg-center" style={{ backgroundImage: "url('/icon.jpeg')" }}>
+              <div className="animate-bounce relative w-full h-full bg-linear-to-r from-red-500 to-red-700 rounded-full items-center justify-center shadow-2xl border-4 sm:border-8 border-white text-white bg-cover bg-center" style={{ backgroundImage: `url('${resolveImageUrl(content.hero.heroImage)}')` }}>
               </div>
             </div>
           </div>

@@ -5,6 +5,7 @@ import { Plus, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, TimerRese
 import api from "../../api";
 import AddDiscountDialog from "../../Components/AddDiscountDialog"; 
 import DeleteConfirmDialog from "../../Components/DeleteConfirmDialog";
+import { Skeleton } from "../../Components/ui/skeleton";
 
 // +++ IMPORT THE NEW MODAL +++
 import ManagePosLimitDialog from "../../Components/ManagePosLimitDialog";
@@ -22,8 +23,10 @@ const PromoManagement = () => {
   // --- LIMIT MODAL STATES ---
   const [isManageLimitOpen, setIsManageLimitOpen] = useState(false);
   const [maxCouponsLimit, setMaxCouponsLimit] = useState(2);
+  const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
+    setLoading(true);
     try {
         const [couponRes, prodRes, settingsRes] = await Promise.all([
           api.get("/firstapp/coupons/"),
@@ -39,6 +42,8 @@ const PromoManagement = () => {
         }
     } catch (error) {
         console.error("Failed to load promo data:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -88,7 +93,7 @@ const PromoManagement = () => {
   };
 
   return (
-    <div className="p-6 space-y-8 bg-gray-50 min-h-screen">
+    <div className="p-6 space-y-8 min-h-screen">
       
       {/* HEADER & ACTIONS */}
       <div className="flex justify-between items-center">
@@ -111,6 +116,22 @@ const PromoManagement = () => {
       {/* ACTIVE COUPONS TABLE */}
       <div className="bg-white rounded-lg shadow p-4 border border-gray-200 flex flex-col h-full">
         <h2 className="text-lg font-semibold mb-4 text-gray-800">Active Coupons</h2>
+        {loading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-10 w-full" />
+            {Array.from({ length: itemsPerPage }).map((_, index) => (
+              <div key={index} className="grid grid-cols-7 gap-3">
+                <Skeleton className="h-5 w-full" />
+                <Skeleton className="h-5 w-full" />
+                <Skeleton className="h-5 w-full" />
+                <Skeleton className="h-5 w-full" />
+                <Skeleton className="h-5 w-full" />
+                <Skeleton className="h-5 w-full" />
+                <Skeleton className="h-5 w-full" />
+              </div>
+            ))}
+          </div>
+        ) : (
         <Table>
           <TableHeader>
             <TableRow>
@@ -197,9 +218,10 @@ const PromoManagement = () => {
             )}
           </TableBody>
         </Table>
+        )}
 
         {/* PAGINATION CONTROLS */}
-        {coupons.length > 0 && (
+        {!loading && coupons.length > 0 && (
             <div className="flex items-center justify-end space-x-2 py-4 mt-2 border-t border-gray-100">
                 <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => handlePageChange(1)} disabled={currentPage === 1}>
                     <ChevronsLeft className="h-4 w-4" />

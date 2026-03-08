@@ -29,7 +29,7 @@ const Layout = () => {
 
         {/* Main Content: Adjusts margin based on sidebar state */}
         <main 
-          className={`flex-1 h-[calc(100vh-4rem)] overflow-y-auto bg-gray-200 transition-all duration-300 ${
+          className={`flex-1 h-[calc(100vh-4rem)] overflow-y-auto bg-gray-200/50 transition-all duration-300 ${
             // If expanded, margin is 64 (16rem). If shrunk, margin is 20 (5rem) to match sidebar width.
             isExpanded ? 'ml-64' : 'ml-20' 
           }`}

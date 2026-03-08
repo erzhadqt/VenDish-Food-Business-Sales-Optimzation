@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { HistoryIcon, Loader2, AlertCircle, Tag, EllipsisVertical, ChevronLeft, ChevronRight, Ban, User } from 'lucide-react';
+import { HistoryIcon, AlertCircle, Tag, EllipsisVertical, ChevronLeft, ChevronRight, Ban, User } from 'lucide-react';
 import api from '../../api';
 import ReceiptModal from '../../Components/ReceiptModal.jsx';
+import { Skeleton } from '../../Components/ui/skeleton';
 
 const Transaction = () => {
     const [transactions, setTransactions] = useState([]);
@@ -105,9 +106,26 @@ const Transaction = () => {
 
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden min-h-[400px]">  
                     {loading && (  
-                        <div className="flex flex-col justify-center items-center h-64">  
-                            <Loader2 className="animate-spin text-blue-600 mb-2" size={40} />  
-                            <p className="text-gray-500">Loading records...</p>  
+                        <div className="p-4 md:p-6 space-y-4">  
+                            <div className="grid grid-cols-8 gap-4"> 
+                                {Array.from({ length: 8 }).map((_, index) => ( 
+                                    <Skeleton key={`th-${index}`} className="h-5 w-full" /> 
+                                ))}
+                            </div>
+                            {Array.from({ length: rowsPerPage }).map((_, rowIndex) => (
+                                <div key={`row-${rowIndex}`} className="grid grid-cols-8 gap-4 items-center">
+                                    <Skeleton className="h-5 w-3/4" />
+                                    <Skeleton className="h-5 w-full" />
+                                    <Skeleton className="h-5 w-4/5" />
+                                    <Skeleton className="h-6 w-3/4 rounded-full" />
+                                    <Skeleton className="h-6 w-2/3 rounded-full" />
+                                    <Skeleton className="h-5 w-1/2 ml-auto" />
+                                    <Skeleton className="h-6 w-2/3 rounded-full" />
+                                    <div className="flex justify-center">
+                                        <Skeleton className="h-8 w-8 rounded-full" />
+                                    </div>
+                                </div>
+                            ))}
                         </div>  
                     )}  
 

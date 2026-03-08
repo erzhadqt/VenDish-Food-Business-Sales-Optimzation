@@ -16,6 +16,7 @@ import ConfirmDeleteUserDialog from "../../Components/ConfirmDeleteUserDialog";
 import AddUserDialog from "../../Components/AddUserDialog";
 import SuccessAlert from "../../Components/SuccessAlert";
 import UserDetailsModal from "../../Components/UserDetailsModal";
+import { Skeleton } from "../../Components/ui/skeleton";
 
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
@@ -143,7 +144,26 @@ export default function UserManagement() {
         )}
 
         {loading && (
-          <p className="text-gray-500 text-center py-8">Loading...</p>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="p-4 space-y-3 border-b border-gray-200 bg-gray-50">
+              <Skeleton className="h-4 w-full" />
+            </div>
+            <div className="p-4 space-y-4">
+              {Array.from({ length: rowsPerPage }).map((_, index) => (
+                <div key={index} className="grid grid-cols-5 gap-3 items-center">
+                  <Skeleton className="h-4 w-4/5" />
+                  <Skeleton className="h-4 w-4/5" />
+                  <Skeleton className="h-6 w-2/3 rounded-full" />
+                  <Skeleton className="h-6 w-2/3 rounded-full" />
+                  <div className="flex justify-center gap-2">
+                    <Skeleton className="h-8 w-8 rounded-md" />
+                    <Skeleton className="h-8 w-8 rounded-md" />
+                    <Skeleton className="h-8 w-8 rounded-md" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         {!loading && users.length === 0 && (

@@ -15,10 +15,75 @@ import {
 } from "lucide-react";
 
 import api from '../../api'; 
+import { Skeleton } from '../../Components/ui/skeleton';
 
 const periods = ["Daily", "Weekly", "Monthly", "Yearly"];
 const chartTypes = ["Bar", "Line", "Area"];
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
+
+const TimelineLoadingSkeleton = () => (
+  <>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <div key={index} className="bg-white shadow-lg rounded-xl p-5 border-l-4 border-gray-200">
+          <Skeleton className="h-4 w-1/2 mb-3" />
+          <Skeleton className="h-8 w-2/3 mb-2" />
+          <Skeleton className="h-3 w-1/3" />
+        </div>
+      ))}
+    </div>
+
+    <div className="bg-white p-6 rounded-xl shadow-lg mb-6">
+      <div className="flex justify-between items-center mb-6">
+        <Skeleton className="h-6 w-52" />
+        <div className="flex gap-2">
+          <Skeleton className="h-8 w-14" />
+          <Skeleton className="h-8 w-14" />
+          <Skeleton className="h-8 w-14" />
+        </div>
+      </div>
+      <Skeleton className="h-80 w-full" />
+    </div>
+
+    <div className="bg-white rounded-xl shadow-lg overflow-hidden mt-6 p-4 space-y-3">
+      <Skeleton className="h-10 w-full" />
+      {Array.from({ length: 5 }).map((_, index) => (
+        <div key={index} className="grid grid-cols-5 gap-4">
+          <Skeleton className="h-5 w-full" />
+          <Skeleton className="h-5 w-full" />
+          <Skeleton className="h-5 w-full" />
+          <Skeleton className="h-5 w-full" />
+          <Skeleton className="h-5 w-full" />
+        </div>
+      ))}
+    </div>
+  </>
+);
+
+const StaffLoadingSkeleton = () => (
+  <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <div className="bg-white p-6 rounded-xl shadow-lg">
+        <Skeleton className="h-6 w-48 mb-4" />
+        <Skeleton className="h-80 w-full" />
+      </div>
+      <div className="bg-white p-6 rounded-xl shadow-lg">
+        <Skeleton className="h-6 w-48 mb-4" />
+        <Skeleton className="h-80 w-full" />
+      </div>
+    </div>
+    <div className="bg-white rounded-xl shadow-lg p-4 space-y-3">
+      <Skeleton className="h-10 w-full" />
+      {Array.from({ length: 5 }).map((_, index) => (
+        <div key={index} className="grid grid-cols-3 gap-4">
+          <Skeleton className="h-5 w-full" />
+          <Skeleton className="h-5 w-full" />
+          <Skeleton className="h-5 w-full" />
+        </div>
+      ))}
+    </div>
+  </div>
+);
 
 export default function SalesAndReports() {
   // --- STATE ---
@@ -269,7 +334,7 @@ export default function SalesAndReports() {
   };
 
   return (
-    <div className="p-4 md:p-6 bg-linear-to-br from-gray-50 to-gray-100 min-h-screen">
+    <div className="p-4 md:p-6 min-h-screen">
       
       {/* HEADER */}
       <div className="mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -358,128 +423,137 @@ export default function SalesAndReports() {
                 </div>
             )}
 
-            {/* WIDGETS */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            {loading ? (
+              <TimelineLoadingSkeleton />
+            ) : (
+              <>
+              {/* WIDGETS */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 <div className="bg-white shadow-lg rounded-xl p-5 border-l-4 border-blue-800">
                 <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-gray-600 font-medium text-sm">Total Revenue</h3>
-                    <PhilippinePesoIcon className="text-blue-800" size={24} />
+                  <h3 className="text-gray-600 font-medium text-sm">Total Revenue</h3>
+                  <PhilippinePesoIcon className="text-blue-800" size={24} />
                 </div>
                 <p className="text-blue-800 font-bold text-3xl">₱ {stats.totalRev.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
                 <p className="text-xs text-gray-400 mt-1">
-                    {filterCashier === 'ALL' ? 'Overall Revenue' : `Rev. by ${filterCashier}`}
+                  {filterCashier === 'ALL' ? 'Overall Revenue' : `Rev. by ${filterCashier}`}
                 </p>
                 </div>
 
                 <div className="bg-white shadow-lg rounded-xl p-5 border-l-4 border-orange-500">
                 <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-gray-600 font-medium text-sm">Total Orders</h3>
-                    <Package className="text-orange-500" size={24} />
+                  <h3 className="text-gray-600 font-medium text-sm">Total Orders</h3>
+                  <Package className="text-orange-500" size={24} />
                 </div>
                 <p className="text-orange-500 font-bold text-3xl">{stats.totalOrders}</p>
                 </div>
 
                 <div className="bg-white shadow-lg rounded-xl p-5 border-l-4 border-purple-500">
                 <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-gray-600 font-medium text-sm">Top Seller</h3>
-                    <TrendingUp className="text-purple-500" size={24} />
+                  <h3 className="text-gray-600 font-medium text-sm">Top Seller</h3>
+                  <TrendingUp className="text-purple-500" size={24} />
                 </div>
                 <p className="text-purple-500 font-bold text-xl truncate">{stats.topSellerName}</p>
                 <p className="text-xs text-gray-400 mt-1">
-                     {filterCashier === 'ALL' ? 'Most bought' : `Top item for ${filterCashier}`}
+                  {filterCashier === 'ALL' ? 'Most bought' : `Top item for ${filterCashier}`}
                 </p>
                 </div>
-            </div>
+              </div>
 
-            {/* CHARTS */}
-            <div className="bg-white p-6 rounded-xl shadow-lg mb-6">
+              {/* CHARTS */}
+              <div className="bg-white p-6 rounded-xl shadow-lg mb-6">
                 <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-semibold text-gray-800">
-                    {filterCashier === 'ALL' ? 'Financial Performance' : `Performance: ${filterCashier}`}
+                  {filterCashier === 'ALL' ? 'Financial Performance' : `Performance: ${filterCashier}`}
                 </h3>
                 <div className="flex gap-2">
-                    {chartTypes.map(type => (
-                    <button key={type} onClick={() => setChartType(type)} className={`px-3 py-1 rounded-md text-xs font-medium border ${chartType === type ? "bg-gray-800 text-white border-gray-800" : "bg-white text-gray-600 border-gray-200"}`}>
-                        {type}
-                    </button>
-                    ))}
+                  {chartTypes.map(type => (
+                  <button key={type} onClick={() => setChartType(type)} className={`px-3 py-1 rounded-md text-xs font-medium border ${chartType === type ? "bg-gray-800 text-white border-gray-800" : "bg-white text-gray-600 border-gray-200"}`}>
+                    {type}
+                  </button>
+                  ))}
                 </div>
                 </div>
-                
+                    
                 <ResponsiveContainer width="100%" height={320}>
-                    {chartType === "Bar" ? (
-                    <BarChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                        <YAxis tickFormatter={(v) => `₱${v/1000}k`} tick={{ fontSize: 12 }} />
-                        <Tooltip formatter={(v) => `₱ ${v.toLocaleString()}`} />
-                        <Legend />
-                        <Bar dataKey="revenue" name="Revenue" fill="#1e40af" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                    ) : chartType === "Line" ? (
-                    <LineChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                        <YAxis tickFormatter={(v) => `₱${v/1000}k`} tick={{ fontSize: 12 }} />
-                        <Tooltip formatter={(v) => `₱ ${v.toLocaleString()}`} />
-                        <Legend />
-                        <Line type="monotone" dataKey="revenue" name="Revenue" stroke="#1e40af" strokeWidth={3} dot={{ r: 3 }} />
-                    </LineChart>
-                    ) : (
-                    <AreaChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                        <YAxis tickFormatter={(v) => `₱${v/1000}k`} tick={{ fontSize: 12 }} />
-                        <Tooltip formatter={(v) => `₱ ${v.toLocaleString()}`} />
-                        <Legend />
-                        <Area type="monotone" dataKey="revenue" name="Revenue" stackId="1" stroke="#1e40af" fill="#93c5fd" />
-                    </AreaChart>
-                    )}
+                  {chartType === "Bar" ? (
+                  <BarChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                    <YAxis tickFormatter={(v) => `₱${v/1000}k`} tick={{ fontSize: 12 }} />
+                    <Tooltip formatter={(v) => `₱ ${v.toLocaleString()}`} />
+                    <Legend />
+                    <Bar dataKey="revenue" name="Revenue" fill="#1e40af" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                  ) : chartType === "Line" ? (
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                    <YAxis tickFormatter={(v) => `₱${v/1000}k`} tick={{ fontSize: 12 }} />
+                    <Tooltip formatter={(v) => `₱ ${v.toLocaleString()}`} />
+                    <Legend />
+                    <Line type="monotone" dataKey="revenue" name="Revenue" stroke="#1e40af" strokeWidth={3} dot={{ r: 3 }} />
+                  </LineChart>
+                  ) : (
+                  <AreaChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                    <YAxis tickFormatter={(v) => `₱${v/1000}k`} tick={{ fontSize: 12 }} />
+                    <Tooltip formatter={(v) => `₱ ${v.toLocaleString()}`} />
+                    <Legend />
+                    <Area type="monotone" dataKey="revenue" name="Revenue" stackId="1" stroke="#1e40af" fill="#93c5fd" />
+                  </AreaChart>
+                  )}
                 </ResponsiveContainer>
-            </div>
+              </div>
 
-            {/* TABLE */}
-            <div className="bg-white rounded-xl shadow-lg overflow-hidden mt-6">
+              {/* TABLE */}
+              <div className="bg-white rounded-xl shadow-lg overflow-hidden mt-6">
                 <div className="overflow-x-auto">
                 <table className="min-w-[800px] w-full">
-                    <thead>
-                    <tr className="bg-gray-800 text-white">
-                        <th onClick={() => handleSort('report_date')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Date {sortConfig.key === 'report_date' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                        <th onClick={() => handleSort('total_orders')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Orders {sortConfig.key === 'total_orders' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                        <th onClick={() => handleSort('total_revenue')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Revenue {sortConfig.key === 'total_revenue' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                        <th onClick={() => handleSort('top_selling_product')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Top Seller {sortConfig.key === 'top_selling_product' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                        <th onClick={() => handleSort('voided_orders')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Voided {sortConfig.key === 'voided_orders' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                  <thead>
+                  <tr className="bg-gray-800 text-white">
+                    <th onClick={() => handleSort('report_date')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Date {sortConfig.key === 'report_date' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                    <th onClick={() => handleSort('total_orders')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Orders {sortConfig.key === 'total_orders' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                    <th onClick={() => handleSort('total_revenue')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Revenue {sortConfig.key === 'total_revenue' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                    <th onClick={() => handleSort('top_selling_product')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Top Seller {sortConfig.key === 'top_selling_product' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                    <th onClick={() => handleSort('voided_orders')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Voided {sortConfig.key === 'voided_orders' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                  </tr>
+                  </thead>
+                  <tbody>
+                  {sortedTableData.length > 0 ? sortedTableData.map((report) => (
+                    <tr key={report.id || report.report_date} className="border-b hover:bg-gray-50 transition-colors">
+                    <td className="py-3 px-4 text-sm font-medium text-gray-900">{report.report_date}</td>
+                    <td className="py-3 px-4 text-sm text-gray-600">{report.total_orders}</td>
+                    <td className="py-3 px-4 text-sm font-semibold text-blue-700">₱ {parseFloat(report.total_revenue).toLocaleString()}</td>
+                    <td className="py-3 px-4 text-sm text-gray-600">
+                      <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs font-medium">
+                        {report.top_selling_product || "N/A"}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-sm font-bold text-red-600">{parseFloat(report.voided_orders).toLocaleString()}</td>
                     </tr>
-                    </thead>
-                    <tbody>
-                    {sortedTableData.length > 0 ? sortedTableData.map((report) => (
-                        <tr key={report.id || report.report_date} className="border-b hover:bg-gray-50 transition-colors">
-                        <td className="py-3 px-4 text-sm font-medium text-gray-900">{report.report_date}</td>
-                        <td className="py-3 px-4 text-sm text-gray-600">{report.total_orders}</td>
-                        <td className="py-3 px-4 text-sm font-semibold text-blue-700">₱ {parseFloat(report.total_revenue).toLocaleString()}</td>
-                        <td className="py-3 px-4 text-sm text-gray-600">
-                            <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs font-medium">
-                                {report.top_selling_product || "N/A"}
-                            </span>
-                        </td>
-                        <td className="py-3 px-4 text-sm font-bold text-red-600">{parseFloat(report.voided_orders).toLocaleString()}</td>
-                        </tr>
-                    )) : (
-                        <tr>
-                            <td colSpan="5" className="text-center py-8 text-gray-500">
-                                {loading ? "Loading data..." : "No sales reports found."}
-                            </td>
-                        </tr>
-                    )}
-                    </tbody>
+                  )) : (
+                    <tr>
+                      <td colSpan="5" className="text-center py-8 text-gray-500">
+                        No sales reports found.
+                      </td>
+                    </tr>
+                  )}
+                  </tbody>
                 </table>
                 </div>
-            </div>
+              </div>
+              </>
+            )}
         </>
       )}
 
       {/* ========================== VIEW MODE: STAFF (ADMIN ONLY) ========================== */}
       {viewMode === 'staff' && isAdmin && (
+        loading ? (
+          <StaffLoadingSkeleton />
+        ) : (
         <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 
@@ -551,6 +625,7 @@ export default function SalesAndReports() {
               </table>
           </div>
         </div>
+        )
       )}
 
     </div>

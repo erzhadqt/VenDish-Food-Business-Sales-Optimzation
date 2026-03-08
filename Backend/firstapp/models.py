@@ -246,6 +246,17 @@ class HomePage(models.Model):
     popular_dish_2 = models.CharField(max_length=100, default="Pork Sisig")
     popular_dish_3 = models.CharField(max_length=100, default="Beef Sinigang")
     popular_dish_4 = models.CharField(max_length=100, default="Kare-Kare")
+    hero_image = models.ImageField(upload_to='homepage_images/', null=True, blank=True)
+    carousel_image_1 = models.ImageField(upload_to='homepage_carousel/', null=True, blank=True)
+    carousel_image_2 = models.ImageField(upload_to='homepage_carousel/', null=True, blank=True)
+    carousel_image_3 = models.ImageField(upload_to='homepage_carousel/', null=True, blank=True)
+    carousel_image_4 = models.ImageField(upload_to='homepage_carousel/', null=True, blank=True)
+    carousel_image_5 = models.ImageField(upload_to='homepage_carousel/', null=True, blank=True)
+    carousel_image_6 = models.ImageField(upload_to='homepage_carousel/', null=True, blank=True)
+    carousel_image_7 = models.ImageField(upload_to='homepage_carousel/', null=True, blank=True)
+    carousel_image_8 = models.ImageField(upload_to='homepage_carousel/', null=True, blank=True)
+    carousel_image_9 = models.ImageField(upload_to='homepage_carousel/', null=True, blank=True)
+    carousel_image_10 = models.ImageField(upload_to='homepage_carousel/', null=True, blank=True)
 
     def __str__(self): return "Home Page Content"
 

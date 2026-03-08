@@ -6,6 +6,7 @@ import { Label } from "../Components/ui/label";
 import { Plus, Edit, Trash2, ArrowLeft, AlertCircle, CheckCircle2 } from "lucide-react"; 
 import api from "../api"; 
 import DeleteConfirmDialog from "./DeleteConfirmDialog"; 
+import { Skeleton } from "../Components/ui/skeleton";
 
 export default function ManageCategoryDialog({ open, onOpenChange, onSaved }) {
   const [view, setView] = useState("list"); // 'list' or 'form'
@@ -170,7 +171,17 @@ export default function ManageCategoryDialog({ open, onOpenChange, onSaved }) {
             </div>
 
             {fetching ? (
-              <div className="text-center py-8 text-gray-500">Loading categories...</div>
+              <div className="border rounded-lg overflow-hidden bg-gray-50 max-h-[40vh] overflow-y-auto p-3 space-y-3">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <div key={index} className="p-3 flex justify-between items-center bg-white rounded-md border border-gray-200">
+                    <Skeleton className="h-5 w-1/2" />
+                    <div className="flex items-center gap-2">
+                      <Skeleton className="h-8 w-8 rounded-md" />
+                      <Skeleton className="h-8 w-8 rounded-md" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : (
               <div className="border rounded-lg overflow-hidden bg-gray-50 max-h-[40vh] overflow-y-auto">
                 {categoryList.length === 0 ? (

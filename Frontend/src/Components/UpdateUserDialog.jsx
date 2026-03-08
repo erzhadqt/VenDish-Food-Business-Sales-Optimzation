@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import api from "../api";
 import { Button } from "../Components/ui/button";
 import {
@@ -14,12 +14,19 @@ import { Input } from "../Components/ui/input";
 import { Label } from "../Components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "../Components/ui/alert";
 import { AlertCircle } from "lucide-react";
+import { Skeleton } from "../Components/ui/skeleton";
 
 export default function UpdateUserDialog({ user, onClose, onSaved }) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     // Initialize isStaff state from the prop
-    const [isStaff, setIsStaff] = useState(user.is_staff);
+    const [isStaff, setIsStaff] = useState(Boolean(user?.is_staff));
+
+    useEffect(() => {
+        if (user) {
+            setIsStaff(Boolean(user.is_staff));
+        }
+    }, [user]);
 
     const handleSave = async (e) => {
         e.preventDefault();
@@ -104,13 +111,47 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
             onClick={handleClose} 
             />
 
-        <DialogContent className="sm:max-w-[450px] z-50">
+                <DialogContent className="sm:max-w-[450px] z-50">
             <DialogHeader>
             <DialogTitle>Edit User</DialogTitle>
             <DialogDescription>
                 Update the user information and click save.
             </DialogDescription>
             </DialogHeader>
+
+                        {!user ? (
+                            <div className="grid gap-4 py-1">
+                                <div className="grid gap-2">
+                                    <Skeleton className="h-4 w-24" />
+                                    <Skeleton className="h-10 w-full" />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Skeleton className="h-4 w-24" />
+                                    <Skeleton className="h-10 w-full" />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Skeleton className="h-4 w-24" />
+                                    <Skeleton className="h-10 w-full" />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Skeleton className="h-4 w-24" />
+                                    <Skeleton className="h-10 w-full" />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Skeleton className="h-4 w-24" />
+                                    <Skeleton className="h-10 w-full" />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Skeleton className="h-4 w-4" />
+                                    <Skeleton className="h-4 w-52" />
+                                </div>
+                                <DialogFooter>
+                                    <Skeleton className="h-10 w-24" />
+                                    <Skeleton className="h-10 w-28" />
+                                </DialogFooter>
+                            </div>
+                        ) : (
+                            <>
 
             {error && (
             <Alert variant="destructive">
@@ -129,7 +170,7 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
                 <Input 
                 name="username" 
                 id="username" 
-                defaultValue={user.username} 
+                defaultValue={user?.username || ""} 
                 required 
                 maxLength={50} 
                 />
@@ -140,7 +181,7 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
                 <Input 
                 name="first_name" 
                 id="first_name" 
-                defaultValue={user.first_name} 
+                defaultValue={user?.first_name || ""} 
                 maxLength={50} 
                 />
             </div>
@@ -150,7 +191,7 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
                 <Input 
                 name="last_name" 
                 id="last_name" 
-                defaultValue={user.last_name} 
+                defaultValue={user?.last_name || ""} 
                 maxLength={50} 
                 />
             </div>
@@ -161,7 +202,7 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
                 name="email"
                 id="email"
                 type="email"
-                defaultValue={user.email}
+                defaultValue={user?.email || ""}
                 required
                 maxLength={50}
                 />
@@ -204,6 +245,8 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
                 </Button>
             </DialogFooter>
             </form>
+            </>
+            )}
         </DialogContent>
         </Dialog>
     );

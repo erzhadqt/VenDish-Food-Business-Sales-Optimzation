@@ -1,8 +1,38 @@
 import React from "react";
 import { X } from "lucide-react";
+import { Skeleton } from "../Components/ui/skeleton";
 
 export default function UserDetailsModal({ isOpen, onClose, user }) {
-  if (!isOpen || !user) return null;
+  if (!isOpen) return null;
+
+  if (!user) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="bg-white rounded-xl shadow-lg w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="flex justify-between items-center p-4 border-b border-gray-100">
+            <h3 className="text-lg font-bold text-gray-900">Personal Information</h3>
+            <button 
+              onClick={onClose} 
+              className="text-gray-400 hover:text-gray-700 p-1 rounded-md hover:bg-gray-100 transition-colors"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="p-5 space-y-4">
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-6 w-2/3" />
+            <Skeleton className="h-6 w-1/2" />
+            <Skeleton className="h-16 w-full" />
+          </div>
+
+          <div className="p-4 border-t border-gray-100 flex justify-end bg-gray-50">
+            <Skeleton className="h-10 w-20" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">

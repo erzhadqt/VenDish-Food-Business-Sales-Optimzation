@@ -7,6 +7,7 @@ import ReceiptModal2 from "../../Components/ReceiptModal2";
 import VoidConfirmDialog from "../../Components/VoidConfirmDialog";
 import { SelectDiscount } from "../../Components/SelectDiscount";
 import AlertModal from "../../Components/AlertModal";
+import { Skeleton } from "../../Components/ui/skeleton";
 
 const POS_STORAGE_KEYS = {
   cart: "pos_cartItems",
@@ -40,6 +41,7 @@ const Pos = () => {
 
   const [receiptDetails, setReceiptDetails] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(false);
   
   const [promoCode, setPromoCode] = useState(() => {
     try {
@@ -109,7 +111,7 @@ const Pos = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      setLoading(true);
+      setDataLoading(true);
       try {
         const [prodRes, userRes, settingsRes] = await Promise.all([
             api.get("/firstapp/products/"),
@@ -124,7 +126,7 @@ const Pos = () => {
       } catch (error) {
         console.error("Failed to fetch data:", error);
       } finally {
-        setLoading(false);
+        setDataLoading(false);
       }
     };
     fetchData();
@@ -490,7 +492,7 @@ const Pos = () => {
   };
 
   return (
-    <div className="font-poppins bg-zinc-300 min-h-screen flex flex-col lg:flex-row gap-4 p-4">
+    <div className="font-poppins min-h-screen flex flex-col lg:flex-row gap-4 p-4">
         <AlertModal 
             open={alertConfig.open} 
             onOpenChange={(isOpen) => setAlertConfig(prev => ({ ...prev, open: isOpen }))}
@@ -516,43 +518,58 @@ const Pos = () => {
            </div>
            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-               {filteredFoods.map((food) => (
+               {dataLoading && Array.from({ length: 8 }).map((_, index) => (
+                <div 
+                  key={`skeleton-${index}`} 
+                  className="bg-white border border-gray-100 p-3 rounded-xl shadow-sm flex flex-col items-center h-60"
+                >
+                  <Skeleton className="w-full h-32 mb-2 rounded-lg" />
+                  <Skeleton className="h-5 w-3/4" />
+                  <div className="flex-1"></div>
+                  <div className="w-full flex justify-between items-end border-t pt-2 mt-1">
+                    <Skeleton className="h-5 w-16" />
+                    <Skeleton className="h-5 w-20 rounded-full" />
+                  </div>
+                </div>
+               ))}
+
+               {!dataLoading && filteredFoods.map((food) => (
                 <div 
                   key={food.id} 
                   onClick={() => handleFoodClick(food)} 
                   className="bg-white border border-gray-100 p-3 rounded-xl shadow-sm hover:shadow-lg hover:border-red-200 transition cursor-pointer flex flex-col items-center group relative overflow-hidden h-60"
                 >
-                    <div className="w-full h-32 mb-2 overflow-hidden rounded-lg bg-gray-200">
-                       {food.image ? (
-                         <img src={food.image} alt={food.product_name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" /> 
-                       ) : (
-                         <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No Image</div>
-                       )}
-                    </div>
-                    <h4 className="font-bold text-gray-800 text-center text-md line-clamp-1 w-full">{food.product_name}</h4>
-                    <div className="flex-1"></div>
+                  <div className="w-full h-32 mb-2 overflow-hidden rounded-lg bg-gray-200">
+                    {food.image ? (
+                      <img src={food.image} alt={food.product_name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" /> 
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No Image</div>
+                    )}
+                  </div>
+                  <h4 className="font-bold text-gray-800 text-center text-md line-clamp-1 w-full">{food.product_name}</h4>
+                  <div className="flex-1"></div>
+                  
+                  <div className="w-full flex justify-between items-end border-t pt-2 mt-1">
+                    <span className="text-red-600 font-bold">₱{food.price}</span>
                     
-                    <div className="w-full flex justify-between items-end border-t pt-2 mt-1">
-                       <span className="text-red-600 font-bold">₱{food.price}</span>
-                       
-                       {food.track_stock ? (
-                           food.stock_quantity > 0 ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800 border border-green-200">
-                                   Stock: {food.stock_quantity}
-                                </span>
-                           ) : (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 border border-red-200">
-                                   Out of Stock
-                                </span>
-                           )
-                       ) : (
-                           food.is_available ? (
-                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800 border border-green-200">Available</span>
-                           ) : (
-                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 border border-red-200">Unavailable</span>
-                           )
-                       )}
-                    </div>
+                    {food.track_stock ? (
+                        food.stock_quantity > 0 ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800 border border-green-200">
+                                Stock: {food.stock_quantity}
+                              </span>
+                        ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 border border-red-200">
+                                Out of Stock
+                              </span>
+                        )
+                    ) : (
+                        food.is_available ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800 border border-green-200">Available</span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 border border-red-200">Unavailable</span>
+                        )
+                    )}
+                  </div>
                 </div>
                ))}
              </div>
