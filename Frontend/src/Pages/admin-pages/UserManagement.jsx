@@ -8,12 +8,14 @@ import {
   ChevronLeft, 
   ChevronRight,
   Filter,
-  EllipsisVertical
+  EllipsisVertical,
+  UserRoundX
 } from "lucide-react";
 
 import UpdateUserDialog from "../../Components/UpdateUserDialog";
 import ConfirmDeleteUserDialog from "../../Components/ConfirmDeleteUserDialog";
 import AddUserDialog from "../../Components/AddUserDialog";
+import BlockUserDialog from "../../Components/BlockUserDialog";
 import SuccessAlert from "../../Components/SuccessAlert";
 import UserDetailsModal from "../../Components/UserDetailsModal";
 import { Skeleton } from "../../Components/ui/skeleton";
@@ -90,6 +92,16 @@ export default function UserManagement() {
     triggerSuccessAlert("User account updated successfully!");
   };
 
+  const handleBlocked = (mode = "block", count = 0) => {
+    fetchUsers();
+    const action = mode === "unblock" ? "unblocked" : "blocked";
+    const message =
+      count > 0
+        ? `${count} user account${count > 1 ? "s were" : " was"} ${action} successfully!`
+        : `Selected user accounts were ${action} successfully!`;
+    triggerSuccessAlert(message);
+  };
+
   const handleDelete = async (id) => {
     try {
       await api.delete(`/firstapp/users/${id}/`);
@@ -134,6 +146,12 @@ export default function UserManagement() {
                 <UserPlus size={20} /> User
               </button>
             </AddUserDialog>
+
+            <BlockUserDialog users={users} onSaved={handleBlocked}>
+              <button className="flex gap-2 items-center bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm">
+                <UserRoundX size={20} /> Manage Blocking
+              </button>
+            </BlockUserDialog>
           </div>
         </div>
 

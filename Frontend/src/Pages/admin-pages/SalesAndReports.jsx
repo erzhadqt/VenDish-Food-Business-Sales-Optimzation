@@ -7,7 +7,8 @@ import {
 } from "recharts";
 import { 
   format, startOfMonth, endOfMonth, isWithinInterval, parseISO, 
-  startOfWeek, endOfWeek, startOfYear, endOfYear, startOfDay, endOfDay 
+  startOfWeek, endOfWeek, startOfYear, endOfYear, startOfDay, endOfDay,
+  eachDayOfInterval, eachMonthOfInterval, subYears, isSameDay // <-- Added isSameDay
 } from "date-fns";
 import { 
   TrendingUp, Package, CalendarDays, 
@@ -17,7 +18,8 @@ import {
 import api from '../../api'; 
 import { Skeleton } from '../../Components/ui/skeleton';
 
-const periods = ["Daily", "Weekly", "Monthly", "Yearly"];
+// Added "Specific Day" to handle exact calendar dates
+const periods = ["Specific Day", "Daily", "Weekly", "Monthly", "Yearly"];
 const chartTypes = ["Bar", "Line", "Area"];
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
@@ -98,7 +100,8 @@ export default function SalesAndReports() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [period, setPeriod] = useState("Daily");
+  // Defaulted to Specific Day to match your desired behavior
+  const [period, setPeriod] = useState("Specific Day");
   const [chartType, setChartType] = useState("Bar");
   const [showCalendar, setShowCalendar] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: 'report_date', direction: 'desc' });
@@ -122,18 +125,14 @@ export default function SalesAndReports() {
   const fetchReports = async (cashierFilter = "ALL") => {
     setLoading(true);
     try {
-      // 1. Fetch Timeline Data from Backend (Pass the cashier filter directly)
       const queryParam = cashierFilter !== "ALL" ? `?cashier=${encodeURIComponent(cashierFilter)}` : "";
       const timelineRes = await api.get(`/firstapp/sales/${queryParam}`);
       setReports(timelineRes.data);         
 
-      // 2. Fetch Staff Data & Users for Filters (Admin Only)
       if (isAdmin) {
-          // Fetch pre-aggregated staff performance from the backend
           const staffRes = await api.get('/firstapp/sales/by-staff/');
           setStaffReports(staffRes.data);
 
-          // Fetch users just to populate the cashier dropdown
           const usersRes = await api.get('/firstapp/users/');
           const uniqueCashiers = new Set();
           
@@ -154,7 +153,6 @@ export default function SalesAndReports() {
     }
   };
 
-  // Trigger fetch when component mounts or filter changes
   useEffect(() => {
     fetchReports(filterCashier);
   }, [isAdmin, filterCashier]);
@@ -177,9 +175,13 @@ export default function SalesAndReports() {
       if (!report.report_date) return false;
       const reportDate = parseISO(report.report_date);
       
-      if (period === "Daily") {
+      // NEW: Filters to the exact specific date selected
+      if (period === "Specific Day") {
+        return isSameDay(reportDate, selectedDate);
+      }
+      else if (period === "Daily") {
         return isWithinInterval(reportDate, { 
-          start: startOfDay(selectedDate), end: endOfDay(selectedDate)
+          start: startOfMonth(selectedDate), end: endOfMonth(selectedDate)
         });
       } 
       else if (period === "Weekly") {
@@ -189,12 +191,12 @@ export default function SalesAndReports() {
       }
       else if (period === "Monthly") {
          return isWithinInterval(reportDate, {
-          start: startOfMonth(selectedDate), end: endOfMonth(selectedDate)
+          start: startOfYear(selectedDate), end: endOfYear(selectedDate)
         });
       }
       else if (period === "Yearly") {
          return isWithinInterval(reportDate, { 
-          start: startOfYear(selectedDate), end: endOfYear(selectedDate) 
+          start: startOfYear(subYears(selectedDate, 4)), end: endOfYear(selectedDate) 
         });
       }
       return true;
@@ -205,28 +207,89 @@ export default function SalesAndReports() {
   const chartData = useMemo(() => {
     const getVal = (val) => parseFloat(val || 0);
 
-    if (period === "Daily" || period === "Weekly" || period === "Monthly") {
-      return filteredReports.map(r => ({
-        label: format(parseISO(r.report_date), "MMM dd"),
-        revenue: getVal(r.total_revenue),
-        orders: r.total_orders || 0
-      })).reverse(); 
+    // NEW: Map data for a specific day
+    if (period === "Specific Day") {
+        const dayStr = format(selectedDate, 'yyyy-MM-dd');
+        const found = filteredReports.find(r => r.report_date === dayStr);
+        return [{
+            label: format(selectedDate, "MMM d, yyyy"),
+            revenue: found ? getVal(found.total_revenue) : 0,
+            orders: found ? found.total_orders : 0
+        }];
+    }
+
+    if (period === "Daily") {
+        const start = startOfMonth(selectedDate);
+        const end = endOfMonth(selectedDate);
+        const days = eachDayOfInterval({ start, end });
+
+        return days.map(day => {
+            const dayStr = format(day, 'yyyy-MM-dd');
+            const found = filteredReports.find(r => r.report_date === dayStr);
+            return {
+                label: format(day, "MMM d"), 
+                revenue: found ? getVal(found.total_revenue) : 0,
+                orders: found ? found.total_orders : 0
+            };
+        });
+    }
+
+    if (period === "Weekly") {
+        const start = startOfWeek(selectedDate);
+        const end = endOfWeek(selectedDate);
+        const days = eachDayOfInterval({ start, end });
+        
+        return days.map(day => {
+            const dayStr = format(day, 'yyyy-MM-dd');
+            const found = filteredReports.find(r => r.report_date === dayStr);
+            return {
+                label: format(day, 'EEE'), 
+                revenue: found ? getVal(found.total_revenue) : 0,
+                orders: found ? found.total_orders : 0
+            };
+        });
+    }
+
+    if (period === "Monthly") {
+        const start = startOfYear(selectedDate);
+        const end = endOfYear(selectedDate);
+        const months = eachMonthOfInterval({ start, end });
+
+        return months.map(month => {
+            const monthName = format(month, "MMM");
+            const monthReports = filteredReports.filter(r => {
+                return format(parseISO(r.report_date), "MMM yyyy") === format(month, "MMM yyyy");
+            });
+            
+            const totalRev = monthReports.reduce((sum, r) => sum + getVal(r.total_revenue), 0);
+            const totalOrd = monthReports.reduce((sum, r) => sum + (r.total_orders || 0), 0);
+
+            return {
+                label: monthName, 
+                revenue: totalRev,
+                orders: totalOrd
+            };
+        });
     }
 
     if (period === "Yearly") {
-      const monthlyGroups = {};
-      filteredReports.forEach(r => {
-        const monthName = format(parseISO(r.report_date), "MMM");
-        if (!monthlyGroups[monthName]) {
-          monthlyGroups[monthName] = { label: monthName, revenue: 0, orders: 0 };
-        }
-        monthlyGroups[monthName].revenue += getVal(r.total_revenue);
-        monthlyGroups[monthName].orders += (r.total_orders || 0);
-      });
-      return Object.values(monthlyGroups); 
+        const currentYear = selectedDate.getFullYear();
+        const years = [currentYear - 4, currentYear - 3, currentYear - 2, currentYear - 1, currentYear];
+
+        return years.map(year => {
+            const yearStr = year.toString();
+            const yearReports = filteredReports.filter(r => r.report_date.startsWith(yearStr));
+            
+            return {
+                label: yearStr, 
+                revenue: yearReports.reduce((sum, r) => sum + getVal(r.total_revenue), 0),
+                orders: yearReports.reduce((sum, r) => sum + (r.total_orders || 0), 0)
+            };
+        });
     }
+
     return [];
-  }, [filteredReports, period]);
+  }, [filteredReports, period, selectedDate]);
 
   // --- WIDGET STATS ---
   const stats = useMemo(() => {
@@ -333,6 +396,17 @@ export default function SalesAndReports() {
     window.URL.revokeObjectURL(url);
   };
 
+  // --- AXIS FORMATTER ---
+  const formatAxisCurrency = (value) => {
+    if (value >= 1000) {
+      const formatted = Number.isInteger(value / 1000) 
+        ? value / 1000 
+        : (value / 1000).toFixed(1);
+      return `₱${formatted}k`;
+    }
+    return `₱${value}`;
+  };
+
   return (
     <div className="p-4 md:p-6 min-h-screen">
       
@@ -405,7 +479,8 @@ export default function SalesAndReports() {
             <div className="flex flex-wrap gap-3 mb-6">
                 <button onClick={() => setShowCalendar(!showCalendar)} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 shadow-sm">
                 <CalendarDays size={18} />
-                {format(selectedDate, "MMM yyyy")}
+                {/* Changed to format to exact day so the button reflects the specific date picked */}
+                {format(selectedDate, "MMM d, yyyy")}
                 </button>
 
                 <div className="flex bg-white rounded-lg border border-gray-200 p-1">
@@ -480,7 +555,7 @@ export default function SalesAndReports() {
                   <BarChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                    <YAxis tickFormatter={(v) => `₱${v/1000}k`} tick={{ fontSize: 12 }} />
+                    <YAxis tickFormatter={formatAxisCurrency} tick={{ fontSize: 12 }} />
                     <Tooltip formatter={(v) => `₱ ${v.toLocaleString()}`} />
                     <Legend />
                     <Bar dataKey="revenue" name="Revenue" fill="#1e40af" radius={[4, 4, 0, 0]} />
@@ -489,7 +564,7 @@ export default function SalesAndReports() {
                   <LineChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                    <YAxis tickFormatter={(v) => `₱${v/1000}k`} tick={{ fontSize: 12 }} />
+                    <YAxis tickFormatter={formatAxisCurrency} tick={{ fontSize: 12 }} />
                     <Tooltip formatter={(v) => `₱ ${v.toLocaleString()}`} />
                     <Legend />
                     <Line type="monotone" dataKey="revenue" name="Revenue" stroke="#1e40af" strokeWidth={3} dot={{ r: 3 }} />
@@ -498,7 +573,7 @@ export default function SalesAndReports() {
                   <AreaChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                    <YAxis tickFormatter={(v) => `₱${v/1000}k`} tick={{ fontSize: 12 }} />
+                    <YAxis tickFormatter={formatAxisCurrency} tick={{ fontSize: 12 }} />
                     <Tooltip formatter={(v) => `₱ ${v.toLocaleString()}`} />
                     <Legend />
                     <Area type="monotone" dataKey="revenue" name="Revenue" stackId="1" stroke="#1e40af" fill="#93c5fd" />
@@ -563,7 +638,7 @@ export default function SalesAndReports() {
                     <ResponsiveContainer width="100%" height={300}>
                         <BarChart data={staffReports} layout="vertical" margin={{ left: 20 }}>
                             <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis type="number" tickFormatter={(v) => `₱${v/1000}k`} />
+                            <XAxis type="number" tickFormatter={formatAxisCurrency} />
                             <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 12}}/>
                             <Tooltip formatter={(v) => `₱ ${v.toLocaleString()}`} />
                             <Bar dataKey="revenue" fill="#8884d8" name="Revenue" radius={[0, 4, 4, 0]}>

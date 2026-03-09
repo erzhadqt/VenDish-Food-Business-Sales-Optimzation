@@ -21,15 +21,14 @@ from django.urls import path, include
 
 from rest_framework.permissions import AllowAny
 
-from firstapp.views import CreateUserView, UserViewSet, UserDetailView, HomePageViewSet, AboutPageViewSet, ContactPageViewSet, CurrentUserView, OTPViewSet, VerifyOTPViewSet, ChangePasswordViaToken, VerifyVoidPinView, UpdateVoidPinView, StoreSettingsView
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from firstapp.views import CreateUserView, UserViewSet, UserDetailView, HomePageViewSet, AboutPageViewSet, ContactPageViewSet, CurrentUserView, OTPViewSet, VerifyOTPViewSet, ChangePasswordViaToken, VerifyVoidPinView, UpdateVoidPinView, StoreSettingsView, SafeTokenRefreshView, PlatformTokenObtainPairView
 
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('firstapp/user/register/', CreateUserView.as_view(), name='register'),
-    path('firstapp/token/', TokenObtainPairView.as_view(permission_classes=[AllowAny]), name='get_token'),
-    path('firstapp/token/refresh/', TokenRefreshView.as_view(permission_classes=[AllowAny]), name='refresh'),
+    path('firstapp/token/', PlatformTokenObtainPairView.as_view(permission_classes=[AllowAny]), name='get_token'),
+    path('firstapp/token/refresh/', SafeTokenRefreshView.as_view(permission_classes=[AllowAny]), name='refresh'),
     path('firstapp-auth/', include('rest_framework.urls')),
 
     path("firstapp/users/<int:pk>/", UserDetailView.as_view(), name="user-detail"),

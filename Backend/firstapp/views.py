@@ -14,7 +14,11 @@ from datetime import timedelta
 from django.db.models import Sum, Count, Q
 from django.db.models.functions import TruncDate
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework.decorators import action
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.exceptions import InvalidToken
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+
+from django.db.models import Sum, Count, Q, Exists, OuterRef
 
 from django.contrib.auth.hashers import make_password, check_password
 
@@ -26,6 +30,7 @@ from .serializers import (
 )   
 from .models import Product, Category, Receipt, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, ReceiptItem, Review, OTP, PasswordResetToken, StoreSettings
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
+from rest_framework.exceptions import AuthenticationFailed
 
 
 # -------------------------------
@@ -97,6 +102,47 @@ class CurrentUserView(APIView):
     def get(self, request):
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
+
+
+class SafeTokenRefreshSerializer(TokenRefreshSerializer):
+    def validate(self, attrs):
+        try:
+            return super().validate(attrs)
+        except User.DoesNotExist:
+            raise InvalidToken("Token is invalid or user no longer exists")
+
+
+class SafeTokenRefreshView(TokenRefreshView):
+    serializer_class = SafeTokenRefreshSerializer
+
+
+class PlatformTokenObtainPairSerializer(TokenObtainPairSerializer):
+    def validate(self, attrs):
+        username = attrs.get(self.username_field)
+        password = attrs.get("password")
+
+        user = User.objects.filter(**{self.username_field: username}).first()
+
+        if not user or not user.check_password(password):
+            raise AuthenticationFailed("No active account found with the given credentials")
+
+        platform = self.context.get("request").data.get("platform", "web")
+
+        if platform == "web" and user.is_staff and not user.is_active:
+            raise AuthenticationFailed("This staff account is blocked from web login")
+
+        if platform == "app" and not user.is_staff and not user.is_active:
+            raise AuthenticationFailed("This user account is blocked from app login")
+
+        refresh = self.get_token(user)
+        return {
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+        }
+
+
+class PlatformTokenObtainPairView(TokenObtainPairView):
+    serializer_class = PlatformTokenObtainPairSerializer
 
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all().order_by("-id")
@@ -384,9 +430,25 @@ class CouponViewSet(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return Response({"error": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
 
-        my_coupons = Coupon.objects.filter(claimed_by=user).order_by('-created_at')
+        # Check if a COMPLETED receipt exists for this specific user & coupon
+        my_coupons = Coupon.objects.filter(claimed_by=user).annotate(
+            is_used_by_user=Exists(
+                Receipt.objects.filter(
+                    coupons=OuterRef('pk'),
+                    customer=user,
+                    status='COMPLETED'
+                )
+            )
+        ).order_by('-created_at')
+        
         serializer = self.get_serializer(my_coupons, many=True)
-        return Response(serializer.data)
+        data = serializer.data
+        
+        # Inject the 'is_used' boolean directly into the serialized data
+        for index, coupon in enumerate(my_coupons):
+            data[index]['is_used'] = coupon.is_used_by_user
+
+        return Response(data)
 
 class CouponCriteriaViewSet(viewsets.ModelViewSet):
     queryset = CouponCriteria.objects.all().order_by('-id')

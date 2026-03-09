@@ -144,7 +144,19 @@ class CouponSerializer(serializers.ModelSerializer):
         return obj.criteria.name if obj.criteria else "Promo Code"
 
     def get_rate(self, obj):
-        return obj.criteria.discount_value if obj.criteria else 0
+        if not obj.criteria:
+            return "0"
+        c = obj.criteria
+        if c.discount_type == 'percentage':
+            # Strip trailing zeros: 15.00 → "15%", 7.50 → "7.5%"
+            val = f"{c.discount_value:g}"
+            return f"{val}%"
+        elif c.discount_type == 'fixed':
+            val = f"{c.discount_value:g}"
+            return f"₱{val}"
+        elif c.discount_type == 'free_item':
+            return "FREE"
+        return str(c.discount_value)
 
     def get_product_name(self, obj):
         if not obj.criteria: return "General Discount"
