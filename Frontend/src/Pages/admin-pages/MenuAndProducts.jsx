@@ -229,7 +229,7 @@ function ProductList() {
                   <div className="flex items-center justify-between">
                     <span className="text-gray-500">Category</span>
                     <span className="text-gray-700 font-medium capitalize">
-                      {p.category.replace('_', ' ')}
+                      {p.category ? p.category.replace('_', ' ') : 'Uncategorized'}
                     </span>
                   </div>
                   
