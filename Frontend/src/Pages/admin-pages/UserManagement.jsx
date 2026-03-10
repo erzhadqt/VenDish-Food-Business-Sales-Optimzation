@@ -92,15 +92,15 @@ export default function UserManagement() {
     triggerSuccessAlert("User account updated successfully!");
   };
 
-  const handleBlocked = (mode = "block", count = 0) => {
-    fetchUsers();
-    const action = mode === "unblock" ? "unblocked" : "blocked";
-    const message =
-      count > 0
-        ? `${count} user account${count > 1 ? "s were" : " was"} ${action} successfully!`
-        : `Selected user accounts were ${action} successfully!`;
-    triggerSuccessAlert(message);
-  };
+  // const handleBlocked = (mode = "block", count = 0) => {
+  //   fetchUsers();
+  //   const action = mode === "unblock" ? "unblocked" : "blocked";
+  //   const message =
+  //     count > 0
+  //       ? `${count} user account${count > 1 ? "s were" : " was"} ${action} successfully!`
+  //       : `Selected user accounts were ${action} successfully!`;
+  //   triggerSuccessAlert(message);
+  // };
 
   // const handleDelete = async (id) => {
   //   try {
@@ -147,11 +147,11 @@ export default function UserManagement() {
               </button>
             </AddUserDialog>
 
-            <BlockUserDialog users={users} onSaved={handleBlocked}>
+            {/* <BlockUserDialog users={users} onSaved={handleBlocked}>
               <button className="flex gap-2 items-center bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm">
                 <UserRoundX size={20} /> Manage Blocking
               </button>
-            </BlockUserDialog>
+            </BlockUserDialog> */}
           </div>
         </div>
 
