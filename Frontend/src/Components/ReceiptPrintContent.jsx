@@ -22,39 +22,38 @@ const ReceiptPrintContent = forwardRef(({ transactionData }, ref) => {
       <style>{`
         @media print {
           @page {
-            size: 48mm auto;
-            margin: 2mm 0mm;
+            size: 58mm auto;
+            margin: 2mm 1mm;
           }
           html, body {
             margin: 0 !important;
             padding: 0 !important;
-            width: 48mm !important;
           }
 
-          /* Hide everything except the receipt */
-          body > *:not(#receipt-root) { display: none !important; }
-
           #receipt {
-            width: 48mm !important;
-            max-width: 48mm !important;
+            width: 58mm !important;
+            max-width: 58mm !important;
             margin: 0 !important;
             padding: 1mm !important;
             box-sizing: border-box !important;
             overflow: hidden !important;
+            display: block !important;
+            visibility: visible !important;
           }
 
           #receipt, #receipt * {
             font-family: 'Courier New', 'Lucida Console', monospace !important;
-            font-size: 9px !important;
+            font-size: 10px !important;
             font-weight: 600 !important;
             line-height: 1.3 !important;
             color: #000 !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+            visibility: visible !important;
           }
 
           #receipt h5 {
-            font-size: 11px !important;
+            font-size: 12px !important;
             font-weight: 800 !important;
           }
 
@@ -86,7 +85,7 @@ const ReceiptPrintContent = forwardRef(({ transactionData }, ref) => {
         }
       `}</style>
 
-      <div style={{ width: '48mm', maxWidth: '48mm', padding: '1mm', boxSizing: 'border-box', fontFamily: "'Courier New', monospace", fontSize: '9px' }}>
+      <div style={{ width: '58mm', maxWidth: '58mm', padding: '1mm', boxSizing: 'border-box', fontFamily: "'Courier New', monospace", fontSize: '10px' }}>
 
         {/* HEADER */}
         <h5 style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '11px', marginBottom: '2px', textTransform: 'uppercase', lineHeight: '1.2' }}>
