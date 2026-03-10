@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { User, Lock, Mail, ArrowLeft, Loader2, AlertCircle, Eye, EyeOff } from "lucide-react";
 import api from "../api";
 import { useAuth } from "../context/AuthContext";
+import ForgotPasswordModal from "./ForgotPasswordModal";
 
 function Form({ route, method }) {
   const { user, loading: userLoading, login } = useAuth();
@@ -16,7 +17,8 @@ function Form({ route, method }) {
   
   // UI State
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState(""); 
+  const [message, setMessage] = useState("");
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
   
   const navigate = useNavigate();
 
@@ -193,6 +195,13 @@ function Form({ route, method }) {
                 </div>
               )}
 
+              <p 
+                onClick={() => setForgotPasswordOpen(true)}
+                className="flex float-right text-xs text-gray-600 hover:text-gray-900 hover:underline cursor-pointer"
+              >
+                Forgot Password
+              </p>
+
               {/* Terms Checkbox (Signup Only - Text) */}
               {!isLogin && (
                 <div className="text-xs text-center text-gray-500 px-1 mt-2">
@@ -237,6 +246,9 @@ function Form({ route, method }) {
           © {new Date().getFullYear()} Kuya Vince Karinderya
         </p>
       </div>
+
+      {/* Forgot Password Modal */}
+      <ForgotPasswordModal open={forgotPasswordOpen} onOpenChange={setForgotPasswordOpen} />
     </div>
   );
 }

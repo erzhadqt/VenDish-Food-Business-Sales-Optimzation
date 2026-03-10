@@ -11,11 +11,11 @@ class UserSerializer(serializers.ModelSerializer):
     middle_name = serializers.CharField(source='profile.middle_name', required=False, allow_blank=True)
     phone = serializers.CharField(source='profile.phone', required=False, allow_blank=True)
     address = serializers.CharField(source='profile.address', required=False, allow_blank=True)
-    # profile_pic = serializers.ImageField(source='profile.profile_pic', required=False)
+    profile_pic = serializers.ImageField(source='profile.profile_pic', required=False, allow_null=True)
 
     class Meta:
         model = User
-        fields = ["id", "username", "email", "first_name", "last_name", "middle_name", "phone", "address", "password", "is_superuser", "is_staff", "is_active"]
+        fields = ["id", "username", "email", "first_name", "last_name", "middle_name", "phone", "address", "profile_pic", "password", "is_superuser", "is_staff", "is_active"]
         extra_kwargs = {"password": {"write_only": True},
                         "is_superuser": {"read_only": True}}
 
@@ -163,16 +163,51 @@ class CouponSerializer(serializers.ModelSerializer):
         if obj.criteria.target_product: return obj.criteria.target_product.product_name
         if obj.criteria.free_product: return f"Free {obj.criteria.free_product.product_name}"
         if obj.criteria.target_category: return f"{obj.criteria.target_category} Special"
-        return "OFF of any order"
+        return "Discount on any order"
 
     def get_description(self, obj):
         if not obj.criteria: return "Special exclusive discount."
         c = obj.criteria
-        if c.discount_type == 'percentage': return f"Get {c.discount_value}% OFF on selected items."
-        elif c.discount_type == 'fixed': return f"Save ₱{c.discount_value} on your order."
+
+        min_spend = float(c.min_spend) if c.min_spend else 0
+        target = c.target_product.product_name if c.target_product else None
+        category = c.target_category if c.target_category else None
+        free = c.free_product.product_name if c.free_product else None
+
+        if c.discount_type == 'percentage':
+            val = f"{c.discount_value:g}%"
+            if target and min_spend > 0:
+                return f"Spend at least ₱{min_spend:g} and get {val} OFF on {target}."
+            elif target:
+                return f"Get {val} OFF on {target}."
+            elif category and min_spend > 0:
+                return f"Spend at least ₱{min_spend:g} on {category} items and get {val} OFF."
+            elif category:
+                return f"Get {val} OFF on {category} items."
+            elif min_spend > 0:
+                return f"Spend at least ₱{min_spend:g} and get {val} OFF your order."
+            return f"Get {val} OFF on selected items."
+
+        elif c.discount_type == 'fixed':
+            val = f"₱{c.discount_value:g}"
+            if target and min_spend > 0:
+                return f"Spend at least ₱{min_spend:g} and save {val} on {target}."
+            elif target:
+                return f"Save {val} on {target}."
+            elif category and min_spend > 0:
+                return f"Spend at least ₱{min_spend:g} on {category} items and save {val}."
+            elif category:
+                return f"Save {val} on {category} items."
+            elif min_spend > 0:
+                return f"Spend at least ₱{min_spend:g} and save {val} on your order."
+            return f"Save {val} on your order."
+
         elif c.discount_type == 'free_item':
-            prod = c.free_product.product_name if c.free_product else "item"
-            return f"Buy required items and get a {prod} for free!"
+            prod = free or "item"
+            if min_spend > 0:
+                return f"Spend at least ₱{min_spend:g} and get a free {prod}!"
+            return f"Get a free {prod} with your order!"
+
         return "Limited time offer."
 
     def get_is_used(self, obj):
@@ -250,19 +285,91 @@ class ReceiptSerializer(serializers.ModelSerializer):
 class ReviewSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
     product_name = serializers.CharField(source='product.product_name', read_only=True)
+    profile_pic = serializers.SerializerMethodField(read_only=True)
+
+    # ── Profanity word list ───────────────────────────────────────────────────
+    # Words are matched case-insensitively as whole words.
+    # Add or remove entries as needed.
+    PROFANITY_LIST = [
+        # English
+        'fuck', 'fucking', 'fucked', 'fucker', 'fuckers', 'fucks',
+        'shit', 'shitty', 'shits', 'bullshit',
+        'ass', 'asshole', 'assholes',
+        'bitch', 'bitches', 'bitching',
+        'damn', 'damned', 'dammit',
+        'dick', 'dicks',
+        'bastard', 'bastards',
+        'crap', 'crappy',
+        'cunt', 'cunts',
+        'piss', 'pissed',
+        'whore', 'whores',
+        'slut', 'sluts',
+        'cock', 'cocks',
+        'wtf', 'stfu', 'lmfao',
+        'motherfucker', 'motherfuckers', 'motherfucking',
+        'retard', 'retarded',
+        'idiot', 'idiots',
+        'stupid',
+        'dumbass', 'dumbasses',
+        'nigga', 'niggas', 'nigger', 'niggers',
+        # Filipino / Tagalog
+        'putangina', 'putang ina', 'tangina', 'tang ina',
+        'gago', 'gaga',
+        'bobo', 'boba',
+        'tanga', 'tangang',
+        'ulol', 'olol',
+        'tarantado', 'tarantada',
+        'leche', 'letse', 'lintik',
+        'punyeta', 'pakshet', 'pakyu',
+        'kupal',
+        'hinayupak', 'hayop ka',
+        'peste',
+        'siraulo',
+        'bwisit',
+        'animal ka',
+        'kingina', 'kinginamo',
+    ]
 
     class Meta:
         model = Review
         fields = [
-            'id', 'user', 'username', 'review_type', 
+            'id', 'user', 'username', 'profile_pic', 'review_type', 
             'product', 'product_name', 
             'rating', 'comment', 'image', 'created_at'
         ]
         read_only_fields = ['user', 'created_at']
 
+    # ── Profanity filter applied during validation ────────────────────────────
+    @staticmethod
+    def _censor_word(match):
+        """Replace the matched word with asterisks of the same length."""
+        return '*' * len(match.group())
+
+    def validate_comment(self, value):
+        """Auto-censor profane words in the comment before saving."""
+        import re
+        for word in self.PROFANITY_LIST:
+            # \b ensures whole-word matching; re.IGNORECASE handles any casing
+            pattern = r'\b' + re.escape(word) + r'\b'
+            value = re.sub(pattern, self._censor_word, value, flags=re.IGNORECASE)
+        return value
+
     def create(self, validated_data):
         validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
+
+    def get_profile_pic(self, obj):
+        """Return the reviewer's profile picture URL, if set."""
+        try:
+            pic = obj.user.profile.profile_pic
+            if pic:
+                request = self.context.get('request')
+                if request:
+                    return request.build_absolute_uri(pic.url)
+                return pic.url
+        except Exception:
+            pass
+        return None
 
 class StaffPerformanceSerializer(serializers.Serializer):
     name = serializers.CharField(read_only=True)

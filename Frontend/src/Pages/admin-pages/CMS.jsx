@@ -43,7 +43,8 @@ const DEFAULT_SERVICES = {
 };
 const DEFAULT_ABOUT = {
   header: { line1: "WE'RE MORE", line1Highlight: "THAN", line1End: "JUST A", line1Highlight2: "PLACE TO EAT,", line2: "WE'RE A", line2Highlight: "TASTE", line2End: "OF", line2Highlight2: "HOME." },
-  story: { title: "Our Story", p1: "Inspired by the warmth of Filipino karinderyas...", p2: "Our journey started with a simple mission...", footer: "Masarap, malasakit, tulad ng pamilya!" }
+  story: { title: "Our Story", p1: "Inspired by the warmth of Filipino karinderyas...", p2: "Our journey started with a simple mission...", footer: "Masarap, malasakit, tulad ng pamilya!" },
+  location: { openHours: "Everyday: 7:00 AM \u2013 10:00 PM", locationImage: "" }
 };
 const DEFAULT_CONTACT = {
   header: { highlight: "CONTACT", suffix: "US", subtitle: "We’d love to hear from you!" },
@@ -76,6 +77,7 @@ const CMS = () => {
   const [contactData, setContactData] = useState(DEFAULT_CONTACT);
   const [heroImageFile, setHeroImageFile] = useState(null);
   const [carouselImageFiles, setCarouselImageFiles] = useState(Array(10).fill(null));
+  const [locationImageFile, setLocationImageFile] = useState(null);
 
   const [pageIds, setPageIds] = useState({
     home: null,
@@ -174,6 +176,10 @@ const CMS = () => {
               p1: aboutApiData.story_p1,
               p2: aboutApiData.story_p2,
               footer: aboutApiData.footer_text,
+            },
+            location: {
+              openHours: aboutApiData.open_hours || "Everyday: 7:00 AM \u2013 10:00 PM",
+              locationImage: aboutApiData.location_image || "",
             },
           });
         }
@@ -295,28 +301,53 @@ const CMS = () => {
             setStatus({ type: 'success', message: 'Saved SERVICES to backend!' });
         }
         else if (activeTab === 'about') {
-            const payload = {
-              line1: aboutData.header.line1,
-              line1_highlight: aboutData.header.line1Highlight,
-              line1_end: aboutData.header.line1End,
-              line1_highlight2: aboutData.header.line1Highlight2,
-              line2: aboutData.header.line2,
-              line2_highlight: aboutData.header.line2Highlight,
-              line2_end: aboutData.header.line2End,
-              line2_highlight2: aboutData.header.line2Highlight2,
-              story_title: aboutData.story.title,
-              story_p1: aboutData.story.p1,
-              story_p2: aboutData.story.p2,
-              footer_text: aboutData.story.footer,
-            };
+            const payload = new FormData();
+            payload.append('line1', aboutData.header.line1);
+            payload.append('line1_highlight', aboutData.header.line1Highlight);
+            payload.append('line1_end', aboutData.header.line1End);
+            payload.append('line1_highlight2', aboutData.header.line1Highlight2);
+            payload.append('line2', aboutData.header.line2);
+            payload.append('line2_highlight', aboutData.header.line2Highlight);
+            payload.append('line2_end', aboutData.header.line2End);
+            payload.append('line2_highlight2', aboutData.header.line2Highlight2);
+            payload.append('story_title', aboutData.story.title);
+            payload.append('story_p1', aboutData.story.p1);
+            payload.append('story_p2', aboutData.story.p2);
+            payload.append('footer_text', aboutData.story.footer);
+            payload.append('open_hours', aboutData.location?.openHours || '');
+            if (locationImageFile) {
+              payload.append('location_image', locationImageFile);
+            }
+
+            let savedAboutData = null;
 
             if (pageIds.about) {
-              await api.put(`/firstapp/about/${pageIds.about}/`, payload);
+              const res = await api.patch(`/firstapp/about/${pageIds.about}/`, payload, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+              });
+              savedAboutData = res.data;
             } else {
-              const res = await api.post('/firstapp/about/', payload);
+              const res = await api.post('/firstapp/about/', payload, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+              });
+              savedAboutData = res.data;
               if (res.data?.id) {
                 setPageIds(prev => ({ ...prev, about: res.data.id }));
               }
+            }
+
+            if (savedAboutData) {
+              setAboutData(prev => ({
+                ...prev,
+                location: {
+                  ...prev.location,
+                  locationImage: savedAboutData.location_image || prev.location?.locationImage || '',
+                },
+              }));
+            }
+
+            if (locationImageFile) {
+              setLocationImageFile(null);
             }
             setStatus({ type: 'success', message: 'Saved ABOUT to backend!' });
         }
@@ -585,6 +616,36 @@ const CMS = () => {
                             <InputGroup label="Paragraph 2" type="textarea" value={aboutData.story.p2} onChange={(v) => updateState(setAboutData, aboutData, 'story', 'p2', v)} />
                         </div>
                         <InputGroup label="Footer / Slogan" value={aboutData.story.footer} onChange={(v) => updateState(setAboutData, aboutData, 'story', 'footer', v)} />
+                    </section>
+                    <section className="bg-white p-6 border border-gray-200 rounded-xl shadow-sm">
+                        <h2 className="font-bold text-lg mb-6 text-gray-800 flex items-center gap-2"><span className="w-1.5 h-6 bg-red-500 rounded-full"></span>Location Tab Settings (App)</h2>
+                        <p className="text-xs text-gray-500 mb-4">These values are displayed in the mobile app's Location tab.</p>
+                        <InputGroup label="Open Hours" value={aboutData.location?.openHours || ''} onChange={(v) => updateState(setAboutData, aboutData, 'location', 'openHours', v)} />
+                        <div className="mt-2">
+                          <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">Location / Map Image</label>
+                          <div className="flex items-start gap-4">
+                            <div className="w-48 h-32 rounded-lg border border-gray-200 overflow-hidden bg-gray-100 flex items-center justify-center shrink-0">
+                              {(locationImageFile || aboutData.location?.locationImage) ? (
+                                <img
+                                  src={locationImageFile ? URL.createObjectURL(locationImageFile) : resolveImageUrl(aboutData.location.locationImage)}
+                                  alt="Location preview"
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <span className="text-xs text-gray-500">No image</span>
+                              )}
+                            </div>
+                            <div className="flex-1 space-y-2">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => setLocationImageFile(e.target.files?.[0] || null)}
+                                className="w-full p-2.5 border border-gray-300 rounded-lg text-sm bg-gray-50"
+                              />
+                              <p className="text-xs text-gray-500">Upload an image of your shop location or map screenshot.</p>
+                            </div>
+                          </div>
+                        </div>
                     </section>
                 </div>
             )}

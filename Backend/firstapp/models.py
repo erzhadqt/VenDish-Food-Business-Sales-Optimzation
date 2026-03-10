@@ -296,6 +296,10 @@ class AboutPage(models.Model):
     story_p2 = models.TextField(default="Our journey started...")
     footer_text = models.CharField(max_length=100, default="Masarap, malasakit, tulad ng pamilya!")
 
+    # Location / Open Hours (displayed on the app's Location tab)
+    open_hours = models.CharField(max_length=200, default="Everyday: 7:00 AM – 10:00 PM", blank=True)
+    location_image = models.ImageField(upload_to='location_images/', null=True, blank=True)
+
     def __str__(self): return "About Page Content"
 
 class ContactPage(models.Model):

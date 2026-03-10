@@ -92,6 +92,8 @@ INSTALLED_APPS = [
     'firstapp',
     'cloudinary',
 
+    'anymail',
+
     'rest_framework',
     'corsheaders',
     'django_filters',
@@ -155,6 +157,17 @@ STORAGES = {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
+
+ANYMAIL = {
+    # Note: Anymail still uses the 'sendinblue' name internally for Brevo
+    "BREVO_API_KEY": config('BREVO_API_KEY'),
+}
+
+# Tell Django to route all emails through Anymail's Brevo backend
+EMAIL_BACKEND = "anymail.backends.brevo.EmailBackend"
+
+# Default sender address
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='erzhadqt22@gmail.com')
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators

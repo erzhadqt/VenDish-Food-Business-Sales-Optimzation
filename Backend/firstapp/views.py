@@ -41,6 +41,7 @@ class CreateUserView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = [AllowAny]
+    authentication_classes = []  # Public endpoint — skip JWT validation
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by("-id")
@@ -59,11 +60,19 @@ class UserViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    # [NEW] 'Me' Endpoint to fetch current user details
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='me')
+    # [NEW] 'Me' Endpoint to fetch/update current user details
+    @action(detail=False, methods=['get', 'patch', 'put'], permission_classes=[IsAuthenticated], url_path='me')
     def me(self, request):
-        serializer = self.get_serializer(request.user)
-        return Response(serializer.data)
+        if request.method == 'GET':
+            serializer = self.get_serializer(request.user)
+            return Response(serializer.data)
+
+        # PATCH / PUT – update profile
+        serializer = self.get_serializer(request.user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated], url_path='deactivate')
     def deactivate_account(self, request):
@@ -646,65 +655,86 @@ class ContactPageViewSet(viewsets.ModelViewSet):
 
 import random
 import secrets
+from django.core.mail import send_mail
     
 class OTPViewSet(viewsets.ModelViewSet):
     queryset = OTP.objects.all()
     serializer_class = OTPSerializer
     permission_classes = [AllowAny]
+    authentication_classes = []  # Prevent stale JWTs from causing 401 on this public endpoint
 
     def create(self, request):
         email = request.data.get('email', '').strip().lower()
 
         if not email:
-            return Response({'type': 'error', 'label': 'No Email', 'details': 'No email has been sent'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'type': 'error', 'label': 'No Email', 'details': 'Please provide an email address.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        random_otp = int(''.join(map(str, [random.randint(1, 6) for _ in range(6)])))
-        user = None
-        otp = None
+        # Generate a proper 6-digit OTP (100000–999999)
+        random_otp = random.randint(100000, 999999)
 
-        try:
-            # user = User.objects.get(email=email)
-            user = User.objects.filter(email=email).first()
-        except User.DoesNotExist:
-            pass
+        user = User.objects.filter(email__iexact=email).first()
         
         if user:
+            # Update or create the OTP record
+            otp_record, created = OTP.objects.update_or_create(
+                user=user,
+                defaults={
+                    'otp': random_otp,
+                    'is_valid': True,
+                    'expires_at': timezone.localtime() + timedelta(minutes=15),
+                }
+            )
+
+            # Send the OTP via email (Brevo / Anymail)
             try:
-                otp = OTP.objects.get(user__email=email)
-
-                otp.otp = random_otp
-                otp.is_valid = True
-                otp.expires_at=timezone.localtime() + timedelta(minutes=15)
-                otp.save()
-
-            except OTP.DoesNotExist:
-                otp = OTP.objects.create(
-                    user=user,
-                    otp=random_otp,
-                    is_valid=True,
-                    expires_at=timezone.localtime() + timedelta(minutes=15)
+                send_mail(
+                    subject='Your Password Reset OTP – Kuya Vince Karinderya',
+                    message=(
+                        f'Hi {user.first_name or user.username},\n\n'
+                        f'Your one-time password (OTP) is: {random_otp}\n\n'
+                        f'This code will expire in 15 minutes.\n'
+                        f'If you did not request this, please ignore this email.\n\n'
+                        f'– Kuya Vince Karinderya'
+                    ),
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[user.email],
+                    fail_silently=False,
                 )
-                serializer = self.get_serializer(otp)
-                if serializer.is_valid():
-                    serializer.save()
+            except Exception as e:
+                # Log the error but don't expose it to the client
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f'Failed to send OTP email to {email}: {e}')
+                return Response({
+                    'type': 'error',
+                    'label': 'Email Failed',
+                    'details': 'We could not send the OTP email. Please try again later.'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
-        return Response({'otp': str(random_otp), 'type': 'success', 'label': 'OTP Sent!', 'details': 'The OTP has been sent! Check your email address for more information'}, status=status.HTTP_200_OK)
+        # Always return success to prevent email enumeration
+        return Response({
+            'type': 'success',
+            'label': 'OTP Sent!',
+            'details': 'If an account with that email exists, an OTP has been sent. Please check your inbox.'
+        }, status=status.HTTP_200_OK)
 
 
 class VerifyOTPViewSet(viewsets.ModelViewSet):
     queryset = OTP.objects.all()
     serializer_class = OTPSerializer
     permission_classes = [AllowAny]
+    authentication_classes = []  # Prevent stale JWTs from causing 401 on this public endpoint
 
     def create(self, request):
         received_otp = request.data.get('otp')
-        email = request.data.get('email')
+        email = request.data.get('email', '').strip().lower()
 
-        print(received_otp, email)
+        if not received_otp or not email:
+            return Response({'type': 'error', 'label': 'Missing Data', 'details': 'Both OTP and email are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             otp = OTP.objects.get(otp=received_otp, user__email__iexact=email)
-            user = User.objects.filter(email=email).first()
+            user = User.objects.filter(email__iexact=email).first()
 
             if not otp.is_valid:
                 return Response({'type': 'error', 'label': 'Invalid OTP', 'details': 'The OTP you have sent is no longer valid. Please request another OTP'}, status=status.HTTP_400_BAD_REQUEST)
@@ -734,6 +764,7 @@ class VerifyOTPViewSet(viewsets.ModelViewSet):
 class ChangePasswordViaToken(viewsets.ModelViewSet):
     queryset = PasswordResetToken.objects.all()
     permission_classes = [AllowAny]
+    authentication_classes = []  # Prevent stale JWTs from causing 401 on this public endpoint
 
     def create(self, request):
         received_token = request.data.get('token')
@@ -743,19 +774,13 @@ class ChangePasswordViaToken(viewsets.ModelViewSet):
         if not received_token or not password or not email:
             return Response({'type': 'error', 'label': 'Missing Data', 'details': 'Token, email, and new password are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        print(received_token)
-        print(password)
-        print(email)
-
         try:
             token = PasswordResetToken.objects.get(token=received_token)
 
             if token.expires_at < timezone.localtime():
-                return Response({'type': 'error', 'label': 'Expired Token', 'details': 'Your token has expired. Please redo the process carefully'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'type': 'error', 'label': 'Expired Token', 'details': 'Your token has expired. Please redo the process carefully.'}, status=status.HTTP_400_BAD_REQUEST)
 
-            user = User.objects.filter(email=email).first()
-
-            print('User is motherfucker: ', user)
+            user = User.objects.filter(email__iexact=email).first()
 
             if token.user != user:
                 return Response({'type': 'error', 'label': 'Token Mismatch', 'details': 'This token does not belong to the specified user.'}, status=status.HTTP_400_BAD_REQUEST)
