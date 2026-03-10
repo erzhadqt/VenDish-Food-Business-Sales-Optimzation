@@ -93,10 +93,6 @@ export default function AddUserDialog({ onSaved, children }) {
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{children}</DialogTrigger>
 
-      {open && (
-        <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" aria-hidden="true" />
-      )}
-
       {/* Increased max-width to accommodate extra fields comfortably */}
       <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto z-50">
         <DialogHeader>

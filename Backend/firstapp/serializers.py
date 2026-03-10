@@ -284,6 +284,11 @@ class ReceiptSerializer(serializers.ModelSerializer):
 
 class ReviewSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
+    email = serializers.CharField(source='user.email', read_only=True)
+    first_name = serializers.CharField(source='user.first_name', read_only=True)
+    last_name = serializers.CharField(source='user.last_name', read_only=True)
+    phone = serializers.CharField(source='user.profile.phone', read_only=True)
+    address = serializers.CharField(source='user.profile.address', read_only=True)
     product_name = serializers.CharField(source='product.product_name', read_only=True)
     profile_pic = serializers.SerializerMethodField(read_only=True)
 
@@ -333,7 +338,9 @@ class ReviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = Review
         fields = [
-            'id', 'user', 'username', 'profile_pic', 'review_type', 
+            'id', 'user', 'username', 
+            'email', 'first_name', 'last_name', 'phone', 'address', # <--- Add them to fields
+            'profile_pic', 'review_type', 
             'product', 'product_name', 
             'rating', 'comment', 'image', 'created_at'
         ]

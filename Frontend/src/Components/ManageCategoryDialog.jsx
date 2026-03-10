@@ -132,9 +132,6 @@ export default function ManageCategoryDialog({ open, onOpenChange, onSaved }) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* Blurred Backdrop */}
-      {open && <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" aria-hidden="true" />}
-
       <DialogContent className="sm:max-w-md z-50">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

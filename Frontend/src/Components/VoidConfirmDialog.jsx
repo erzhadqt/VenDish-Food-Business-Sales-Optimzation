@@ -134,10 +134,6 @@ const VoidConfirmDialog = ({ onConfirm, trigger, cartItems }) => {
         {trigger}
       </AlertDialogTrigger>
 
-      {open && (
-        <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" aria-hidden="true" />
-      )}
-
       <AlertDialogContent className="sm:max-w-md z-50">
         
         {/* --- STEP 1: AUTHORIZATION --- */}

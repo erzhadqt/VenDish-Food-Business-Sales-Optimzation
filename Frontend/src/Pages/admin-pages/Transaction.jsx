@@ -16,6 +16,7 @@ const Transaction = () => {
     const [filterStatus, setFilterStatus] = useState('ALL'); 
     const [filterCoupon, setFilterCoupon] = useState('ALL');
     const [filterCashier, setFilterCashier] = useState('ALL');
+    const [filterDate, setFilterDate] = useState(''); // New state for Date filter
 
     const formatCurrency = (amount) => {  
         return new Intl.NumberFormat('en-US', {  
@@ -56,7 +57,21 @@ const Transaction = () => {
         const statusMatch = filterStatus === 'ALL' || receipt.status === filterStatus;  
         const couponMatch = filterCoupon === 'ALL' || (filterCoupon === 'WITH' && receipt.coupon_details) || (filterCoupon === 'WITHOUT' && !receipt.coupon_details);  
         const cashierMatch = filterCashier === 'ALL' || (receipt.cashier_name || "System") === filterCashier;
-        return statusMatch && couponMatch && cashierMatch;  
+        
+        // Date match logic
+        let dateMatch = true;
+        if (filterDate) {
+            // Convert receipt date to local YYYY-MM-DD for accurate comparison
+            const receiptDateObj = new Date(receipt.created_at);
+            const year = receiptDateObj.getFullYear();
+            const month = String(receiptDateObj.getMonth() + 1).padStart(2, '0');
+            const day = String(receiptDateObj.getDate()).padStart(2, '0');
+            const formattedReceiptDate = `${year}-${month}-${day}`;
+            
+            dateMatch = formattedReceiptDate === filterDate;
+        }
+
+        return statusMatch && couponMatch && cashierMatch && dateMatch;  
     });  
 
     const totalPages = Math.ceil(filteredTransactions.length / rowsPerPage);  
@@ -76,10 +91,19 @@ const Transaction = () => {
                 </nav>  
 
                 {/* Filters Grid for responsiveness */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">  
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">  
+                    <div className="flex flex-col">
+                        <label className="text-sm font-medium text-gray-700 mb-1">Date</label>
+                        <input 
+                            type="date" 
+                            value={filterDate} 
+                            onChange={(e) => { setFilterDate(e.target.value); setCurrentPage(1); }} 
+                            className="border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none w-full"
+                        />
+                    </div>
                     <div className="flex flex-col">  
                         <label className="text-sm font-medium text-gray-700 mb-1">Status</label>  
-                        <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }} className="border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">  
+                        <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }} className="border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none w-full">  
                             <option value="ALL">All</option>  
                             <option value="COMPLETED">Completed</option>  
                             <option value="VOIDED">Voided</option>  
@@ -87,7 +111,7 @@ const Transaction = () => {
                     </div>  
                     <div className="flex flex-col">  
                         <label className="text-sm font-medium text-gray-700 mb-1">Coupon</label>  
-                        <select value={filterCoupon} onChange={(e) => { setFilterCoupon(e.target.value); setCurrentPage(1); }} className="border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">  
+                        <select value={filterCoupon} onChange={(e) => { setFilterCoupon(e.target.value); setCurrentPage(1); }} className="border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none w-full">  
                             <option value="ALL">All</option>  
                             <option value="WITH">With Coupon</option>  
                             <option value="WITHOUT">Without Coupon</option>  
@@ -95,7 +119,7 @@ const Transaction = () => {
                     </div>  
                     <div className="flex flex-col">  
                         <label className="text-sm font-medium text-gray-700 mb-1">Cashier</label>  
-                        <select value={filterCashier} onChange={(e) => { setFilterCashier(e.target.value); setCurrentPage(1); }} className="border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">  
+                        <select value={filterCashier} onChange={(e) => { setFilterCashier(e.target.value); setCurrentPage(1); }} className="border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none w-full">  
                             <option value="ALL">All Cashiers</option>  
                             {uniqueCashiers.map((name) => (
                                 <option key={name} value={name}>{name}</option>

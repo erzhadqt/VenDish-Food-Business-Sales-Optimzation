@@ -65,8 +65,6 @@ export default function ChangeVoidPinDialog({ open, onOpenChange }) {
 
   return (
     <Dialog open={open} onOpenChange={(val) => { if (!val) handleClose(); }}>
-      {open && <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" aria-hidden="true" />}
-
       <DialogContent className="sm:max-w-md z-50">
         <DialogHeader>
           <DialogTitle>Change Void PIN</DialogTitle>

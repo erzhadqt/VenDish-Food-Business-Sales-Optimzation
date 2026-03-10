@@ -1,5 +1,5 @@
 import React from "react";
-import { X } from "lucide-react";
+import { X, User } from "lucide-react";
 import { Skeleton } from "../Components/ui/skeleton";
 
 export default function UserDetailsModal({ isOpen, onClose, user }) {
@@ -20,7 +20,15 @@ export default function UserDetailsModal({ isOpen, onClose, user }) {
           </div>
 
           <div className="p-5 space-y-4">
-            <Skeleton className="h-16 w-full" />
+            {/* Skeleton for Avatar Header */}
+            <div className="flex items-center gap-4 pb-2">
+               <Skeleton className="h-16 w-16 rounded-full shrink-0" />
+               <div className="space-y-2 flex-1">
+                  <Skeleton className="h-5 w-1/2" />
+                  <Skeleton className="h-4 w-1/3" />
+               </div>
+            </div>
+            <Skeleton className="h-12 w-full" />
             <Skeleton className="h-6 w-2/3" />
             <Skeleton className="h-6 w-1/2" />
             <Skeleton className="h-16 w-full" />
@@ -33,6 +41,9 @@ export default function UserDetailsModal({ isOpen, onClose, user }) {
       </div>
     );
   }
+
+  // Handle different possible field names for the image from your Django backend
+  const userImage = user.image || user.profile_image || user.avatar;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -47,21 +58,48 @@ export default function UserDetailsModal({ isOpen, onClose, user }) {
           </button>
         </div>
         
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-5">
+          
+          {/* Profile Header: Avatar, Username, and Email */}
+          <div className="flex items-center gap-4 pb-3 border-b border-gray-100">
+            <div className="h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden shrink-0 border border-gray-200 shadow-sm">
+              {userImage ? (
+                <img src={userImage} alt={user.username || "User"} className="h-full w-full object-cover" />
+              ) : (
+                <User size={32} className="text-gray-400" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="text-lg font-bold text-gray-900 truncate">
+                {user.username || `${user.first_name || ''} ${user.last_name || ''}`.trim() || "Unknown User"}
+              </h4>
+              <p className="text-sm text-gray-500 truncate">{user.email || "No email provided"}</p>
+            </div>
+          </div>
+
+          {/* Details Grid */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-semibold text-gray-500 uppercase">First Name</label>
               <p className="text-gray-800 font-medium">{user.first_name || "N/A"}</p>
             </div>
             <div>
-              <label className="text-xs font-semibold text-gray-500 uppercase">Middle Name</label>
-              <p className="text-gray-800 font-medium">{user.middle_name || "N/A"}</p>
+              <label className="text-xs font-semibold text-gray-500 uppercase">Last Name</label>
+              <p className="text-gray-800 font-medium">{user.last_name || "N/A"}</p>
             </div>
           </div>
           
+          {/* Conditionally render Middle Name so it doesn't leave an awkward gap if empty */}
+          {user.middle_name && (
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase">Middle Name</label>
+              <p className="text-gray-800 font-medium">{user.middle_name}</p>
+            </div>
+          )}
+          
           <div>
-            <label className="text-xs font-semibold text-gray-500 uppercase">Last Name</label>
-            <p className="text-gray-800 font-medium">{user.last_name || "N/A"}</p>
+            <label className="text-xs font-semibold text-gray-500 uppercase">Email Address</label>
+            <p className="text-gray-800 font-medium">{user.email || "N/A"}</p>
           </div>
           
           <div>
@@ -71,7 +109,7 @@ export default function UserDetailsModal({ isOpen, onClose, user }) {
           
           <div>
             <label className="text-xs font-semibold text-gray-500 uppercase">Address</label>
-            <p className="text-gray-800 font-medium bg-gray-50 p-2 rounded-md border border-gray-100 mt-1">
+            <p className="text-gray-800 font-medium bg-gray-50 p-3 rounded-md border border-gray-100 mt-1">
               {user.address || "N/A"}
             </p>
           </div>

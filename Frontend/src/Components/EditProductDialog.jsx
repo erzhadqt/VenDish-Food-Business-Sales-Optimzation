@@ -77,14 +77,6 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
 
   return (
     <Dialog open={true} onOpenChange={handleClose}>
-      {/* Custom blurred backdrop */}
-      <div
-        className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
-        aria-hidden="true"
-        onClick={handleClose} 
-      />
-
-      {/* Modal content (above backdrop) */}
       <DialogContent className="sm:max-w-[450px] z-50">
         <DialogHeader>
           <DialogTitle>Edit Product</DialogTitle>

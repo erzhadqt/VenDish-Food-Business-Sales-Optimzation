@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Star, MessageSquare, TrendingUp, Eye, Trash2, Search } from 'lucide-react';
 import api from '../../api';
-import DeleteConfirmDialog from '../../Components/DeleteConfirmDialog'; // Add this import (adjust path if needed)
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../Components/ui/dialog";
+import DeleteConfirmDialog from '../../Components/DeleteConfirmDialog';
 import { Skeleton } from '../../Components/ui/skeleton';
+
+// Import the single unified modal
+import ReviewDetailsModal from '../../Components/ReviewDetailsModal';
 
 const CustomerFeedback = () => {
   const [activeTab, setActiveTab] = useState('customer'); // 'customer' or 'food'
@@ -12,30 +14,35 @@ const CustomerFeedback = () => {
   const [filteredFeedbacks, setFilteredFeedbacks] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [ratingFilter, setRatingFilter] = useState('all');
-  const [loading, setLoading] = useState(true);
-  const [selectedFeedback, setSelectedFeedback] = useState(null);
-  const [showModal, setShowModal] = useState(false);
-
+  
   const [foodFeedbacks, setFoodFeedbacks] = useState([]);
   const [filteredFoodFeedbacks, setFilteredFoodFeedbacks] = useState([]);
   const [searchFoodTerm, setSearchFoodTerm] = useState('');
   const [foodRatingFilter, setFoodRatingFilter] = useState('all');
-  const [selectedFoodFeedback, setSelectedFoodFeedback] = useState(null);
-  const [showFoodModal, setShowFoodModal] = useState(false);
+  
+  const [loading, setLoading] = useState(true);
+
+  // --- UNIFIED MODAL STATE ---
+  const [selectedReview, setSelectedReview] = useState(null);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
 
   useEffect(() => {
     const loadFeedbacks = async () => {
       try {
         setLoading(true);
 
-        // 1. Fetch reviews from Django
         const response = await api.get('/firstapp/reviews/');
         const allReviews = response.data;
 
-        // 2. Separate them into Shop (Customer) and Food reviews
         const shopReviews = allReviews.filter(r => r.review_type === 'shop').map(r => ({
            id: r.id,
            customer_name: r.username || 'Anonymous',
+           email: r.email,
+          first_name: r.first_name,
+          last_name: r.last_name,
+          phone: r.phone,
+          address: r.address,
+          profile_pic: r.profile_pic,
            rating: r.rating,
            comment: r.comment,
            created_at: r.created_at,
@@ -45,22 +52,26 @@ const CustomerFeedback = () => {
         const productReviews = allReviews.filter(r => r.review_type === 'food').map(r => ({
            id: r.id,
            food_name: r.product_name || 'Unknown Item', 
+           customer_name: r.username || 'Anonymous',
+           email: r.email,
+          first_name: r.first_name,
+          last_name: r.last_name,
+          phone: r.phone,
+          address: r.address,
+          profile_pic: r.profile_pic,
            rating: r.rating,
            comment: r.comment,
            created_at: r.created_at,
            image: r.image
         }));
 
-        // 3. Update State
         setFeedbacks(shopReviews);
         setFilteredFeedbacks(shopReviews); 
 
         setFoodFeedbacks(productReviews);
         setFilteredFoodFeedbacks(productReviews);
 
-        // Remove localStorage logic since we are now live
         localStorage.removeItem('customer_feedbacks'); 
-
       } catch (err) {
         console.error('Error loading feedbacks:', err);
       } finally {
@@ -93,7 +104,6 @@ const CustomerFeedback = () => {
     setFilteredFoodFeedbacks(filtered);
   }, [searchFoodTerm, foodRatingFilter, foodFeedbacks]);
 
-  // Customer stats
   const totalFeedbacks = feedbacks.length;
   const averageRating = feedbacks.length > 0 ? (feedbacks.reduce((sum, f) => sum + f.rating, 0) / feedbacks.length).toFixed(1) : 0;
   const fiveStarCount = feedbacks.filter(f => f.rating === 5).length;
@@ -107,25 +117,25 @@ const CustomerFeedback = () => {
     </div>
   );
 
-  const handleViewFeedback = (feedback) => { setSelectedFeedback(feedback); setShowModal(true); };
+  // Unified function to open the modal
+  const handleViewReview = (review) => { 
+    setSelectedReview(review); 
+    setIsReviewModalOpen(true); 
+  };
   
-  // UPDATED: Now uses API and no longer uses window.confirm()
   const handleDeleteFeedback = async (id) => { 
     try {
-      await api.delete(`/firstapp/reviews/${id}/`); // Delete from DB
+      await api.delete(`/firstapp/reviews/${id}/`);
       const updated = feedbacks.filter(f => f.id !== id); 
       setFeedbacks(updated); 
     } catch (error) {
       console.error("Failed to delete customer feedback:", error);
     }
   };
-
-  const handleViewFoodFeedback = (feedback) => { setSelectedFoodFeedback(feedback); setShowFoodModal(true); };
   
-  // UPDATED: Now uses API and no longer uses window.confirm()
   const handleDeleteFoodFeedback = async (id) => { 
     try {
-      await api.delete(`/firstapp/reviews/${id}/`); // Delete from DB
+      await api.delete(`/firstapp/reviews/${id}/`);
       const updated = foodFeedbacks.filter(f => f.id !== id); 
       setFoodFeedbacks(updated); 
       setFilteredFoodFeedbacks(updated); 
@@ -141,7 +151,6 @@ const CustomerFeedback = () => {
           <Skeleton className="h-10 w-36 rounded-lg" />
           <Skeleton className="h-10 w-28 rounded-lg" />
         </div>
-
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {Array.from({ length: 3 }).map((_, index) => (
             <div key={index} className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
@@ -150,7 +159,6 @@ const CustomerFeedback = () => {
             </div>
           ))}
         </div>
-
         <div className="flex flex-col md:flex-row gap-4">
           <Skeleton className="h-12 flex-1 rounded-lg" />
           <div className="flex gap-2">
@@ -159,7 +167,6 @@ const CustomerFeedback = () => {
             ))}
           </div>
         </div>
-
         <div className="space-y-4">
           {Array.from({ length: 4 }).map((_, index) => (
             <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -194,7 +201,6 @@ const CustomerFeedback = () => {
 
         {activeTab === 'customer' && (
           <>
-            {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
                 <div className="flex items-center justify-between">
@@ -234,7 +240,6 @@ const CustomerFeedback = () => {
               </div>
             </div>
 
-            {/* Search and Filter */}
             <div className="mb-6 flex flex-col md:flex-row gap-4">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -254,7 +259,6 @@ const CustomerFeedback = () => {
               </div>
             </div>
 
-            {/* Feedbacks List */}
             {filteredFeedbacks.length>0 ? (
               <div className="space-y-4">
                 {filteredFeedbacks.map(f => (
@@ -270,9 +274,9 @@ const CustomerFeedback = () => {
                         </p>
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={()=>handleViewFeedback(f)} className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Eye size={18} /></button>
+                        {/* Use Unified view function */}
+                        <button onClick={()=>handleViewReview(f)} className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Eye size={18} /></button>
                         
-                        {/* APPLIED DIALOG HERE */}
                         <DeleteConfirmDialog
                           title={`Delete review by ${f.customer_name}?`}
                           description="Are you sure you want to delete this customer feedback? This action cannot be undone."
@@ -282,7 +286,6 @@ const CustomerFeedback = () => {
                             <Trash2 size={18} />
                           </button>
                         </DeleteConfirmDialog>
-
                       </div>
                     </div>
                     <p className="text-gray-700 leading-relaxed">{f.comment}</p>
@@ -301,7 +304,6 @@ const CustomerFeedback = () => {
 
         {activeTab === 'food' && (
           <>
-            {/* Food Search and Filter */}
             <div className="mb-6 flex flex-col md:flex-row gap-4">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -321,7 +323,6 @@ const CustomerFeedback = () => {
               </div>
             </div>
 
-            {/* Food Feedbacks List */}
             {filteredFoodFeedbacks.length>0 ? (
               <div className="space-y-4">
                 {filteredFoodFeedbacks.map(f => (
@@ -335,9 +336,9 @@ const CustomerFeedback = () => {
                         <p className="text-sm text-gray-500">{new Date(f.created_at).toLocaleString()}</p>
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={()=>handleViewFoodFeedback(f)} className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Eye size={18} /></button>
+                         {/* Use Unified view function */}
+                        <button onClick={()=>handleViewReview(f)} className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Eye size={18} /></button>
                         
-                        {/* APPLIED DIALOG HERE */}
                         <DeleteConfirmDialog
                           title={`Delete review for ${f.food_name}?`}
                           description="Are you sure you want to delete this food review? This action cannot be undone."
@@ -347,7 +348,6 @@ const CustomerFeedback = () => {
                             <Trash2 size={18} />
                           </button>
                         </DeleteConfirmDialog>
-
                       </div>
                     </div>
                     <p className="text-gray-700 leading-relaxed">{f.comment}</p>
@@ -364,79 +364,12 @@ const CustomerFeedback = () => {
           </>
         )}
 
-        {/* --- CUSTOMER FEEDBACK MODAL --- */}
-        <Dialog open={showModal} onOpenChange={setShowModal}>
-          {showModal && <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" aria-hidden="true" />}
-          <DialogContent className="sm:max-w-[500px] z-50">
-            <DialogHeader>
-              <DialogTitle>Customer Review Details</DialogTitle>
-            </DialogHeader>
-            
-            {selectedFeedback && (
-              <div className="mt-4 space-y-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">{selectedFeedback.customer_name}</h3>
-                    <p className="text-sm text-gray-500">{new Date(selectedFeedback.created_at).toLocaleString()}</p>
-                  </div>
-                  <div>{renderStars(selectedFeedback.rating)}</div>
-                </div>
-                
-                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                  <p className="text-gray-700 whitespace-pre-wrap">{selectedFeedback.comment}</p>
-                </div>
-
-                {selectedFeedback.image && (
-                  <div className="mt-4">
-                    <p className="text-sm font-medium text-gray-700 mb-2">Attached Image:</p>
-                    <img 
-                      src={selectedFeedback.image} 
-                      alt="Customer attachment" 
-                      className="w-full max-h-64 object-contain rounded-md border border-gray-200 bg-gray-50" 
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
-
-        {/* --- FOOD FEEDBACK MODAL --- */}
-        <Dialog open={showFoodModal} onOpenChange={setShowFoodModal}>
-          {showFoodModal && <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" aria-hidden="true" />}
-          <DialogContent className="sm:max-w-[500px] z-50">
-            <DialogHeader>
-              <DialogTitle>Food Review Details</DialogTitle>
-            </DialogHeader>
-            
-            {selectedFoodFeedback && (
-              <div className="mt-4 space-y-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">{selectedFoodFeedback.food_name}</h3>
-                    <p className="text-sm text-gray-500">{new Date(selectedFoodFeedback.created_at).toLocaleString()}</p>
-                  </div>
-                  <div>{renderStars(selectedFoodFeedback.rating)}</div>
-                </div>
-                
-                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                  <p className="text-gray-700 whitespace-pre-wrap">{selectedFoodFeedback.comment}</p>
-                </div>
-
-                {selectedFoodFeedback.image && (
-                  <div className="mt-4">
-                    <p className="text-sm font-medium text-gray-700 mb-2">Attached Image:</p>
-                    <img 
-                      src={selectedFoodFeedback.image} 
-                      alt="Food attachment" 
-                      className="w-full max-h-64 object-contain rounded-md border border-gray-200 bg-gray-50" 
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
+        {/* --- USE SINGLE UNIFIED MODAL --- */}
+        <ReviewDetailsModal 
+          open={isReviewModalOpen} 
+          onOpenChange={setIsReviewModalOpen} 
+          feedback={selectedReview} 
+        />
 
       </div>
     </div>

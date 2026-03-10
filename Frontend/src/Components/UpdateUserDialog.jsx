@@ -10,7 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../Components/ui/dialog";
-import { Input } from "../Components/ui/input";
 import { Label } from "../Components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "../Components/ui/alert";
 import { AlertCircle } from "lucide-react";
@@ -19,235 +18,180 @@ import { Skeleton } from "../Components/ui/skeleton";
 export default function UpdateUserDialog({ user, onClose, onSaved }) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    // Initialize isStaff state from the prop
+    
+    // System-level toggles state
     const [isStaff, setIsStaff] = useState(Boolean(user?.is_staff));
+    const [isActive, setIsActive] = useState(user?.is_active !== false);
 
     useEffect(() => {
         if (user) {
             setIsStaff(Boolean(user.is_staff));
+            setIsActive(user.is_active !== false); // Defaults to true if undefined
         }
     }, [user]);
 
     const handleSave = async (e) => {
         e.preventDefault();
         setLoading(true);
-        setError(null); // Clear previous errors
+        setError(null); 
 
-        const formData = new FormData(e.target);
-        const values = Object.fromEntries(formData.entries());
+        // Only send the fields the admin is allowed to change
+        const payload = {
+            is_staff: isStaff,
+            is_active: isActive
+        };
 
-        const trimmedPassword = (values.password || "").trim();
-        if (!trimmedPassword) {
-            delete values.password;
-        } else {
-            values.password = trimmedPassword;
-        }
+        try {
+            console.log("Payload:", payload); 
+          
+            await api.patch(`/firstapp/users/${user.id}/`, payload, {
+                headers: {
+                    "Content-Type": "application/json",
+                },
+            });
 
-        // 1. Convert checkbox state (boolean) to the payload
-        values.is_staff = isStaff;
-
-    try {
-        console.log("Payload:", values); 
-      
-        await api.patch(`/firstapp/users/${user.id}/`, values, {
-            headers: {
-                "Content-Type": "application/json",
-            },
-        });
-
-        onSaved(); 
-        onClose(); 
-    } catch (err) {
-        console.error("Update User Error:", err.response?.data || err);
-      
-        // Format the error message
-        let errorMessage = "Failed to update user.";
-        
-        if (err.response?.data) {
-            const errorData = err.response.data;
+            onSaved(); 
+            onClose(); 
+        } catch (err) {
+            console.error("Update User Error:", err.response?.data || err);
+          
+            let errorMessage = "Failed to update user privileges.";
             
-            // Check if there are specific password errors from Django
-            if (errorData.password && Array.isArray(errorData.password)) {
-                // Join multiple password errors with a space or new line
-                errorMessage = errorData.password.join(" ");
-            } 
-            // Handle other specific field errors dynamically
-            else if (typeof errorData === 'object') {
-                const errorMessages = [];
-                for (const [field, messages] of Object.entries(errorData)) {
-                    if (Array.isArray(messages)) {
-                        // Capitalize the field name (e.g., "email" -> "Email") and append the message
-                        const fieldName = field.charAt(0).toUpperCase() + field.slice(1);
-                        errorMessages.push(`${fieldName}: ${messages.join(" ")}`);
-                    } else {
-                        errorMessages.push(`${field}: ${messages}`);
+            if (err.response?.data) {
+                const errorData = err.response.data;
+                if (typeof errorData === 'object') {
+                    const errorMessages = [];
+                    for (const [field, messages] of Object.entries(errorData)) {
+                        if (Array.isArray(messages)) {
+                            const fieldName = field.charAt(0).toUpperCase() + field.slice(1);
+                            errorMessages.push(`${fieldName}: ${messages.join(" ")}`);
+                        } else {
+                            errorMessages.push(`${field}: ${messages}`);
+                        }
                     }
+                    errorMessage = errorMessages.join(" | ");
+                } else {
+                    errorMessage = String(errorData);
                 }
-                errorMessage = errorMessages.join(" | ");
-            } else {
-                errorMessage = String(errorData);
+            } else if (err.message) {
+                errorMessage = err.message;
             }
-        } else if (err.message) {
-            errorMessage = err.message;
+          
+            setError(errorMessage);
+        } finally {
+            setLoading(false);
         }
-      
-        setError(errorMessage);
-    } finally {
-        setLoading(false);
-    }
     };
 
-  const handleClose = () => {
+    const handleClose = () => {
         setError(null);
         onClose();
     };
 
-  return (
+    return (
         <Dialog open={true} onOpenChange={handleClose}>
+            <DialogContent className="sm:max-w-[450px] z-50">
+                <DialogHeader>
+                    <DialogTitle>Manage User Permissions</DialogTitle>
+                    <DialogDescription>
+                        Update the system access and status for this user.
+                    </DialogDescription>
+                </DialogHeader>
 
-        <div
-            className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
-            aria-hidden="true"
-            onClick={handleClose} 
-            />
+                {!user ? (
+                    <div className="grid gap-4 py-1">
+                        <div className="grid gap-2">
+                            <Skeleton className="h-4 w-24" />
+                            <Skeleton className="h-10 w-full" />
+                        </div>
+                        <div className="grid gap-2">
+                            <Skeleton className="h-4 w-24" />
+                            <Skeleton className="h-10 w-full" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Skeleton className="h-4 w-4" />
+                            <Skeleton className="h-4 w-52" />
+                        </div>
+                        <DialogFooter>
+                            <Skeleton className="h-10 w-24" />
+                            <Skeleton className="h-10 w-28" />
+                        </DialogFooter>
+                    </div>
+                ) : (
+                    <>
+                        {error && (
+                            <Alert variant="destructive">
+                                <AlertCircle className="h-4 w-4" />
+                                <AlertTitle>Error</AlertTitle>
+                                <AlertDescription className="break-words">
+                                    {error}
+                                </AlertDescription>
+                            </Alert>
+                        )}
 
-                <DialogContent className="sm:max-w-[450px] z-50">
-            <DialogHeader>
-            <DialogTitle>Edit User</DialogTitle>
-            <DialogDescription>
-                Update the user information and click save.
-            </DialogDescription>
-            </DialogHeader>
-
-                        {!user ? (
-                            <div className="grid gap-4 py-1">
-                                <div className="grid gap-2">
-                                    <Skeleton className="h-4 w-24" />
-                                    <Skeleton className="h-10 w-full" />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Skeleton className="h-4 w-24" />
-                                    <Skeleton className="h-10 w-full" />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Skeleton className="h-4 w-24" />
-                                    <Skeleton className="h-10 w-full" />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Skeleton className="h-4 w-24" />
-                                    <Skeleton className="h-10 w-full" />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Skeleton className="h-4 w-24" />
-                                    <Skeleton className="h-10 w-full" />
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Skeleton className="h-4 w-4" />
-                                    <Skeleton className="h-4 w-52" />
-                                </div>
-                                <DialogFooter>
-                                    <Skeleton className="h-10 w-24" />
-                                    <Skeleton className="h-10 w-28" />
-                                </DialogFooter>
+                        <form onSubmit={handleSave} className="grid gap-4">
+                            
+                            {/* Read-Only Identity Card */}
+                            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Editing Account</p>
+                                <p className="font-medium text-gray-900">{user.username}</p>
+                                <p className="text-sm text-gray-600">{user.email}</p>
                             </div>
-                        ) : (
-                            <>
 
-            {error && (
-            <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Error</AlertTitle>
-                <AlertDescription className="break-words">
-                {error}
-                </AlertDescription>
-            </Alert>
-            )}
+                            <div className="grid gap-3 py-2">
+                                {/* 1. Staff Checkbox */}
+                                <div className="flex items-start space-x-3 border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors">
+                                    <input
+                                        type="checkbox"
+                                        id="is_staff"
+                                        checked={isStaff}
+                                        onChange={(e) => setIsStaff(e.target.checked)}
+                                        className="h-4 w-4 mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                    />
+                                    <div className="grid gap-1.5 leading-none">
+                                        <Label htmlFor="is_staff" className="font-medium cursor-pointer text-gray-900">
+                                            Staff Access
+                                        </Label>
+                                        <p className="text-sm text-gray-500">
+                                            Allows the user to access the POS system and manage standard operations.
+                                        </p>
+                                    </div>
+                                </div>
 
-            <form onSubmit={handleSave} className="grid gap-4">
+                                {/* 2. Active Status Checkbox */}
+                                <div className="flex items-start space-x-3 border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors">
+                                    <input
+                                        type="checkbox"
+                                        id="is_active"
+                                        checked={isActive}
+                                        onChange={(e) => setIsActive(e.target.checked)}
+                                        className="h-4 w-4 mt-0.5 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer"
+                                    />
+                                    <div className="grid gap-1.5 leading-none">
+                                        <Label htmlFor="is_active" className="font-medium cursor-pointer text-gray-900">
+                                            Account Active
+                                        </Label>
+                                        <p className="text-sm text-gray-500">
+                                            Uncheck to deactivate this account and block the user from logging in.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
 
-            <div className="grid gap-2">
-                <Label htmlFor="username">Username</Label>
-                <Input 
-                name="username" 
-                id="username" 
-                defaultValue={user?.username || ""} 
-                required 
-                maxLength={50} 
-                />
-            </div>
-
-            <div className="grid gap-2">
-                <Label htmlFor="first_name">First Name</Label>
-                <Input 
-                name="first_name" 
-                id="first_name" 
-                defaultValue={user?.first_name || ""} 
-                maxLength={50} 
-                />
-            </div>
-
-            <div className="grid gap-2">
-                <Label htmlFor="last_name">Last Name</Label>
-                <Input 
-                name="last_name" 
-                id="last_name" 
-                defaultValue={user?.last_name || ""} 
-                maxLength={50} 
-                />
-            </div>
-
-            <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                name="email"
-                id="email"
-                type="email"
-                defaultValue={user?.email || ""}
-                required
-                maxLength={50}
-                />
-            </div>
-
-            <div className="grid gap-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                name="password"
-                id="password"
-                type="password"
-                placeholder="Leave blank to keep current password"
-                maxLength={50}
-                />
-            </div>
-
-            {/* 2. Staff Checkbox (Controlled Component) */}
-            <div className="flex items-center gap-2">
-                <input
-                type="checkbox"
-                id="is_staff"
-                // Controls the checkbox state
-                checked={isStaff}
-                // Updates the state when clicked
-                onChange={(e) => setIsStaff(e.target.checked)}
-                className="h-4 w-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
-                />
-                <Label htmlFor="is_staff" className="cursor-pointer select-none">Staff Access (Can use POS)</Label>
-            </div>
-
-            <DialogFooter>
-                <DialogClose asChild>
-                <Button variant="outline" disabled={loading} onClick={handleClose}>
-                    Cancel
-                </Button>
-                </DialogClose>
-
-                <Button type="submit" disabled={loading}>
-                {loading ? "Saving..." : "Save Changes"}
-                </Button>
-            </DialogFooter>
-            </form>
-            </>
-            )}
-        </DialogContent>
+                            <DialogFooter className="mt-4">
+                                <DialogClose asChild>
+                                    <Button variant="outline" disabled={loading} onClick={handleClose}>
+                                        Cancel
+                                    </Button>
+                                </DialogClose>
+                                <Button type="submit" disabled={loading}>
+                                    {loading ? "Saving..." : "Save Privileges"}
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    </>
+                )}
+            </DialogContent>
         </Dialog>
     );
 }

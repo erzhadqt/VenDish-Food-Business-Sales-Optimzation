@@ -88,10 +88,6 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{children}</DialogTrigger>
 
-      {open && (
-        <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" aria-hidden="true" />
-      )}
-
       <DialogContent className="sm:max-w-md z-50">
         <DialogHeader>
           <DialogTitle>Add New Product</DialogTitle>

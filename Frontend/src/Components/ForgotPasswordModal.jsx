@@ -251,9 +251,6 @@ export default function ForgotPasswordModal({ open, onOpenChange }) {
 
   return (
     <Dialog open={open} onOpenChange={(val) => { if (!val && !loading) onOpenChange(false); }}>
-      {/* Backdrop blur overlay - consistent with ChangeVoidPinDialog */}
-      {open && <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" aria-hidden="true" />}
-
       <DialogContent className="sm:max-w-md z-50 font-poppins" showCloseButton={!loading}>
         <DialogHeader>
           <DialogTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
