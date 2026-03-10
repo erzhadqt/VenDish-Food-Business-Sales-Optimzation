@@ -29,6 +29,7 @@ const Pos = () => {
   });
   const [cash, setCash] = useState("");
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState(["All"]);
 
   const [maxCoupons, setMaxCoupons] = useState(2);
   
@@ -113,15 +114,20 @@ const Pos = () => {
     const fetchData = async () => {
       setDataLoading(true);
       try {
-        const [prodRes, userRes, settingsRes] = await Promise.all([
+        const [prodRes, userRes, settingsRes, catRes] = await Promise.all([
             api.get("/firstapp/products/"),
             api.get("/firstapp/users/"),
-            api.get("/settings/")
+            api.get("/settings/"),
+            api.get("/firstapp/categories/")
         ]);
         setProducts(prodRes.data);
         setUsers(userRes.data);
         if (settingsRes.data.max_coupons_per_order !== undefined) {
              setMaxCoupons(settingsRes.data.max_coupons_per_order);
+        }
+        if (catRes.data && Array.isArray(catRes.data)) {
+          const catNames = catRes.data.map(c => c.name).filter(Boolean);
+          setCategories(["All", ...catNames]);
         }
       } catch (error) {
         console.error("Failed to fetch data:", error);
@@ -131,8 +137,6 @@ const Pos = () => {
     };
     fetchData();
   }, []);
-
-  const categories = ["All", ...new Set(products.map((p) => p.category))];
   const filteredFoods = selectedCategory === "All" ? products : products.filter((food) => food.category === selectedCategory);
 
   // --- UPDATED CUSTOMER FILTER LOGIC ---
@@ -486,7 +490,17 @@ const Pos = () => {
       setCustomerSearch("");
 
       setIsReceiptModalOpen(false);
-      api.get("/firstapp/products/").then(res => setProducts(res.data));
+      // Refresh both products and categories after order reset
+      Promise.all([
+        api.get("/firstapp/products/"),
+        api.get("/firstapp/categories/")
+      ]).then(([prodRes, catRes]) => {
+        setProducts(prodRes.data);
+        if (catRes.data && Array.isArray(catRes.data)) {
+          const catNames = catRes.data.map(c => c.name).filter(Boolean);
+          setCategories(["All", ...catNames]);
+        }
+      });
   };
 
   return (
