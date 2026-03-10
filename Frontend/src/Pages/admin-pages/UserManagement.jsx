@@ -35,6 +35,7 @@ export default function UserManagement() {
 
   // Filter State
   const [filterRole, setFilterRole] = useState("All");
+  const [filterStatus, setFilterStatus] = useState("All");
 
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 5;
@@ -57,9 +58,14 @@ export default function UserManagement() {
 
   // Filter Logic
   const filteredUsers = users.filter((user) => {
-    if (filterRole === "All") return true;
-    if (filterRole === "Staff") return user.is_staff === true;
-    if (filterRole === "User") return user.is_staff === false || user.is_staff === undefined;
+    // Role filter
+    if (filterRole === "Staff" && user.is_staff !== true) return false;
+    if (filterRole === "User" && (user.is_staff !== false && user.is_staff !== undefined)) return false;
+
+    // Status filter
+    if (filterStatus === "Active" && user.is_active === false) return false;
+    if (filterStatus === "Deactivated" && user.is_active !== false) return false;
+
     return true;
   });
 
@@ -72,6 +78,11 @@ export default function UserManagement() {
 
   const handleFilterChange = (e) => {
     setFilterRole(e.target.value);
+    setCurrentPage(1);
+  };
+
+  const handleStatusFilterChange = (e) => {
+    setFilterStatus(e.target.value);
     setCurrentPage(1);
   };
 
@@ -138,6 +149,22 @@ export default function UserManagement() {
                 <option value="All">All Users</option>
                 <option value="Staff">Staffs</option>
                 <option value="User">Normal Accounts</option>
+              </select>
+            </div>
+
+            <div className="relative group">
+              <Filter
+                size={20}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none"
+              />
+              <select
+                value={filterStatus}
+                onChange={handleStatusFilterChange}
+                className="appearance-none pl-10 pr-8 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent cursor-pointer font-medium hover:bg-gray-50 transition-colors shadow-sm"
+              >
+                <option value="All">All Status</option>
+                <option value="Active">Active</option>
+                <option value="Deactivated">Deactivated</option>
               </select>
             </div>
 
