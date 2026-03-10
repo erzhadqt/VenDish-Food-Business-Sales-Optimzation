@@ -27,7 +27,7 @@ const ReceiptPrintContent = forwardRef(({ transactionData }, ref) => {
           }
           html, body {
             margin: 0 !important;
-            padding: 0 !important;
+            padding: 20 !important;
           }
 
           #receipt {

@@ -640,7 +640,7 @@ const Pos = () => {
                 
                 {/* --- CUSTOMER INPUT --- */}
                 <div className="mb-3 relative" ref={searchRef}>
-                    <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Customer (Optional)</label>
+                    <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Select User (Customer)</label>
                     <div className="relative">
                         <div className="absolute left-3 top-2.5 text-gray-400">
                             {selectedCustomer ? <User size={16} className="text-green-600" /> : <Search size={16} />}
