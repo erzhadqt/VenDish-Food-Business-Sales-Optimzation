@@ -102,16 +102,16 @@ export default function UserManagement() {
     triggerSuccessAlert(message);
   };
 
-  const handleDelete = async (id) => {
-    try {
-      await api.delete(`/firstapp/users/${id}/`);
-      fetchUsers();
-      triggerSuccessAlert("User deleted successfully!");
-    } catch (err) {
-      console.error("Delete failed:", err);
-      alert("Failed to delete user. Please try again.");
-    }
-  };
+  // const handleDelete = async (id) => {
+  //   try {
+  //     await api.delete(`/firstapp/users/${id}/`);
+  //     fetchUsers();
+  //     triggerSuccessAlert("User deleted successfully!");
+  //   } catch (err) {
+  //     console.error("Delete failed:", err);
+  //     alert("Failed to delete user. Please try again.");
+  //   }
+  // };
 
   const handlePrevPage = () => setCurrentPage((prev) => Math.max(prev - 1, 1));
   const handleNextPage = () => setCurrentPage((prev) => Math.min(prev + 1, totalPages));
@@ -264,7 +264,7 @@ export default function UserManagement() {
                             </button>
   
                             {/* Delete Button */}
-                            <ConfirmDeleteUserDialog
+                            {/* <ConfirmDeleteUserDialog
                               title="Delete User"
                               description="Are you sure you want to delete this user? This action cannot be undone."
                               onConfirm={() => handleDelete(u.id)}
@@ -272,7 +272,7 @@ export default function UserManagement() {
                               <button className="p-2 hover:bg-red-50 rounded-md transition-colors duration-150" title="Delete User">
                                 <Trash2Icon size={20} className="text-red-600 hover:text-red-600" />
                               </button>
-                            </ConfirmDeleteUserDialog>
+                            </ConfirmDeleteUserDialog> */}
                           </div>
                         </td>
                       </tr>

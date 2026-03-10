@@ -42,8 +42,8 @@ export default function UserDetailsModal({ isOpen, onClose, user }) {
     );
   }
 
-  // Handle different possible field names for the image from your Django backend
-  const userImage = user.image || user.profile_image || user.avatar;
+  // UPDATED: Added user.profile_pic to match your Django serializer
+  const userImage = user.profile_pic || user.image || user.profile_image || user.avatar;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">

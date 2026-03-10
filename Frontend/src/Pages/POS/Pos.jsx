@@ -135,14 +135,21 @@ const Pos = () => {
   const categories = ["All", ...new Set(products.map((p) => p.category))];
   const filteredFoods = selectedCategory === "All" ? products : products.filter((food) => food.category === selectedCategory);
 
+  // --- UPDATED CUSTOMER FILTER LOGIC ---
   const filteredCustomers = useMemo(() => {
-    if (!customerSearch) return users.slice(0, 5); 
+    // 1. Only include standard users (not staff or superusers)
+    const normalUsers = users.filter((u) => !u.is_staff);
+
+    // 2. If no search term is entered, show all normal users
+    if (!customerSearch) return normalUsers; 
+    
+    // 3. Otherwise, filter the normal users by the search term
     const lowerQ = customerSearch.toLowerCase();
-    return users.filter(u => 
+    return normalUsers.filter(u => 
         u.username.toLowerCase().includes(lowerQ) ||
         (u.first_name && u.first_name.toLowerCase().includes(lowerQ)) ||
         (u.last_name && u.last_name.toLowerCase().includes(lowerQ))
-    ).slice(0, 10); 
+    ); 
   }, [users, customerSearch]);
 
   const handleSelectCustomer = (user) => {
@@ -208,7 +215,6 @@ const Pos = () => {
       return 0;
   }, [selectedDiscount, subTotal]);
 
-  // [FIXED] Updated Logic: Prioritize discount_type to ensure free_item is always caught
   const couponDiscountAmount = useMemo(() => {
     if (appliedCoupons.length === 0) return 0;
 
@@ -219,16 +225,12 @@ const Pos = () => {
         const criteria = coupon.criteria_details;
         let currentDiscount = 0;
         
-        // 1. FREE ITEM LOGIC (Highest Priority)
-        // We check this first so it doesn't get swallowed by target_product checks
         if (criteria.discount_type === 'free_item' && criteria.free_product) {
              const freeItemInCart = cartItems.find(item => item.id === criteria.free_product);
              if (freeItemInCart) {
-                 // Discount is the price of ONE unit of the free item
                  currentDiscount = parseFloat(freeItemInCart.price);
              }
         }
-        // 2. TARGET PRODUCT LOGIC (Percentage / Fixed)
         else if (criteria.target_product) {
             const targetItem = cartItems.find(item => item.id === criteria.target_product);
             if (targetItem) {
@@ -242,7 +244,6 @@ const Pos = () => {
                 }
             }
         } 
-        // 3. GENERAL LOGIC (Order-wide)
         else {
             const baseAmount = subTotal - standardDiscount;
             if (criteria.discount_type === 'percentage') {
@@ -320,16 +321,13 @@ const Pos = () => {
         }
       }
 
-      // Handle Auto-Add Items
       if (coupon.criteria_details) {
         const criteria = coupon.criteria_details;
         let itemToAutoAdd = null;
         
-        // If it's a free item coupon, auto-add the free product
         if (criteria.discount_type === 'free_item' && criteria.free_product) {
             itemToAutoAdd = criteria.free_product;
         } 
-        // If it's a targeted discount, auto-add the target product (convenience)
         else if (criteria.target_product) {
             itemToAutoAdd = criteria.target_product;
         }
