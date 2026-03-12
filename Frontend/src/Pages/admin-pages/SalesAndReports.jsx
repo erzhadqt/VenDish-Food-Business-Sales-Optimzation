@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import Calendar from "react-calendar";
 import "react-calendar/dist/Calendar.css";
 import { 
@@ -8,7 +8,7 @@ import {
 import { 
   format, startOfMonth, endOfMonth, isWithinInterval, parseISO, 
   startOfWeek, endOfWeek, startOfYear, endOfYear, startOfDay, endOfDay,
-  eachDayOfInterval, eachMonthOfInterval, subYears, isSameDay // <-- Added isSameDay
+  eachDayOfInterval, eachMonthOfInterval, subYears 
 } from "date-fns";
 import { 
   TrendingUp, Package, CalendarDays, 
@@ -18,8 +18,7 @@ import {
 import api from '../../api'; 
 import { Skeleton } from '../../Components/ui/skeleton';
 
-// Added "Specific Day" to handle exact calendar dates
-const periods = ["Specific Day", "Daily", "Weekly", "Monthly", "Yearly"];
+const periods = ["Custom Range", "Daily", "Weekly", "Monthly", "Yearly"];
 const chartTypes = ["Bar", "Line", "Area"];
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
@@ -99,12 +98,15 @@ export default function SalesAndReports() {
   const [viewMode, setViewMode] = useState('timeline'); 
   const [isAdmin, setIsAdmin] = useState(false);
 
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  // Defaulted to Specific Day to match your desired behavior
-  const [period, setPeriod] = useState("Specific Day");
+  // Date state
+  const [dateRange, setDateRange] = useState([new Date(), new Date()]);
+  const [period, setPeriod] = useState("Custom Range");
   const [chartType, setChartType] = useState("Bar");
   const [showCalendar, setShowCalendar] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: 'report_date', direction: 'desc' });
+
+  // Refs for click outside
+  const calendarRef = useRef(null);
 
   // 1. CHECK ADMIN STATUS ON LOAD
   useEffect(() => {
@@ -157,6 +159,22 @@ export default function SalesAndReports() {
     fetchReports(filterCashier);
   }, [isAdmin, filterCashier]);
 
+  // 3. HANDLE CLICK OUTSIDE CALENDAR TO CLOSE
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (calendarRef.current && !calendarRef.current.contains(event.target)) {
+        setShowCalendar(false);
+      }
+    }
+
+    if (showCalendar) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showCalendar]);
+
   const refreshToday = async () => {
     try {
       setLoading(true);
@@ -174,53 +192,64 @@ export default function SalesAndReports() {
     return reports.filter((report) => {
       if (!report.report_date) return false;
       const reportDate = parseISO(report.report_date);
+      const refDate = dateRange[0] || new Date(); 
       
-      // NEW: Filters to the exact specific date selected
-      if (period === "Specific Day") {
-        return isSameDay(reportDate, selectedDate);
+      if (period === "Custom Range") {
+        if (!dateRange[0] || !dateRange[1]) return true;
+        return isWithinInterval(reportDate, { 
+          start: startOfDay(dateRange[0]), 
+          end: endOfDay(dateRange[1]) 
+        });
       }
       else if (period === "Daily") {
         return isWithinInterval(reportDate, { 
-          start: startOfMonth(selectedDate), end: endOfMonth(selectedDate)
+          start: startOfMonth(refDate), end: endOfMonth(refDate)
         });
       } 
       else if (period === "Weekly") {
         return isWithinInterval(reportDate, { 
-          start: startOfWeek(selectedDate), end: endOfWeek(selectedDate) 
+          start: startOfWeek(refDate), end: endOfWeek(refDate) 
         });
       }
       else if (period === "Monthly") {
          return isWithinInterval(reportDate, {
-          start: startOfYear(selectedDate), end: endOfYear(selectedDate)
+          start: startOfYear(refDate), end: endOfYear(refDate)
         });
       }
       else if (period === "Yearly") {
          return isWithinInterval(reportDate, { 
-          start: startOfYear(subYears(selectedDate, 4)), end: endOfYear(selectedDate) 
+          start: startOfYear(subYears(refDate, 4)), end: endOfYear(refDate) 
         });
       }
       return true;
     });
-  }, [reports, selectedDate, period]);
+  }, [reports, dateRange, period]);
 
   // --- CHART DATA (Timeline) ---
   const chartData = useMemo(() => {
     const getVal = (val) => parseFloat(val || 0);
+    const refDate = dateRange[0] || new Date();
 
-    // NEW: Map data for a specific day
-    if (period === "Specific Day") {
-        const dayStr = format(selectedDate, 'yyyy-MM-dd');
-        const found = filteredReports.find(r => r.report_date === dayStr);
-        return [{
-            label: format(selectedDate, "MMM d, yyyy"),
-            revenue: found ? getVal(found.total_revenue) : 0,
-            orders: found ? found.total_orders : 0
-        }];
+    if (period === "Custom Range") {
+        if (!dateRange[0] || !dateRange[1]) return [];
+        const start = startOfDay(dateRange[0]);
+        const end = endOfDay(dateRange[1]);
+        const days = eachDayOfInterval({ start, end });
+
+        return days.map(day => {
+            const dayStr = format(day, 'yyyy-MM-dd');
+            const found = filteredReports.find(r => r.report_date === dayStr);
+            return {
+                label: format(day, "MMM d"), 
+                revenue: found ? getVal(found.total_revenue) : 0,
+                orders: found ? found.total_orders : 0
+            };
+        });
     }
 
     if (period === "Daily") {
-        const start = startOfMonth(selectedDate);
-        const end = endOfMonth(selectedDate);
+        const start = startOfMonth(refDate);
+        const end = endOfMonth(refDate);
         const days = eachDayOfInterval({ start, end });
 
         return days.map(day => {
@@ -235,8 +264,8 @@ export default function SalesAndReports() {
     }
 
     if (period === "Weekly") {
-        const start = startOfWeek(selectedDate);
-        const end = endOfWeek(selectedDate);
+        const start = startOfWeek(refDate);
+        const end = endOfWeek(refDate);
         const days = eachDayOfInterval({ start, end });
         
         return days.map(day => {
@@ -251,8 +280,8 @@ export default function SalesAndReports() {
     }
 
     if (period === "Monthly") {
-        const start = startOfYear(selectedDate);
-        const end = endOfYear(selectedDate);
+        const start = startOfYear(refDate);
+        const end = endOfYear(refDate);
         const months = eachMonthOfInterval({ start, end });
 
         return months.map(month => {
@@ -273,7 +302,7 @@ export default function SalesAndReports() {
     }
 
     if (period === "Yearly") {
-        const currentYear = selectedDate.getFullYear();
+        const currentYear = refDate.getFullYear();
         const years = [currentYear - 4, currentYear - 3, currentYear - 2, currentYear - 1, currentYear];
 
         return years.map(year => {
@@ -289,7 +318,7 @@ export default function SalesAndReports() {
     }
 
     return [];
-  }, [filteredReports, period, selectedDate]);
+  }, [filteredReports, period, dateRange]);
 
   // --- WIDGET STATS ---
   const stats = useMemo(() => {
@@ -372,13 +401,15 @@ export default function SalesAndReports() {
             [''] 
         ];
         
-        filename = `sales-report-${filterCashier}-${format(selectedDate, 'yyyy-MM-dd')}`;
+        const fileDate = dateRange[0] || new Date();
+        filename = `sales-report-${filterCashier}-${format(fileDate, 'yyyy-MM-dd')}`;
     }
 
+    const fileDateStr = dateRange[0] ? format(dateRange[0], 'MMM yyyy') : format(new Date(), 'MMM yyyy');
     const metadata = [
         [title],
         [`Generated: ${format(new Date(), 'yyyy-MM-dd HH:mm:ss')}`],
-        [`Period: ${period} (${format(selectedDate, 'MMM yyyy')})`],
+        [`Period: ${period} (${fileDateStr})`],
         [''] 
     ];
 
@@ -476,12 +507,38 @@ export default function SalesAndReports() {
       {viewMode === 'timeline' && (
         <>
             {/* CONTROLS */}
-            <div className="flex flex-wrap gap-3 mb-6">
-                <button onClick={() => setShowCalendar(!showCalendar)} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 shadow-sm">
-                <CalendarDays size={18} />
-                {/* Changed to format to exact day so the button reflects the specific date picked */}
-                {format(selectedDate, "MMM d, yyyy")}
-                </button>
+            <div className="flex flex-wrap gap-3 mb-6 relative">
+                
+                {/* CALENDAR TRIGGER AND POPOVER WRAPPER */}
+                <div className="relative" ref={calendarRef}>
+                    <button 
+                        onClick={() => setShowCalendar(!showCalendar)} 
+                        className={`flex items-center gap-2 px-4 py-2 bg-white border rounded-lg shadow-sm transition-all ${showCalendar ? 'border-blue-500 ring-2 ring-blue-100' : 'border-gray-300 hover:bg-gray-50'}`}
+                    >
+                        <CalendarDays size={18} className={showCalendar ? "text-blue-600" : "text-gray-600"}/>
+                        <span className="font-medium text-gray-700">
+                            {dateRange[0] && dateRange[1] && period === "Custom Range" 
+                            ? `${format(dateRange[0], "MMM d, yyyy")} - ${format(dateRange[1], "MMM d, yyyy")}`
+                            : format(dateRange[0] || new Date(), "MMM d, yyyy")}
+                        </span>
+                    </button>
+
+                    {/* CALENDAR POPOVER */}
+                    {showCalendar && (
+                        <div className="absolute left-0 top-full mt-2 bg-white p-4 rounded-xl shadow-2xl border border-gray-100 z-50 min-w-[320px] animate-in fade-in slide-in-from-top-2 duration-200">
+                            <Calendar 
+                                selectRange={true}
+                                onChange={(val) => { 
+                                    setDateRange(val); 
+                                    setShowCalendar(false); 
+                                    setPeriod("Custom Range");
+                                }} 
+                                value={dateRange} 
+                                className="border-none !w-full"
+                            />
+                        </div>
+                    )}
+                </div>
 
                 <div className="flex bg-white rounded-lg border border-gray-200 p-1">
                 {periods.map(p => (
@@ -491,12 +548,6 @@ export default function SalesAndReports() {
                 ))}
                 </div>
             </div>
-
-            {showCalendar && (
-                <div className="mb-6 bg-white p-4 rounded-lg shadow-md max-w-sm relative z-10">
-                <Calendar onChange={(date) => { setSelectedDate(date); setShowCalendar(false); }} value={selectedDate} />
-                </div>
-            )}
 
             {loading ? (
               <TimelineLoadingSkeleton />
