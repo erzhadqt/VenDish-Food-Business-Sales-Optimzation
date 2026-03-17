@@ -120,11 +120,12 @@ class CouponSerializer(serializers.ModelSerializer):
     
     # Check if current user has used this coupon
     is_used = serializers.SerializerMethodField()
+    times_claimed = serializers.SerializerMethodField() # NEW FIELD
 
     class Meta:
         model = Coupon
         fields = [
-            'id', 'code', 'status', 'usage_limit', 'times_used', 
+            'id', 'code', 'status', 'usage_limit', 'claim_limit', 'times_used', 'times_claimed',
             'created_at', 'criteria_details', 'criteria_id',
             'name', 'product_name', 'rate', 'description', 
             'is_used'
@@ -223,6 +224,9 @@ class CouponSerializer(serializers.ModelSerializer):
                 status='COMPLETED'
             ).exists()
         return False
+    
+    def get_times_claimed(self, obj):
+        return max(obj.times_claimed, obj.claimed_by.count())
 
 class ReceiptItemSerializer(serializers.ModelSerializer):
     subtotal = serializers.ReadOnlyField() 

@@ -5,7 +5,7 @@ from django.utils import timezone
 from django.contrib.auth.models import User
 from django.contrib.auth import get_user_model
 
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, m2m_changed
 from django.dispatch import receiver
 from decimal import Decimal
 import uuid
@@ -125,7 +125,9 @@ class Coupon(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
     
     usage_limit = models.PositiveIntegerField(null=True, blank=True, help_text="Total times this code can be claimed")
+    claim_limit = models.PositiveIntegerField(null=True, blank=True, help_text="Total times this code can be CLAIMED by users in the app")
     times_used = models.PositiveIntegerField(default=0)
+    times_claimed = models.PositiveIntegerField(default=0)
 
     # Track who has CLAIMED it (Wallet)
     claimed_by = models.ManyToManyField(User, blank=True, related_name='claimed_coupons')
@@ -153,6 +155,14 @@ class Coupon(models.Model):
                 self.status = self.Status.ACTIVE
             
         super().save(*args, **kwargs)
+
+
+@receiver(m2m_changed, sender=Coupon.claimed_by.through)
+def sync_coupon_times_claimed(sender, instance, action, **kwargs):
+    if action in ['post_add', 'post_remove', 'post_clear']:
+        actual_claims = instance.claimed_by.count()
+        if instance.times_claimed != actual_claims:
+            Coupon.objects.filter(id=instance.id).update(times_claimed=actual_claims)
 
 # RECEIPT 
 class Receipt(models.Model):

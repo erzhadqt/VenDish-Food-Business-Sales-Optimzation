@@ -7,8 +7,9 @@ import AddDiscountDialog from "../../Components/AddDiscountDialog";
 import DeleteConfirmDialog from "../../Components/DeleteConfirmDialog";
 import { Skeleton } from "../../Components/ui/skeleton";
 
-// +++ IMPORT THE NEW MODAL +++
+// +++ IMPORT THE NEW MODAL & SUCCESS ALERT +++
 import ManagePosLimitDialog from "../../Components/ManagePosLimitDialog";
+import SuccessAlert from "../../Components/SuccessAlert";
 
 const PromoManagement = () => {
   const [coupons, setCoupons] = useState([]);
@@ -24,6 +25,9 @@ const PromoManagement = () => {
   const [isManageLimitOpen, setIsManageLimitOpen] = useState(false);
   const [maxCouponsLimit, setMaxCouponsLimit] = useState(2);
   const [loading, setLoading] = useState(true);
+
+  // +++ SUCCESS MESSAGE STATE +++
+  const [successMessage, setSuccessMessage] = useState("");
 
   const fetchData = async () => {
     setLoading(true);
@@ -49,10 +53,19 @@ const PromoManagement = () => {
 
   useEffect(() => { fetchData(); }, []);
 
+  // +++ HELPER TO SHOW SUCCESS ALERT +++
+  const showSuccess = (message) => {
+    setSuccessMessage(message);
+    setTimeout(() => {
+      setSuccessMessage("");
+    }, 3000); // Hide after 3 seconds
+  };
+
   const handleDelete = async (id) => {
     try {
         await api.delete(`/firstapp/coupons/${id}/`);
         setCoupons((prev) => prev.filter((coupon) => coupon.id !== id));
+        showSuccess("Coupon deleted successfully!"); // +++ SHOW ALERT ON DELETE +++
     } catch (error) {
         console.error("Failed to delete coupon:", error);
         alert("Failed to delete coupon. It may have dependencies.");
@@ -93,7 +106,7 @@ const PromoManagement = () => {
   };
 
   return (
-    <div className="p-6 space-y-8 min-h-screen">
+    <div className="p-6 space-y-6 min-h-screen">
       
       {/* HEADER & ACTIONS */}
       <div className="flex justify-between items-center">
@@ -112,6 +125,11 @@ const PromoManagement = () => {
             </Button>
         </div>
       </div>
+
+      {/* +++ RENDER SUCCESS ALERT CONDITIONAL +++ */}
+      {successMessage && (
+        <SuccessAlert message={successMessage} />
+      )}
 
       {/* ACTIVE COUPONS TABLE */}
       <div className="bg-white rounded-lg shadow p-4 border border-gray-200 flex flex-col h-full">
@@ -140,7 +158,7 @@ const PromoManagement = () => {
               <TableHead>Discount Details</TableHead>
               <TableHead>Expiration</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="text-right">Usage</TableHead>
+              <TableHead className="text-right">Stats (Claims / Uses)</TableHead>
               <TableHead className="text-right"></TableHead>
             </TableRow>
           </TableHeader>
@@ -185,14 +203,17 @@ const PromoManagement = () => {
                     </TableCell>
 
                     <TableCell className="text-right text-gray-600">
-                        <div className="flex flex-col items-end">
-                            <span>{coupon.times_used} Used Total</span>
-                            {coupon.usage_limit !== null ? (
-                                <span className={`text-xs font-bold ${isSoldOut ? 'text-red-600' : 'text-green-600'}`}>
-                                    {Math.max(0, coupon.usage_limit - coupon.times_used)} Remaining
+                        <div className="flex flex-col items-end gap-1">
+                            <div className="text-xs">
+                                <span className="font-semibold text-gray-800">Claims:</span> {coupon.times_claimed || 0} / {coupon.claim_limit !== null ? coupon.claim_limit : "∞"}
+                            </div>
+                            <div className="text-xs">
+                                <span className="font-semibold text-gray-800">POS Uses:</span> {coupon.times_used || 0} / {coupon.usage_limit !== null ? coupon.usage_limit : "∞"}
+                            </div>
+                            {coupon.usage_limit !== null && (
+                                <span className={`text-[10px] font-bold mt-1 ${isSoldOut ? 'text-red-600' : 'text-green-600'}`}>
+                                    {Math.max(0, coupon.usage_limit - coupon.times_used)} POS Uses Left
                                 </span>
-                            ) : (
-                                <span className="text-xs text-gray-400">Unlimited</span>
                             )}
                         </div>
                     </TableCell>
@@ -245,7 +266,10 @@ const PromoManagement = () => {
       <AddDiscountDialog 
         open={isCreateOpen} 
         onOpenChange={setIsCreateOpen}
-        onSaved={fetchData}
+        onSaved={() => {
+            fetchData();
+            showSuccess("Coupon created successfully!"); // +++ SHOW ALERT ON CREATE +++
+        }}
         products={products} 
       />
 

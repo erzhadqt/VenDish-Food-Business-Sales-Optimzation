@@ -11,7 +11,8 @@ import api from "../api";
 export default function AddDiscountDialog({ open, onOpenChange, onSaved, products = [] }) {
   // ... (State declarations remain the same)
   const [code, setCode] = useState("");
-  const [usageLimit, setUsageLimit] = useState(""); 
+  const [usageLimit, setUsageLimit] = useState("");
+  const [claimLimit, setClaimLimit] = useState("");
   const [ruleName, setRuleName] = useState(""); 
   const [discountType, setDiscountType] = useState("percentage"); 
   const [discountValue, setDiscountValue] = useState("");
@@ -69,14 +70,15 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
         code: code.toUpperCase(),
         criteria_id: newCriteriaId,
         status: "Active",
-        usage_limit: usageLimit ? parseInt(usageLimit) : null 
+        usage_limit: usageLimit ? parseInt(usageLimit) : null,
+        claim_limit: claimLimit ? parseInt(claimLimit) : null // --- NEW PAYLOAD ARG ---
       });
 
       onSaved(); 
       onOpenChange(false);
       
       // Reset Form
-      setCode(""); setUsageLimit(""); setRuleName(""); setDiscountValue("");
+      setCode(""); setUsageLimit(""); setClaimLimit(""); setRuleName("");
       setMinSpend("0"); setSelectedFreeProduct(""); setTargetProductId("all");
       setValidTo(""); setError(null);
 
@@ -121,10 +123,16 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                               <Button variant="outline" size="icon" onClick={generateRandomCode}><Wand2 className="h-4 w-4" /></Button>
                           </div>
                       </div>
-                      <div className="space-y-1">
-                          <Label className="flex items-center gap-1">Usage Limit <Hash size={12}/></Label>
-                          <Input type="number" placeholder="e.g. 50" value={usageLimit} onChange={(e) => setUsageLimit(e.target.value)} />
-                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                            <Label className="flex items-center gap-1">POS Usage Limit <Hash size={12}/></Label>
+                            <Input type="number" placeholder="e.g. 50" value={usageLimit} onChange={(e) => setUsageLimit(e.target.value)} />
+                        </div>
+                        <div className="space-y-1">
+                            <Label className="flex items-center gap-1">App Claim Limit <Hash size={12}/></Label>
+                            <Input type="number" placeholder="e.g. 100" value={claimLimit} onChange={(e) => setClaimLimit(e.target.value)} />
+                        </div>
+                    </div>
                    </div>
                 </div>  
 

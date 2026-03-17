@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Tag, Trash2, ShoppingBag, User, Search, X } from "lucide-react"; 
-import { FaCheckCircle, FaExclamationCircle } from "react-icons/fa"; 
+import React, { useState, useEffect, useMemo } from "react";
+import { Tag, Trash2, ShoppingBag, User, X } from "lucide-react"; 
+import { FaExclamationCircle } from "react-icons/fa"; 
 
 import api from "../../api";
 import ReceiptModal2 from "../../Components/ReceiptModal2";
 import VoidConfirmDialog from "../../Components/VoidConfirmDialog";
+import CustomerCouponModal from "../../Components/CustomerCouponModal";
 import { SelectDiscount } from "../../Components/SelectDiscount";
 import AlertModal from "../../Components/AlertModal";
 import { Skeleton } from "../../Components/ui/skeleton";
@@ -36,9 +37,9 @@ const Pos = () => {
   // --- CUSTOMER SEARCH STATES ---
   const [users, setUsers] = useState([]); 
   const [selectedCustomer, setSelectedCustomer] = useState(null); 
-  const [customerSearch, setCustomerSearch] = useState(""); 
-  const [showCustomerResults, setShowCustomerResults] = useState(false); 
-  const searchRef = useRef(null);
+  const [customerCoupons, setCustomerCoupons] = useState([]);
+  const [customerCouponsLoading, setCustomerCouponsLoading] = useState(false);
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
 
   const [receiptDetails, setReceiptDetails] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -101,16 +102,6 @@ const Pos = () => {
   }, [appliedCoupons]);
 
   useEffect(() => {
-    function handleClickOutside(event) {
-      if (searchRef.current && !searchRef.current.contains(event.target)) {
-        setShowCustomerResults(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  useEffect(() => {
     const fetchData = async () => {
       setDataLoading(true);
       try {
@@ -139,33 +130,100 @@ const Pos = () => {
   }, []);
   const filteredFoods = selectedCategory === "All" ? products : products.filter((food) => food.category === selectedCategory);
 
-  // --- UPDATED CUSTOMER FILTER LOGIC ---
-  const filteredCustomers = useMemo(() => {
-    // 1. Only include standard users (not staff or superusers)
-    const normalUsers = users.filter((u) => !u.is_staff);
-
-    // 2. If no search term is entered, show all normal users
-    if (!customerSearch) return normalUsers; 
-    
-    // 3. Otherwise, filter the normal users by the search term
-    const lowerQ = customerSearch.toLowerCase();
-    return normalUsers.filter(u => 
-        u.username.toLowerCase().includes(lowerQ) ||
-        (u.first_name && u.first_name.toLowerCase().includes(lowerQ)) ||
-        (u.last_name && u.last_name.toLowerCase().includes(lowerQ))
-    ); 
-  }, [users, customerSearch]);
+  const selectedCustomerInfo = useMemo(
+    () => users.find((user) => user.id === selectedCustomer) || null,
+    [users, selectedCustomer]
+  );
 
   const handleSelectCustomer = (user) => {
+      if (selectedCustomer !== user.id) {
+        setAppliedCoupons([]);
+        setPromoCode("");
+        setCouponError("");
+      }
       setSelectedCustomer(user.id);
-      setCustomerSearch(`${user.first_name} ${user.last_name} (${user.username})`.trim());
-      setShowCustomerResults(false);
   };
 
   const handleClearCustomer = () => {
       setSelectedCustomer(null);
-      setCustomerSearch("");
-      setShowCustomerResults(false);
+      setCustomerCoupons([]);
+      setAppliedCoupons([]);
+      setPromoCode("");
+      setCouponError("");
+  };
+
+  useEffect(() => {
+    const fetchCustomerCoupons = async () => {
+      if (!selectedCustomer) {
+        setCustomerCoupons([]);
+        return;
+      }
+
+      setCustomerCouponsLoading(true);
+      try {
+        const response = await api.get(`/firstapp/users/${selectedCustomer}/claimed-coupons/`);
+        setCustomerCoupons(Array.isArray(response.data) ? response.data : []);
+      } catch (error) {
+        console.error("Failed to fetch customer claimed coupons:", error);
+        setCustomerCoupons([]);
+      } finally {
+        setCustomerCouponsLoading(false);
+      }
+    };
+
+    fetchCustomerCoupons();
+  }, [selectedCustomer]);
+
+  const applyClaimedCoupon = (coupon) => {
+    if (!selectedCustomer) {
+      setCouponError("Select a customer first. Coupons are tied to user accounts.");
+      return;
+    }
+
+    if (appliedCoupons.length >= maxCoupons) {
+      setCouponError(`Maximum of ${maxCoupons} coupons allowed per order.`);
+      return;
+    }
+
+    if (appliedCoupons.some((existing) => existing.id === coupon.id)) {
+      setCouponError("This coupon is already applied!");
+      return;
+    }
+
+    if (coupon.is_used) {
+      setCouponError("This coupon was already used by the selected customer.");
+      return;
+    }
+
+    if (coupon.status === 'Expired') {
+      setCouponError("Coupon is Expired");
+      return;
+    }
+
+    if (coupon.criteria_details && parseFloat(coupon.criteria_details.min_spend) > 0) {
+      if (subTotal < parseFloat(coupon.criteria_details.min_spend)) {
+        setCouponError(`Minimum spend of ₱${coupon.criteria_details.min_spend} required.`);
+        return;
+      }
+    }
+
+    if (coupon.criteria_details) {
+      const criteria = coupon.criteria_details;
+      let itemToAutoAdd = null;
+      
+      if (criteria.discount_type === 'free_item' && criteria.free_product) {
+        itemToAutoAdd = criteria.free_product;
+      } else if (criteria.target_product) {
+        itemToAutoAdd = criteria.target_product;
+      }
+
+      if (itemToAutoAdd) {
+        autoAddItemToCart(itemToAutoAdd);
+      }
+    }
+
+    setAppliedCoupons((prev) => [...prev, coupon]);
+    setCouponError("");
   };
 
   const handleFoodClick = (food) => {
@@ -270,6 +328,11 @@ const Pos = () => {
   const change = cash ? (parseFloat(cash) - total).toFixed(2) : 0;
 
   const handleApplyPromo = async () => {
+    if (!selectedCustomer) {
+      setCouponError("Select a customer first. Coupons are tied to user accounts.");
+      return;
+    }
+
     if (!promoCode.trim()) {
       setCouponError("Please enter a promo code");
       return;
@@ -300,14 +363,18 @@ const Pos = () => {
       }
 
       const coupon = couponData;
-      const isSoldOut = coupon.usage_limit !== null && coupon.times_used >= coupon.usage_limit;
 
-      if (isSoldOut) {
-          if (!selectedCustomer) {
-              setCouponError("Coupon limit reached (Sold Out). Only reserved users allowed.");
-              setCouponLoading(false);
-              return;
-          }
+      const ownedCoupon = customerCoupons.find(c => c.id === coupon.id);
+      if (!ownedCoupon) {
+        setCouponError("This coupon is not claimed by the selected customer.");
+        setCouponLoading(false);
+        return;
+      }
+
+      if (ownedCoupon.is_used) {
+        setCouponError("This coupon was already used by the selected customer.");
+        setCouponLoading(false);
+        return;
       }
       
       const validStatuses = ['Active', 'active', 'Redeemed', 'redeemed'];
@@ -325,25 +392,8 @@ const Pos = () => {
         }
       }
 
-      if (coupon.criteria_details) {
-        const criteria = coupon.criteria_details;
-        let itemToAutoAdd = null;
-        
-        if (criteria.discount_type === 'free_item' && criteria.free_product) {
-            itemToAutoAdd = criteria.free_product;
-        } 
-        else if (criteria.target_product) {
-            itemToAutoAdd = criteria.target_product;
-        }
-
-        if (itemToAutoAdd) {
-            autoAddItemToCart(itemToAutoAdd);
-        }
-      }
-
-      setAppliedCoupons(prev => [...prev, coupon]); 
-      setPromoCode(""); 
-      setCouponError("");
+      applyClaimedCoupon({ ...coupon, is_used: ownedCoupon.is_used });
+      setPromoCode("");
       
     } catch (error) {
       console.error("Promo check failed", error);
@@ -437,6 +487,9 @@ const Pos = () => {
   const handleSubmitOrder = async () => {
     if (cartItems.length === 0) return triggerAlert("Empty Cart", "Cart is empty!");
     if (!cash || parseFloat(cash) < total) return triggerAlert("Insufficient Cash", "The cash provided is less than the total amount!");
+    if (appliedCoupons.length > 0 && !selectedCustomer) {
+      return triggerAlert("Customer Required", "Select a customer first. Coupons are tied to user accounts.");
+    }
     
     for (const coupon of appliedCoupons) {
         const isCouponLimitReached = coupon.usage_limit !== null && coupon.times_used >= coupon.usage_limit;
@@ -487,7 +540,8 @@ const Pos = () => {
       setSelectedDiscount(null);
       setReceiptDetails(null);
       setSelectedCustomer(null); 
-      setCustomerSearch("");
+      setCustomerCoupons([]);
+      setIsCustomerModalOpen(false);
 
       setIsReceiptModalOpen(false);
       // Refresh both products and categories after order reset
@@ -638,62 +692,38 @@ const Pos = () => {
 
              <div className="p-5 bg-gray-50 border-t shadow-[0_-5px_15px_rgba(0,0,0,0.05)] z-10 rounded-b-xl">
                 
-                {/* --- CUSTOMER INPUT --- */}
-                <div className="mb-3 relative" ref={searchRef}>
-                    <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Select User (Customer)</label>
-                    <div className="relative">
-                        <div className="absolute left-3 top-2.5 text-gray-400">
-                            {selectedCustomer ? <User size={16} className="text-green-600" /> : <Search size={16} />}
-                        </div>
-                        
-                        <input 
-                            type="text"
-                            placeholder="Search customer name or ID..."
-                            value={customerSearch}
-                            onChange={(e) => {
-                                setCustomerSearch(e.target.value);
-                                setShowCustomerResults(true);
-                                if(e.target.value === "") setSelectedCustomer(null);
-                            }}
-                            onFocus={() => setShowCustomerResults(true)}
-                            className={`w-full pl-9 pr-8 py-2 border rounded-md text-sm outline-none focus:ring-2 transition ${selectedCustomer ? 'border-green-500 ring-green-100 bg-green-50' : 'focus:ring-blue-100'}`}
-                        />
-
-                        {customerSearch && (
-                            <button 
-                                onClick={handleClearCustomer}
-                                className="absolute right-2 top-2.5 text-gray-400 hover:text-red-500"
-                            >
-                                <X size={16} />
-                            </button>
-                        )}
+                <div className="mb-3 border rounded-md bg-white p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-gray-700 flex items-center gap-2">
+                      <User size={15} className={selectedCustomer ? "text-green-600" : "text-gray-400"} />
+                      {selectedCustomerInfo ? (
+                        <span className="font-medium">
+                          {(selectedCustomerInfo.first_name || selectedCustomerInfo.username) + (selectedCustomerInfo.last_name ? ` ${selectedCustomerInfo.last_name}` : "")}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">No customer selected</span>
+                      )}
                     </div>
 
-                    {showCustomerResults && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto z-20">
-                            {filteredCustomers.length > 0 ? (
-                                filteredCustomers.map(user => (
-                                    <button
-                                        key={user.id}
-                                        onClick={() => handleSelectCustomer(user)}
-                                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
-                                    >
-                                        <div className="bg-gray-200 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-gray-600">
-                                            {user.username.charAt(0).toUpperCase()}
-                                        </div>
-                                        <div>
-                                            <div className="font-medium text-gray-800">
-                                                {user.first_name || user.username} {user.last_name}
-                                            </div>
-                                            <div className="text-xs text-gray-500">@{user.username}</div>
-                                        </div>
-                                    </button>
-                                ))
-                            ) : (
-                                <div className="px-3 py-2 text-sm text-gray-400 text-center">No customers found</div>
-                            )}
-                        </div>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {selectedCustomer && (
+                        <button
+                          type="button"
+                          onClick={handleClearCustomer}
+                          className="text-xs px-2 py-1 rounded border text-gray-600 hover:bg-gray-50"
+                        >
+                          Clear
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomerModalOpen(true)}
+                        className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
+                      >
+                        Select User & Coupons
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="space-y-1 mb-4 text-sm text-gray-600">
@@ -804,6 +834,19 @@ const Pos = () => {
 
              </div>
         </div>
+
+        <CustomerCouponModal
+          open={isCustomerModalOpen}
+          onOpenChange={setIsCustomerModalOpen}
+          users={users}
+          selectedCustomerId={selectedCustomer}
+          onSelectCustomer={handleSelectCustomer}
+          onClearCustomer={handleClearCustomer}
+          customerCoupons={customerCoupons}
+          customerCouponsLoading={customerCouponsLoading}
+          appliedCoupons={appliedCoupons}
+          onApplyCoupon={applyClaimedCoupon}
+        />
     </div>
   );
 };

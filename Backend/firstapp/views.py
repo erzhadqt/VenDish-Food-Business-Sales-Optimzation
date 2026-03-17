@@ -100,6 +100,31 @@ class UserViewSet(viewsets.ModelViewSet):
 
         return Response({"message": "Account deactivated successfully. It will be permanently deleted in 30 days."}, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated], url_path='claimed-coupons')
+    def claimed_coupons(self, request, pk=None):
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response({"error": "Only staff can access customer coupon wallets."}, status=status.HTTP_403_FORBIDDEN)
+
+        customer = get_object_or_404(User, id=pk)
+
+        claimed_coupons = Coupon.objects.filter(claimed_by=customer).annotate(
+            is_used_by_user=Exists(
+                Receipt.objects.filter(
+                    coupons=OuterRef('pk'),
+                    customer=customer,
+                    status='COMPLETED'
+                )
+            )
+        ).order_by('-created_at')
+
+        serializer = CouponSerializer(claimed_coupons, many=True, context={'request': request})
+        data = serializer.data
+
+        for index, coupon in enumerate(claimed_coupons):
+            data[index]['is_used'] = coupon.is_used_by_user
+
+        return Response(data, status=status.HTTP_200_OK)
+
 class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
@@ -237,25 +262,27 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                             if receipt.subtotal < coupon.criteria.min_spend:
                                 raise Exception(f"Coupon {coupon.code} requires a minimum spend of ₱{coupon.criteria.min_spend}.")
 
-                        # RULE A: ONE USE PER USER (If customer is identified)
-                        if target_customer:
-                            already_used = Receipt.objects.filter(
-                                coupons=coupon, # M2M check
-                                customer=target_customer,
-                                status='COMPLETED'
-                            ).exclude(id=receipt.id).exists()
+                        # RULE A: COUPON MUST BE TIED TO A CUSTOMER ACCOUNT
+                        if not target_customer:
+                            raise Exception("Coupons are tied to user accounts. Please select a customer first.")
 
-                            if already_used:
-                                raise Exception(f"User {target_customer.username} has already used coupon {coupon.code}.")
+                        has_claim = coupon.claimed_by.filter(id=target_customer.id).exists()
+                        if not has_claim:
+                            raise Exception(f"Coupon {coupon.code} is not claimed by user {target_customer.username}.")
 
-                        # RULE B: GLOBAL USAGE LIMIT
+                        # RULE B: ONE USE PER USER
+                        already_used = Receipt.objects.filter(
+                            coupons=coupon,
+                            customer=target_customer,
+                            status='COMPLETED'
+                        ).exclude(id=receipt.id).exists()
+
+                        if already_used:
+                            raise Exception(f"User {target_customer.username} has already used coupon {coupon.code}.")
+
+                        # RULE C: GLOBAL USAGE LIMIT
                         if coupon.usage_limit is not None and coupon.times_used >= coupon.usage_limit:
-                            if not target_customer:
-                                raise Exception(f"Coupon {coupon.code} is sold out.")
-                            
-                            has_claim = coupon.claimed_by.filter(id=target_customer.id).exists()
-                            if not has_claim:
-                                raise Exception(f"Coupon {coupon.code} is sold out and not claimed by user.")
+                            raise Exception(f"Coupon {coupon.code} is sold out.")
 
                         # --- END VALIDATION ---
 
@@ -401,31 +428,28 @@ class CouponViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='claim')
     def claim(self, request, pk=None):
-        coupon = self.get_object()
         user = request.user
-
-        # [NEW] Expiration Check
-        if coupon.criteria and coupon.criteria.valid_to and coupon.criteria.valid_to < timezone.now():
-             return Response({"error": "This coupon has expired."}, status=status.HTTP_400_BAD_REQUEST)
-
-        if coupon.status != 'Active':
-            return Response({"error": "This coupon is no longer active."}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if coupon.claimed_by.filter(id=user.id).exists():
-            return Response({"message": "You already have this coupon in your wallet."})
-
-        if coupon.usage_limit is not None and coupon.claimed_by.count() >= coupon.usage_limit:
-             return Response({"error": "This coupon is fully claimed (Sold Out)."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             with transaction.atomic():
-                coupon = Coupon.objects.select_for_update().get(id=coupon.id)
-                
-                if coupon.usage_limit is not None and coupon.claimed_by.count() >= coupon.usage_limit:
-                     return Response({"error": "Sold Out just now."}, status=400)
+                coupon = Coupon.objects.select_for_update().get(id=pk)
+
+                if coupon.criteria and coupon.criteria.valid_to and coupon.criteria.valid_to < timezone.now():
+                    return Response({"error": "This coupon has expired."}, status=status.HTTP_400_BAD_REQUEST)
+
+                if coupon.status != 'Active':
+                    return Response({"error": "This coupon is no longer active."}, status=status.HTTP_400_BAD_REQUEST)
+
+                if coupon.claimed_by.filter(id=user.id).exists():
+                    return Response({"message": "You already have this coupon in your wallet."}, status=status.HTTP_200_OK)
+
+                current_claims = coupon.claimed_by.count()
+                if coupon.claim_limit is not None and current_claims >= coupon.claim_limit:
+                    return Response({"error": "This coupon is fully claimed (Sold Out in App)."}, status=status.HTTP_400_BAD_REQUEST)
 
                 coupon.claimed_by.add(user)
-                coupon.save() 
+                coupon.times_claimed = coupon.claimed_by.count()
+                coupon.save()
 
             serializer = self.get_serializer(coupon)
             return Response(serializer.data, status=status.HTTP_200_OK)
