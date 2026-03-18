@@ -127,6 +127,7 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                         <div className="space-y-1">
                             <Label className="flex items-center gap-1">POS Usage Limit <Hash size={12}/></Label>
                             <Input type="number" placeholder="e.g. 50" value={usageLimit} onChange={(e) => setUsageLimit(e.target.value)} />
+                            <p className="text-[10px] text-gray-500">Leave blank for unlimited</p>
                         </div>
                         <div className="space-y-1">
                             <Label className="flex items-center gap-1">App Claim Limit <Hash size={12}/></Label>
