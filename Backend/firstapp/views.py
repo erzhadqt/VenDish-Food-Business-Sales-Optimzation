@@ -75,7 +75,7 @@ class UserViewSet(viewsets.ModelViewSet):
             StaffInvitationToken.objects.create(user=user, token=token_str)
 
             # Define your frontend URL (Update this in production)
-            frontend_url = getattr(settings, 'FRONTEND_URL', 'https://ven-dish-business-sales-optimz.vercel.app')
+            frontend_url = getattr(settings, 'FRONTEND_URL', 'https://ven-dish-food-business-sales-optimz.vercel.app')
             
             accept_link = f"{frontend_url}/verify-staff?token={token_str}&action=accept"
             reject_link = f"{frontend_url}/verify-staff?token={token_str}&action=reject"
