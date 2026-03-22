@@ -56,6 +56,14 @@ export default function UserManagement() {
     fetchUsers();
   }, []);
 
+  // --- NEW: Helper to determine exact status ---
+  const getUserStatus = (user) => {
+    if (user.is_active) return "Active";
+    // If it's a staff account and inactive, we consider it pending email verification
+    if (user.is_staff && !user.is_active) return "Pending";
+    return "Deactivated";
+  };
+
   // Filter Logic
   const filteredUsers = users.filter((user) => {
     // Role filter
@@ -63,8 +71,8 @@ export default function UserManagement() {
     if (filterRole === "User" && (user.is_staff !== false && user.is_staff !== undefined)) return false;
 
     // Status filter
-    if (filterStatus === "Active" && user.is_active === false) return false;
-    if (filterStatus === "Deactivated" && user.is_active !== false) return false;
+    const status = getUserStatus(user);
+    if (filterStatus !== "All" && status !== filterStatus) return false;
 
     return true;
   });
@@ -95,34 +103,13 @@ export default function UserManagement() {
 
   const handleAdded = () => {
     fetchUsers();
-    triggerSuccessAlert("New user created successfully!");
+    triggerSuccessAlert("New user created successfully! An invite email was sent.");
   };
 
   const handleUpdated = () => {
     fetchUsers();
     triggerSuccessAlert("User account updated successfully!");
   };
-
-  // const handleBlocked = (mode = "block", count = 0) => {
-  //   fetchUsers();
-  //   const action = mode === "unblock" ? "unblocked" : "blocked";
-  //   const message =
-  //     count > 0
-  //       ? `${count} user account${count > 1 ? "s were" : " was"} ${action} successfully!`
-  //       : `Selected user accounts were ${action} successfully!`;
-  //   triggerSuccessAlert(message);
-  // };
-
-  // const handleDelete = async (id) => {
-  //   try {
-  //     await api.delete(`/firstapp/users/${id}/`);
-  //     fetchUsers();
-  //     triggerSuccessAlert("User deleted successfully!");
-  //   } catch (err) {
-  //     console.error("Delete failed:", err);
-  //     alert("Failed to delete user. Please try again.");
-  //   }
-  // };
 
   const handlePrevPage = () => setCurrentPage((prev) => Math.max(prev - 1, 1));
   const handleNextPage = () => setCurrentPage((prev) => Math.min(prev + 1, totalPages));
@@ -164,6 +151,7 @@ export default function UserManagement() {
               >
                 <option value="All">All Status</option>
                 <option value="Active">Active</option>
+                <option value="Pending">Pending</option>
                 <option value="Deactivated">Deactivated</option>
               </select>
             </div>
@@ -173,12 +161,6 @@ export default function UserManagement() {
                 <UserPlus size={20} /> User
               </button>
             </AddUserDialog>
-
-            {/* <BlockUserDialog users={users} onSaved={handleBlocked}>
-              <button className="flex gap-2 items-center bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm">
-                <UserRoundX size={20} /> Manage Blocking
-              </button>
-            </BlockUserDialog> */}
           </div>
         </div>
 
@@ -238,7 +220,10 @@ export default function UserManagement() {
                         </td>
                       </tr>
                   ) : (
-                    paginatedUsers.map((u) => (
+                    paginatedUsers.map((u) => {
+                      const currentStatus = getUserStatus(u);
+                      
+                      return (
                       <tr
                         key={u.id}
                         className="hover:bg-gray-50 transition-colors duration-150"
@@ -257,13 +242,19 @@ export default function UserManagement() {
                           )}
                         </td>
                         
-                        {/* New Status Column */}
+                        {/* New Dynamic Status Column */}
                         <td className="py-3 px-3 text-sm">
-                          {u.is_active !== false ? (
+                          {currentStatus === "Active" && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 border border-green-200">
                               Active
                             </span>
-                          ) : (
+                          )}
+                          {currentStatus === "Pending" && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-200">
+                              Pending
+                            </span>
+                          )}
+                          {currentStatus === "Deactivated" && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 border border-red-200">
                               Deactivated
                             </span>
@@ -289,21 +280,10 @@ export default function UserManagement() {
                             >
                               <UserRoundPen size={20} className="text-green-500" />
                             </button>
-  
-                            {/* Delete Button */}
-                            {/* <ConfirmDeleteUserDialog
-                              title="Delete User"
-                              description="Are you sure you want to delete this user? This action cannot be undone."
-                              onConfirm={() => handleDelete(u.id)}
-                            >
-                              <button className="p-2 hover:bg-red-50 rounded-md transition-colors duration-150" title="Delete User">
-                                <Trash2Icon size={20} className="text-red-600 hover:text-red-600" />
-                              </button>
-                            </ConfirmDeleteUserDialog> */}
                           </div>
                         </td>
                       </tr>
-                    ))
+                    )})
                   )}
                 </tbody>
               </table>

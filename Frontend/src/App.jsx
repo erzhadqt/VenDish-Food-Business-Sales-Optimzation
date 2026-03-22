@@ -5,6 +5,7 @@ import Layout from "./Pages/Layout";
 
 import Login from "./Pages/login-signup/Login";
 import Signup from "./Pages/login-signup/Signup";
+import VerifyStaff from "./Pages/login-signup/VerifyStaff";
 import ProtectedRoute from "./Components/ProtectedRoute";
 
 import NotFound from "./Pages/NotFound";
@@ -64,6 +65,7 @@ function App() {
 				<Route path="/kuyavincekarinderya" element={<Login />} />
 				<Route path="/kuyavincekarinderya-signup" element={<RegisterAndLogout />} />
 				<Route path="/logout" element={<Logout />} />
+				<Route path="/verify-staff" element={<VerifyStaff />} />
 			
 				
 				

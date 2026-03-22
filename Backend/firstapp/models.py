@@ -229,6 +229,15 @@ class Review(models.Model):
     def __str__(self):
         return f"{self.user.username} - {self.rating} stars ({self.review_type})"
 
+class StaffInvitationToken(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    token = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_valid = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"Invite Token for {self.user.username}"
+
 class Feedback(models.Model):
     message = models.TextField()
     date_submitted = models.DateTimeField(default=timezone.now)

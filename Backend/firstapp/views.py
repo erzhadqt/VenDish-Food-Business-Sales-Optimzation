@@ -22,13 +22,15 @@ from django.db.models import Sum, Count, Q, Exists, OuterRef
 
 from django.contrib.auth.hashers import make_password, check_password
 
+import secrets
+
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.permissions import AllowAny
 
 from .serializers import (
     UserSerializer, FeedbackSerializer, ProductSerializer, CategorySerializer, ReceiptSerializer, CouponSerializer, HomePageSerializer, ServicesPageSerializer, AboutPageSerializer, ContactPageSerializer, CouponCriteriaSerializer, StaffPerformanceSerializer, ReviewSerializer, OTPSerializer
 )   
-from .models import Product, Category, Receipt, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, ReceiptItem, Review, OTP, PasswordResetToken, StoreSettings
+from .models import Product, Category, Receipt, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, ReceiptItem, Review, OTP, PasswordResetToken, StoreSettings, StaffInvitationToken
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.exceptions import AuthenticationFailed
 
@@ -47,6 +49,66 @@ class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by("-id")
     serializer_class = UserSerializer
     # permission_classes = [IsAdminUser]
+
+    # [NEW] 1. OVERRIDE CREATE TO INTERCEPT STAFF CREATION
+    def create(self, request, *args, **kwargs):
+        # request.data might be immutable, so we copy it safely
+        data = request.data.copy() if hasattr(request.data, 'copy') else request.data
+
+        # Check if the account being created is a staff account
+        is_staff = data.get('is_staff', False)
+        if isinstance(is_staff, str):
+            is_staff = is_staff.lower() in ['true', '1', 't']
+
+        # If it's a staff account, make it inactive pending email verification
+        if is_staff:
+            data['is_active'] = False  
+
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        user = serializer.instance
+
+        # GENERATE TOKEN AND SEND EMAIL IF STAFF
+        if is_staff and user.email:
+            token_str = secrets.token_urlsafe(32)
+            StaffInvitationToken.objects.create(user=user, token=token_str)
+
+            # Define your frontend URL (Update this in production)
+            frontend_url = getattr(settings, 'FRONTEND_URL', 'https://ven-dish-business-sales-optimz.vercel.app')
+            
+            accept_link = f"{frontend_url}/verify-staff?token={token_str}&action=accept"
+            reject_link = f"{frontend_url}/verify-staff?token={token_str}&action=reject"
+
+            try:
+                send_mail(
+                    subject='Staff Account Invitation – Kuya Vince Karinderya',
+                    message=(
+                        f"Hi {user.first_name or user.username},\n\n"
+                        f"You have been invited to join Kuya Vince Karinderya as a staff member.\n\n"
+                        f"To ACCEPT: {accept_link}\n"
+                        f"To REJECT: {reject_link}\n\n"
+                        f"If you did not expect this, please ignore this email."
+                    ),
+                    html_message=(
+                        f"<div style='font-family: sans-serif;'>"
+                        f"<h3>Hi {user.first_name or user.username},</h3>"
+                        f"<p>You have been invited to join Kuya Vince Karinderya as a staff member.</p>"
+                        f"<p><a href='{accept_link}' style='padding: 10px 20px; background-color: #28a745; color: white; text-decoration: none; border-radius: 5px; display: inline-block;'>Accept Invitation</a></p>"
+                        f"<p><a href='{reject_link}' style='padding: 10px 20px; background-color: #dc3545; color: white; text-decoration: none; border-radius: 5px; display: inline-block;'>Reject Invitation</a></p>"
+                        f"<p><small>If you did not expect this, please ignore this email.</small></p>"
+                        f"</div>"
+                    ),
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[user.email],
+                    fail_silently=False,
+                )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Failed to send staff invitation email to {user.email}: {e}")
+
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     @action(detail=False, methods=['post'], permission_classes=[AllowAny], url_path='register')
     def register(self, request):
@@ -124,6 +186,34 @@ class UserViewSet(viewsets.ModelViewSet):
             data[index]['is_used'] = coupon.is_used_by_user
 
         return Response(data, status=status.HTTP_200_OK)
+
+    # [NEW] 2. NEW ACTION TO HANDLE THE VERIFICATION FROM EMAIL
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny], url_path='verify-invite')
+    def verify_invite(self, request):
+        token = request.data.get('token')
+        action_type = request.data.get('action') # 'accept' or 'reject'
+
+        if not token or action_type not in ['accept', 'reject']:
+            return Response({"error": "Valid token and action ('accept' or 'reject') are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            invite_token = StaffInvitationToken.objects.get(token=token, is_valid=True)
+            user = invite_token.user
+
+            if action_type == 'accept':
+                user.is_active = True
+                user.save()
+                invite_token.is_valid = False
+                invite_token.save()
+                return Response({"message": "Account activated successfully. You can now log in."}, status=status.HTTP_200_OK)
+            
+            elif action_type == 'reject':
+                # If they reject, we delete the pending account entirely to keep the DB clean
+                user.delete() 
+                return Response({"message": "Invitation rejected. The pending account has been removed."}, status=status.HTTP_200_OK)
+
+        except StaffInvitationToken.DoesNotExist:
+            return Response({"error": "Invalid or expired invitation token."}, status=status.HTTP_400_BAD_REQUEST)
 
 class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = User.objects.all()
@@ -829,6 +919,8 @@ class ChangePasswordViaToken(viewsets.ModelViewSet):
         except User.DoesNotExist:
             return Response({'type': 'error', 'label': 'Invalid User', 'details': 'Your credentials does not exist in the system.'}, status=status.HTTP_400_BAD_REQUEST)
         
+
+
 class UpdateVoidPinView(APIView):
     permission_classes = [IsAuthenticated]
 
