@@ -26,12 +26,23 @@ const VerifyStaff = () => {
             }
 
             try {
-                // Ensure this URL matches your Django route setup
-                // If your router is prefixed with '/api/', it might be '/api/users/verify-invite/'
-                const response = await api.post('/users/verify-invite/', {
-                    token: token,
-                    action: action
-                });
+                let response;
+
+                try {
+                    response = await api.post('/firstapp/users/verify-invite/', {
+                        token: token,
+                        action: action
+                    });
+                } catch (primaryError) {
+                    if (primaryError?.response?.status === 404) {
+                        response = await api.post('/users/verify-invite/', {
+                            token: token,
+                            action: action
+                        });
+                    } else {
+                        throw primaryError;
+                    }
+                }
 
                 setStatus('success');
                 setMessage(response.data.message);

@@ -188,10 +188,11 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response(data, status=status.HTTP_200_OK)
 
     # [NEW] 2. NEW ACTION TO HANDLE THE VERIFICATION FROM EMAIL
-    @action(detail=False, methods=['post'], permission_classes=[AllowAny], url_path='verify-invite')
+    @action(detail=False, methods=['get', 'post'], permission_classes=[AllowAny], url_path='verify-invite')
     def verify_invite(self, request):
-        token = request.data.get('token')
-        action_type = request.data.get('action') # 'accept' or 'reject'
+        payload = request.data if request.method == 'POST' else request.query_params
+        token = payload.get('token')
+        action_type = (payload.get('action') or '').lower()  # 'accept' or 'reject'
 
         if not token or action_type not in ['accept', 'reject']:
             return Response({"error": "Valid token and action ('accept' or 'reject') are required."}, status=status.HTTP_400_BAD_REQUEST)
