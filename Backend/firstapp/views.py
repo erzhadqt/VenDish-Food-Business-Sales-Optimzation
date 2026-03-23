@@ -1,6 +1,6 @@
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.utils import timezone
 from django.conf import settings
 from django.db.models import F
@@ -38,7 +38,7 @@ from rest_framework.permissions import AllowAny
 from .serializers import (
     UserSerializer, FeedbackSerializer, ProductSerializer, CategorySerializer, ReceiptSerializer, CouponSerializer, HomePageSerializer, ServicesPageSerializer, AboutPageSerializer, ContactPageSerializer, CouponCriteriaSerializer, StaffPerformanceSerializer, ReviewSerializer, OTPSerializer
 )   
-from .models import Product, Category, Receipt, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, ReceiptItem, Review, OTP, PasswordResetToken, StoreSettings, StaffInvitationToken, PaymentTransaction
+from .models import Product, Category, Receipt, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, ReceiptItem, Review, OTP, PasswordResetToken, StoreSettings, StaffInvitationToken, PaymentTransaction, PaymentWebhookEventLog
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.exceptions import AuthenticationFailed
 
@@ -93,6 +93,161 @@ def _verify_paymongo_signature(raw_body, signature_header):
         if signature and hmac.compare_digest(computed, signature):
             return True
     return False
+
+
+PAYMONGO_ALLOWED_EVENTS = {
+    'checkout_session.payment.paid',
+    'checkout_session.payment.failed',
+    'checkout_session.expired',
+    'payment.paid',
+    'payment.failed',
+}
+
+PAYMONGO_REPLAY_WINDOW_MINUTES = 15
+
+
+def _process_coupon_usage(receipt, target_customer):
+    for coupon_ref in receipt.coupons.all():
+        coupon = Coupon.objects.select_for_update().get(id=coupon_ref.id)
+
+        if coupon.criteria and coupon.criteria.valid_to and coupon.criteria.valid_to < timezone.now():
+            raise Exception(f"Coupon {coupon.code} has expired.")
+
+        if coupon.criteria and coupon.criteria.min_spend > 0:
+            if receipt.subtotal < coupon.criteria.min_spend:
+                raise Exception(f"Coupon {coupon.code} requires a minimum spend of ₱{coupon.criteria.min_spend}.")
+
+        if not target_customer:
+            raise Exception("Coupons are tied to user accounts. Please select a customer first.")
+
+        has_claim = coupon.claimed_by.filter(id=target_customer.id).exists()
+        if not has_claim:
+            raise Exception(f"Coupon {coupon.code} is not claimed by user {target_customer.username}.")
+
+        already_used = Receipt.objects.filter(
+            coupons=coupon,
+            customer=target_customer,
+            status='COMPLETED'
+        ).exclude(id=receipt.id).exists()
+
+        if already_used:
+            raise Exception(f"User {target_customer.username} has already used coupon {coupon.code}.")
+
+        if coupon.usage_limit is not None and coupon.times_used >= coupon.usage_limit:
+            raise Exception(f"Coupon {coupon.code} is sold out.")
+
+        coupon.times_used += 1
+        if coupon.usage_limit is not None and coupon.times_used >= coupon.usage_limit:
+            coupon.status = 'Redeemed'
+        coupon.save()
+
+
+def _normalize_payment_status(event_type="", raw_status=""):
+    event_type = (event_type or '').lower()
+    raw_status = (raw_status or '').lower()
+
+    if 'paid' in event_type or raw_status in ['paid', 'succeeded', 'success']:
+        return PaymentTransaction.Status.PAID
+    if 'expired' in event_type or raw_status in ['expired']:
+        return PaymentTransaction.Status.EXPIRED
+    if 'failed' in event_type or raw_status in ['failed', 'cancelled', 'canceled']:
+        return PaymentTransaction.Status.FAILED
+    return None
+
+
+def _sync_receipt_with_payment(payment_txn):
+    if not payment_txn.receipt_id:
+        return
+
+    receipt = payment_txn.receipt
+    if payment_txn.status == PaymentTransaction.Status.PAID:
+        receipt.payment_method = Receipt.PaymentMethod.GCASH
+        receipt.payment_status = Receipt.PaymentStatus.PAID
+        receipt.provider_reference = payment_txn.reference
+        receipt.provider_payment_id = payment_txn.provider_payment_id
+        if not receipt.paid_at:
+            receipt.paid_at = payment_txn.paid_at or timezone.now()
+        receipt.save(update_fields=['payment_method', 'payment_status', 'provider_reference', 'provider_payment_id', 'paid_at'])
+    elif payment_txn.status == PaymentTransaction.Status.EXPIRED:
+        receipt.payment_status = Receipt.PaymentStatus.EXPIRED
+        receipt.save(update_fields=['payment_status'])
+    elif payment_txn.status in [PaymentTransaction.Status.FAILED, PaymentTransaction.Status.CANCELLED]:
+        receipt.payment_status = Receipt.PaymentStatus.FAILED
+        receipt.save(update_fields=['payment_status'])
+
+
+def _finalize_receipt_from_paid_transaction(payment_txn):
+    if payment_txn.receipt_id or payment_txn.status != PaymentTransaction.Status.PAID:
+        return payment_txn.receipt if payment_txn.receipt_id else None
+
+    payload = payment_txn.order_payload if isinstance(payment_txn.order_payload, dict) else {}
+    if not payload:
+        return None
+
+    payload = {**payload}
+    payload['payment_method'] = 'GCASH'
+    payload['cash_given'] = payload.get('cash_given') or payload.get('total')
+    payload['change'] = payload.get('change') or '0.00'
+
+    serializer = ReceiptSerializer(data=payload)
+    serializer.is_valid(raise_exception=True)
+
+    with transaction.atomic():
+        receipt = serializer.save(cashier=payment_txn.cashier, customer=payment_txn.customer)
+
+        if payment_txn.customer:
+            _process_coupon_usage(receipt, payment_txn.customer)
+
+        receipt.payment_method = Receipt.PaymentMethod.GCASH
+        receipt.payment_status = Receipt.PaymentStatus.PAID
+        receipt.provider_reference = payment_txn.reference
+        receipt.provider_payment_id = payment_txn.provider_payment_id
+        receipt.paid_at = payment_txn.paid_at or timezone.now()
+        receipt.save(update_fields=['payment_method', 'payment_status', 'provider_reference', 'provider_payment_id', 'paid_at'])
+
+        payment_txn.receipt = receipt
+        payment_txn.save(update_fields=['receipt', 'updated_at'])
+
+    return receipt
+
+
+def _sync_transaction_from_paymongo(payment_txn):
+    if not payment_txn.provider_checkout_id:
+        return payment_txn
+
+    try:
+        response = requests.get(
+            f"https://api.paymongo.com/v1/checkout_sessions/{payment_txn.provider_checkout_id}",
+            headers=_paymongo_headers(),
+            timeout=20,
+        )
+        if response.status_code >= 400:
+            return payment_txn
+
+        response_data = response.json()
+        checkout_data = response_data.get('data') or {}
+        checkout_attributes = checkout_data.get('attributes') or {}
+        checkout_status = checkout_attributes.get('status') or ''
+
+        payments_list = checkout_attributes.get('payments')
+        if isinstance(payments_list, list) and payments_list:
+            first_payment = payments_list[0] or {}
+            if isinstance(first_payment, dict):
+                payment_txn.provider_payment_id = first_payment.get('id') or payment_txn.provider_payment_id
+
+        normalized = _normalize_payment_status(raw_status=checkout_status)
+        if normalized:
+            payment_txn.status = normalized
+            if normalized == PaymentTransaction.Status.PAID and not payment_txn.paid_at:
+                payment_txn.paid_at = timezone.now()
+
+        payment_txn.raw_provider_payload = response_data if isinstance(response_data, dict) else {}
+        payment_txn.save(update_fields=['status', 'paid_at', 'provider_payment_id', 'raw_provider_payload', 'updated_at'])
+        _sync_receipt_with_payment(payment_txn)
+    except Exception:
+        return payment_txn
+
+    return payment_txn
 
 
 # -------------------------------
@@ -410,53 +565,8 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                         receipt.payment_status = Receipt.PaymentStatus.PAID
                         receipt.save(update_fields=['paid_at', 'payment_status'])
 
-                    # 3. UPDATE COUPONS (Loop through all applied)
-                    # FIX: Iterate over receipt.coupons.all()
-                    for coupon_ref in receipt.coupons.all():
-                        # Lock the coupon row
-                        coupon = Coupon.objects.select_for_update().get(id=coupon_ref.id)
-                        
-                        # --- VALIDATION LOGIC ---
-
-                        if coupon.criteria and coupon.criteria.valid_to and coupon.criteria.valid_to < timezone.now():
-                            raise Exception(f"Coupon {coupon.code} has expired.")
-
-                        if coupon.criteria and coupon.criteria.min_spend > 0:
-                            if receipt.subtotal < coupon.criteria.min_spend:
-                                raise Exception(f"Coupon {coupon.code} requires a minimum spend of ₱{coupon.criteria.min_spend}.")
-
-                        # RULE A: COUPON MUST BE TIED TO A CUSTOMER ACCOUNT
-                        if not target_customer:
-                            raise Exception("Coupons are tied to user accounts. Please select a customer first.")
-
-                        has_claim = coupon.claimed_by.filter(id=target_customer.id).exists()
-                        if not has_claim:
-                            raise Exception(f"Coupon {coupon.code} is not claimed by user {target_customer.username}.")
-
-                        # RULE B: ONE USE PER USER
-                        already_used = Receipt.objects.filter(
-                            coupons=coupon,
-                            customer=target_customer,
-                            status='COMPLETED'
-                        ).exclude(id=receipt.id).exists()
-
-                        if already_used:
-                            raise Exception(f"User {target_customer.username} has already used coupon {coupon.code}.")
-
-                        # RULE C: GLOBAL USAGE LIMIT
-                        if coupon.usage_limit is not None and coupon.times_used >= coupon.usage_limit:
-                            raise Exception(f"Coupon {coupon.code} is sold out.")
-
-                        # --- END VALIDATION ---
-
-                        # Increment global usage
-                        coupon.times_used += 1
-                        
-                        # Auto-update status if limit reached
-                        if coupon.usage_limit is not None and coupon.times_used >= coupon.usage_limit:
-                            coupon.status = 'Redeemed'
-                            
-                        coupon.save() 
+                    if target_customer:
+                        _process_coupon_usage(receipt, target_customer)
 
                     return Response(
                         {"receipt_id": receipt.id, **serializer.data},
@@ -508,6 +618,50 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                         continue
 
                 return Response({"message": "Void logged successfully"}, status=201)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+    @action(detail=True, methods=['post'], url_path='void')
+    def void_receipt(self, request, pk=None, id=None):
+        receipt = self.get_object()
+
+        if receipt.status == 'VOIDED':
+            return Response(
+                {"error": "This receipt is already voided."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            with transaction.atomic():
+                receipt_items = receipt.items.select_related('product').all()
+                for receipt_item in receipt_items:
+                    product = receipt_item.product
+                    if not product:
+                        continue
+                    Product.objects.filter(id=product.id).update(
+                        stock_quantity=F('stock_quantity') + receipt_item.quantity,
+                        is_available=True
+                    )
+
+                for coupon_ref in receipt.coupons.all():
+                    coupon = Coupon.objects.select_for_update().get(id=coupon_ref.id)
+
+                    if coupon.times_used > 0:
+                        coupon.times_used -= 1
+
+                    if coupon.usage_limit is not None and coupon.times_used < coupon.usage_limit:
+                        coupon.status = 'Active'
+
+                    coupon.save()
+
+                receipt.status = 'VOIDED'
+                receipt.void_reason = request.data.get('reason', "Voided via POS")
+                receipt.voided_at = timezone.now()
+                receipt.voided_by = request.user
+                receipt.save()
+
+                return Response({"status": "Receipt voided successfully", "receipt_id": receipt.id})
 
         except Exception as e:
             return Response({"error": str(e)}, status=500)
@@ -623,6 +777,16 @@ class GCashPaymentStatusView(APIView):
         if not (request.user.is_superuser or request.user.id == payment_txn.cashier_id):
             return Response({'error': 'Not allowed to view this transaction.'}, status=status.HTTP_403_FORBIDDEN)
 
+        if payment_txn.status == PaymentTransaction.Status.PENDING:
+            payment_txn = _sync_transaction_from_paymongo(payment_txn)
+
+        if payment_txn.status == PaymentTransaction.Status.PAID and not payment_txn.receipt_id:
+            try:
+                _finalize_receipt_from_paid_transaction(payment_txn)
+                payment_txn.refresh_from_db()
+            except Exception:
+                pass
+
         return Response({
             'transaction_id': payment_txn.id,
             'reference': payment_txn.reference,
@@ -664,6 +828,74 @@ class GCashAttachReceiptView(APIView):
         return Response({'status': 'ok'})
 
 
+class GCashPaymentFinalizeByReferenceView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        reference = request.data.get('reference')
+        if not reference:
+            return Response({'error': 'reference is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        payment_txn = PaymentTransaction.objects.filter(reference=reference).first()
+        if not payment_txn:
+            return Response({'error': 'Transaction not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not (request.user.is_superuser or request.user.id == payment_txn.cashier_id):
+            return Response({'error': 'Not allowed to finalize this transaction.'}, status=status.HTTP_403_FORBIDDEN)
+
+        if payment_txn.status == PaymentTransaction.Status.PENDING:
+            payment_txn = _sync_transaction_from_paymongo(payment_txn)
+
+        if payment_txn.status != PaymentTransaction.Status.PAID:
+            return Response({'status': payment_txn.status, 'message': 'Payment is not marked as PAID yet.'})
+
+        receipt = payment_txn.receipt
+        if not receipt:
+            try:
+                receipt = _finalize_receipt_from_paid_transaction(payment_txn)
+            except Exception as exc:
+                return Response({'error': f'Failed to finalize paid transaction: {exc}'}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({
+            'status': payment_txn.status,
+            'transaction_id': payment_txn.id,
+            'reference': payment_txn.reference,
+            'receipt_id': receipt.id if receipt else None,
+        })
+
+
+class GCashReconciliationView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        state = (request.query_params.get('state') or 'pending').lower()
+        queryset = PaymentTransaction.objects.filter(cashier=request.user).order_by('-created_at')
+
+        if state == 'pending':
+            queryset = queryset.filter(status=PaymentTransaction.Status.PENDING)
+        elif state == 'unreconciled_paid':
+            queryset = queryset.filter(status=PaymentTransaction.Status.PAID, receipt__isnull=True)
+
+        queryset = queryset[:50]
+
+        data = [
+            {
+                'id': txn.id,
+                'reference': txn.reference,
+                'status': txn.status,
+                'amount': txn.amount,
+                'currency': txn.currency,
+                'checkout_url': txn.checkout_url,
+                'receipt_id': txn.receipt_id,
+                'created_at': txn.created_at,
+                'paid_at': txn.paid_at,
+            }
+            for txn in queryset
+        ]
+
+        return Response(data)
+
+
 class GCashPaymentWebhookView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
@@ -685,6 +917,30 @@ class GCashPaymentWebhookView(APIView):
         event_id = data.get('id')
         event_attributes = data.get('attributes') or {}
         event_type = (event_attributes.get('type') or '').lower()
+
+        if event_type not in PAYMONGO_ALLOWED_EVENTS:
+            return Response({'status': 'ignored_event'})
+
+        signature_hash = hashlib.sha256(raw_body).hexdigest()
+        replay_window = timezone.now() - timedelta(minutes=PAYMONGO_REPLAY_WINDOW_MINUTES)
+
+        if PaymentWebhookEventLog.objects.filter(signature_hash=signature_hash, received_at__gte=replay_window).exists():
+            return Response({'status': 'duplicate_replay'})
+
+        if event_id and PaymentWebhookEventLog.objects.filter(event_id=event_id).exists():
+            return Response({'status': 'duplicate_event'})
+
+        webhook_log = None
+        if event_id:
+            try:
+                webhook_log = PaymentWebhookEventLog.objects.create(
+                    event_id=event_id,
+                    event_type=event_type,
+                    signature_hash=signature_hash,
+                )
+            except IntegrityError:
+                return Response({'status': 'duplicate_event'})
+
         event_data = event_attributes.get('data') or {}
         event_data_attributes = event_data.get('attributes') or {}
         metadata = event_data_attributes.get('metadata') or {}
@@ -700,18 +956,7 @@ class GCashPaymentWebhookView(APIView):
         if not payment_txn:
             return Response({'status': 'ignored'})
 
-        if event_id and payment_txn.provider_event_id == event_id:
-            return Response({'status': 'duplicate'})
-
-        normalized_status = None
-        event_payment_status = (event_data_attributes.get('status') or '').lower()
-
-        if 'paid' in event_type or event_payment_status in ['paid', 'succeeded']:
-            normalized_status = PaymentTransaction.Status.PAID
-        elif 'expired' in event_type or event_payment_status == 'expired':
-            normalized_status = PaymentTransaction.Status.EXPIRED
-        elif 'failed' in event_type or event_payment_status in ['failed', 'cancelled', 'canceled']:
-            normalized_status = PaymentTransaction.Status.FAILED
+        normalized_status = _normalize_payment_status(event_type=event_type, raw_status=event_data_attributes.get('status'))
 
         update_fields = ['raw_provider_payload', 'webhook_verified', 'updated_at']
         payment_txn.raw_provider_payload = payload if isinstance(payload, dict) else {}
@@ -741,72 +986,20 @@ class GCashPaymentWebhookView(APIView):
             update_fields.append('paid_at')
 
         payment_txn.save(update_fields=list(set(update_fields)))
+        _sync_receipt_with_payment(payment_txn)
 
-        if payment_txn.receipt_id:
-            receipt = payment_txn.receipt
-            if normalized_status == PaymentTransaction.Status.PAID:
-                receipt.payment_method = Receipt.PaymentMethod.GCASH
-                receipt.payment_status = Receipt.PaymentStatus.PAID
-                receipt.provider_reference = payment_txn.reference
-                receipt.provider_payment_id = payment_txn.provider_payment_id
-                if not receipt.paid_at:
-                    receipt.paid_at = payment_txn.paid_at or timezone.now()
-                receipt.save(update_fields=['payment_method', 'payment_status', 'provider_reference', 'provider_payment_id', 'paid_at'])
-            elif normalized_status == PaymentTransaction.Status.EXPIRED:
-                receipt.payment_status = Receipt.PaymentStatus.EXPIRED
-                receipt.save(update_fields=['payment_status'])
-            elif normalized_status == PaymentTransaction.Status.FAILED:
-                receipt.payment_status = Receipt.PaymentStatus.FAILED
-                receipt.save(update_fields=['payment_status'])
+        if payment_txn.status == PaymentTransaction.Status.PAID and not payment_txn.receipt_id:
+            try:
+                _finalize_receipt_from_paid_transaction(payment_txn)
+            except Exception:
+                pass
+
+        if webhook_log:
+            webhook_log.transaction = payment_txn
+            webhook_log.processed = True
+            webhook_log.save(update_fields=['transaction', 'processed'])
 
         return Response({'status': 'ok'})
-
-    @action(detail=True, methods=['post'], url_path='void')
-    def void_receipt(self, request, pk=None, id=None):
-        receipt = self.get_object() 
-
-        if receipt.status == 'VOIDED': 
-            return Response(
-                {"error": "This receipt is already voided."}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        try:
-            with transaction.atomic():
-                # Restore servings for tracked products from this completed receipt
-                receipt_items = receipt.items.select_related('product').all()
-                for receipt_item in receipt_items:
-                    product = receipt_item.product
-                    if not product:
-                        continue
-                    Product.objects.filter(id=product.id).update(
-                        stock_quantity=F('stock_quantity') + receipt_item.quantity,
-                        is_available=True
-                    )
-
-                # FIX: Revert ALL coupons
-                for coupon_ref in receipt.coupons.all():
-                    coupon = Coupon.objects.select_for_update().get(id=coupon_ref.id)
-                    
-                    if coupon.times_used > 0:
-                        coupon.times_used -= 1
-                    
-                    # Revert status to Active if space opens up
-                    if coupon.usage_limit is not None and coupon.times_used < coupon.usage_limit:
-                        coupon.status = 'Active'
-                        
-                    coupon.save()
-
-                receipt.status = 'VOIDED' 
-                receipt.void_reason = request.data.get('reason', "Voided via POS")
-                receipt.voided_at = timezone.now()
-                receipt.voided_by = request.user
-                receipt.save()
-
-                return Response({"status": "Receipt voided successfully", "receipt_id": receipt.id})
-
-        except Exception as e:
-            return Response({"error": str(e)}, status=500)
 
 class CouponViewSet(viewsets.ModelViewSet):
     queryset = Coupon.objects.all().order_by('-id')

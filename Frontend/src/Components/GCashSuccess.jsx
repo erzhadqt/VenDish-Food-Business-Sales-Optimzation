@@ -6,17 +6,20 @@ export default function GCashSuccess() {
   const location = useLocation();
 
   useEffect(() => {
-    // You can read the reference number from the URL if needed:
-    // const params = new URLSearchParams(location.search);
-    // const ref = params.get('ref');
+    const params = new URLSearchParams(location.search);
+    const ref = params.get('ref');
 
     // Automatically redirect back to the POS after 3 seconds
     const timer = setTimeout(() => {
-      navigate('/admin/pos');
+      if (ref) {
+        navigate(`/admin/pos?gcash_ref=${encodeURIComponent(ref)}`);
+      } else {
+        navigate('/admin/pos');
+      }
     }, 3000);
 
     return () => clearTimeout(timer);
-  }, [navigate]);
+  }, [navigate, location.search]);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">

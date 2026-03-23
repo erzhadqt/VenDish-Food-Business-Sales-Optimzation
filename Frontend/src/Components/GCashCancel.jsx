@@ -10,7 +10,7 @@ export default function GCashCancel() {
       <div className="p-8 bg-white rounded-lg shadow-md text-center">
         <h1 className="text-3xl font-bold text-red-600 mb-4">Payment Cancelled</h1>
         <p className="text-gray-600 mb-6">The GCash transaction was not completed.</p>
-        <Button onClick={() => navigate('/pos')}>Return to POS</Button>
+        <Button onClick={() => navigate('/admin/pos')}>Return to POS</Button>
       </div>
     </div>
   );

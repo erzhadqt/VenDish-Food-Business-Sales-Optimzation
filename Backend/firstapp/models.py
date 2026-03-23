@@ -264,6 +264,18 @@ class PaymentTransaction(models.Model):
     def __str__(self):
         return f"{self.reference} ({self.status})"
 
+
+class PaymentWebhookEventLog(models.Model):
+    event_id = models.CharField(max_length=100, unique=True)
+    event_type = models.CharField(max_length=120)
+    signature_hash = models.CharField(max_length=128, db_index=True)
+    transaction = models.ForeignKey(PaymentTransaction, on_delete=models.SET_NULL, null=True, blank=True, related_name='webhook_events')
+    processed = models.BooleanField(default=False)
+    received_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.event_type} ({self.event_id})"
+
 class Review(models.Model):
     REVIEW_TYPES = [
         ('shop', 'Shop Review'),

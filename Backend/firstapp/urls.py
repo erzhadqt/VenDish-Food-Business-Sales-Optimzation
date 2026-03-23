@@ -1,5 +1,5 @@
 from django.urls import path, include
-from .views import ProductViewSet, CategoryViewSet, FeedbackViewSet, ReceiptViewSet, CouponViewSet, HomePageViewSet, ServicesPageViewSet, AboutPageViewSet, ContactPageViewSet, UserViewSet, DailySalesReportViewSet, CouponCriteriaViewSet, ReviewViewSet, StoreSettingsView, GCashPaymentCreateView, GCashPaymentStatusView, GCashPaymentWebhookView, GCashAttachReceiptView
+from .views import ProductViewSet, CategoryViewSet, FeedbackViewSet, ReceiptViewSet, CouponViewSet, HomePageViewSet, ServicesPageViewSet, AboutPageViewSet, ContactPageViewSet, UserViewSet, DailySalesReportViewSet, CouponCriteriaViewSet, ReviewViewSet, StoreSettingsView, GCashPaymentCreateView, GCashPaymentStatusView, GCashPaymentWebhookView, GCashAttachReceiptView, GCashPaymentFinalizeByReferenceView, GCashReconciliationView
 
 from rest_framework.routers import DefaultRouter
 
@@ -31,4 +31,6 @@ urlpatterns = [
     path('payments/gcash/<int:transaction_id>/status/', GCashPaymentStatusView.as_view(), name='gcash-payment-status'),
     path('payments/gcash/webhook/', GCashPaymentWebhookView.as_view(), name='gcash-payment-webhook'),
     path('payments/gcash/attach-receipt/', GCashAttachReceiptView.as_view(), name='gcash-payment-attach-receipt'),
+    path('payments/gcash/finalize-by-reference/', GCashPaymentFinalizeByReferenceView.as_view(), name='gcash-payment-finalize-by-reference'),
+    path('payments/gcash/reconcile/', GCashReconciliationView.as_view(), name='gcash-reconciliation'),
 ]

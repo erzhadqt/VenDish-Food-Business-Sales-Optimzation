@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Tag, Trash2, ShoppingBag, User, X } from "lucide-react"; 
 import { FaExclamationCircle } from "react-icons/fa"; 
+import { useLocation } from "react-router-dom";
 
 import api from "../../api";
 import ReceiptModal2 from "../../Components/ReceiptModal2";
 import VoidConfirmDialog from "../../Components/VoidConfirmDialog";
 import CustomerCouponModal from "../../Components/CustomerCouponModal";
 import GCashPaymentModal from "../../Components/GCashPaymentModal";
+import GCashReconciliationModal from "../../Components/GCashReconciliationModal";
 import { SelectDiscount } from "../../Components/SelectDiscount";
 import AlertModal from "../../Components/AlertModal";
 import { Skeleton } from "../../Components/ui/skeleton";
@@ -15,9 +17,11 @@ const POS_STORAGE_KEYS = {
   cart: "pos_cartItems",
   promoCode: "pos_promoCode",
   appliedCoupons: "pos_appliedCoupons",
+  gcashPending: "pos_gcash_pending",
 };
 
 const Pos = () => {
+  const location = useLocation();
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedDiscount, setSelectedDiscount] = useState(null); 
   const [cartItems, setCartItems] = useState(() => {
@@ -74,6 +78,7 @@ const Pos = () => {
   const [gcashTransactionId, setGcashTransactionId] = useState(null);
   const [gcashReference, setGcashReference] = useState("");
   const [gcashStatus, setGcashStatus] = useState("PENDING");
+  const [gcashReconcileOpen, setGcashReconcileOpen] = useState(false);
 
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
@@ -542,6 +547,17 @@ const Pos = () => {
     }
   };
 
+  const openReceiptById = async (receiptId) => {
+    if (!receiptId) return;
+    try {
+      const response = await api.get(`/firstapp/receipt/${receiptId}/`);
+      setReceiptDetails(response.data);
+      setIsReceiptModalOpen(true);
+    } catch (error) {
+      console.error("Failed to load receipt details:", error);
+    }
+  };
+
   const finalizePaidGcashReceipt = async (transactionId) => {
     setLoading(true);
     try {
@@ -551,6 +567,7 @@ const Pos = () => {
       setIsReceiptModalOpen(true);
       await attachPaymentToReceipt(transactionId, response.data.receipt_id || response.data.id);
       setGcashModalOpen(false);
+      localStorage.removeItem(POS_STORAGE_KEYS.gcashPending);
     } catch (error) {
       console.error("Failed to finalize GCash receipt:", error);
       triggerAlert("Order Finalization Failed", error.response?.data?.error || "Payment succeeded but receipt finalization failed.");
@@ -572,6 +589,7 @@ const Pos = () => {
 
       if (["FAILED", "EXPIRED", "CANCELLED"].includes(status)) {
         setGcashModalOpen(false);
+        localStorage.removeItem(POS_STORAGE_KEYS.gcashPending);
         triggerAlert("GCash Payment", `Payment status is ${status}.`);
       }
     } catch (error) {
@@ -597,6 +615,16 @@ const Pos = () => {
     setGcashStatus(response.data.status || "PENDING");
     setGcashModalOpen(true);
 
+    localStorage.setItem(
+      POS_STORAGE_KEYS.gcashPending,
+      JSON.stringify({
+        transactionId: response.data.transaction_id,
+        reference: response.data.reference || "",
+        checkoutUrl: response.data.checkout_url || "",
+        createdAt: Date.now(),
+      })
+    );
+
     if (response.data.checkout_url) {
       window.open(response.data.checkout_url, "_blank", "noopener,noreferrer");
     }
@@ -611,6 +639,57 @@ const Pos = () => {
 
     return () => clearInterval(intervalId);
   }, [gcashModalOpen, gcashTransactionId]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const ref = params.get("gcash_ref") || params.get("ref");
+    if (!ref) return;
+
+    const recoveryKey = `gcash_ref_recovery_${ref}`;
+    if (sessionStorage.getItem(recoveryKey)) return;
+    sessionStorage.setItem(recoveryKey, "1");
+
+    const recoverByReference = async () => {
+      try {
+        const response = await api.post("/firstapp/payments/gcash/finalize-by-reference/", { reference: ref });
+        const receiptId = response.data?.receipt_id;
+
+        if (receiptId) {
+          await openReceiptById(receiptId);
+          setGcashModalOpen(false);
+          localStorage.removeItem(POS_STORAGE_KEYS.gcashPending);
+        }
+      } catch (error) {
+        console.error("Failed to recover GCash by reference:", error);
+      }
+    };
+
+    recoverByReference();
+  }, [location.search]);
+
+  useEffect(() => {
+    try {
+      const rawPending = localStorage.getItem(POS_STORAGE_KEYS.gcashPending);
+      if (!rawPending) return;
+
+      const pending = JSON.parse(rawPending);
+      if (!pending?.transactionId) {
+        localStorage.removeItem(POS_STORAGE_KEYS.gcashPending);
+        return;
+      }
+
+      setPaymentMethod("gcash");
+      setGcashTransactionId(pending.transactionId);
+      setGcashReference(pending.reference || "");
+      setGcashCheckoutUrl(pending.checkoutUrl || "");
+      setGcashModalOpen(true);
+
+      checkGcashStatus(pending.transactionId, { autoFinalize: true });
+    } catch (error) {
+      console.error("Failed to restore pending GCash transaction:", error);
+      localStorage.removeItem(POS_STORAGE_KEYS.gcashPending);
+    }
+  }, []);
 
   const handleSubmitOrder = async () => {
     if (cartItems.length === 0) return triggerAlert("Empty Cart", "Cart is empty!");
@@ -665,6 +744,7 @@ const Pos = () => {
       setGcashTransactionId(null);
       setGcashReference("");
       setGcashStatus("PENDING");
+      localStorage.removeItem(POS_STORAGE_KEYS.gcashPending);
 
       setIsReceiptModalOpen(false);
       // Refresh both products and categories after order reset
@@ -821,6 +901,14 @@ const Pos = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setGcashReconcileOpen(true)}
+                        className="text-xs px-2 py-1 rounded border text-blue-700 hover:bg-blue-50"
+                      >
+                        GCash Reconcile
+                      </button>
+
                       {selectedCustomer && (
                         <button
                           type="button"
@@ -993,6 +1081,12 @@ const Pos = () => {
           reference={gcashReference}
           onRefresh={() => checkGcashStatus(gcashTransactionId, { autoFinalize: true })}
           onCancel={() => setGcashModalOpen(false)}
+        />
+
+        <GCashReconciliationModal
+          open={gcashReconcileOpen}
+          onOpenChange={setGcashReconcileOpen}
+          onReceiptRecovered={openReceiptById}
         />
     </div>
   );
