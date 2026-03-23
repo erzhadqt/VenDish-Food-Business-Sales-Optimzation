@@ -82,7 +82,7 @@ const VerifyStaff = () => {
 
                         {status === 'success' && searchParams.get('action') === 'accept' && (
                             <Button 
-                                onClick={() => navigate('/login')}
+                                onClick={() => navigate('/kuyavincekarinderya-signup')}
                                 className="w-full bg-orange-500 hover:bg-orange-600 text-white"
                             >
                                 Proceed to Login

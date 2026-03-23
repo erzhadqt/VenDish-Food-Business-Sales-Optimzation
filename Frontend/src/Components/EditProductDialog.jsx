@@ -25,8 +25,7 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
   const [productName, setProductName] = useState(product?.product_name || "");
   const [price, setPrice] = useState(product?.price || "");
   const [category, setCategory] = useState(product?.category || "");
-  // Initialize availability from the existing product data
-  const [isAvailable, setIsAvailable] = useState(product?.is_available ?? true);
+  const [servings, setServings] = useState(String(product?.stock_quantity ?? 0));
   const [image, setImage] = useState(null);
 
   // 🔴 REMOVED THE HARDCODED CATEGORIES ARRAY FROM HERE
@@ -41,8 +40,11 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
     formData.append("product_name", productName);
     formData.append("price", parseFloat(price));
     formData.append("category", category);
-    // Send availability status instead of stock
-    formData.append("is_available", isAvailable); 
+    const parsedServings = parseInt(servings || "0", 10);
+    const servingCount = Number.isFinite(parsedServings) ? Math.max(0, parsedServings) : 0;
+    formData.append("stock_quantity", servingCount);
+    formData.append("track_stock", "true");
+    formData.append("is_available", String(servingCount > 0));
     
     if (image) formData.append("image", image);
 
@@ -170,18 +172,18 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
             />
           </div>
 
-          {/* New Availability Toggle */}
-          <div className="flex items-center gap-3 p-3 border rounded-md bg-gray-50">
-            <input
-              id="is_available"
-              type="checkbox"
-              checked={isAvailable}
-              onChange={(e) => setIsAvailable(e.target.checked)}
-              className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 border-gray-300 cursor-pointer"
+          <div className="grid gap-2">
+            <Label htmlFor="servings">Servings Available <p className="text-xs text-muted-foreground">(Restock?)</p></Label>
+            
+            <Input
+              id="servings"
+              type="number"
+              min="0"
+              step="1"
+              value={servings}
+              onChange={(e) => setServings(e.target.value)}
+              required
             />
-            <Label htmlFor="is_available" className="cursor-pointer font-medium text-gray-700 select-none">
-              Is Product Available?
-            </Label>
           </div>
 
           <div className="grid gap-2">

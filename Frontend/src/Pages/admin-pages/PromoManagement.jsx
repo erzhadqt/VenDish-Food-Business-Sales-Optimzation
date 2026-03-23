@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "../../Components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../Components/ui/table";
-import { Plus, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, TimerReset } from "lucide-react"; 
+import { Plus, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, TimerReset, Edit } from "lucide-react"; 
 import api from "../../api";
 import AddDiscountDialog from "../../Components/AddDiscountDialog"; 
 import DeleteConfirmDialog from "../../Components/DeleteConfirmDialog";
 import { Skeleton } from "../../Components/ui/skeleton";
 
-// +++ IMPORT THE NEW MODAL & SUCCESS ALERT +++
 import ManagePosLimitDialog from "../../Components/ManagePosLimitDialog";
 import SuccessAlert from "../../Components/SuccessAlert";
+import EditCouponDialog from "../../Components/EditCouponDialog"; // +++ IMPORT EDIT DIALOG +++
 
 const PromoManagement = () => {
   const [coupons, setCoupons] = useState([]);
@@ -20,6 +20,10 @@ const PromoManagement = () => {
   const itemsPerPage = 5; 
   
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+
+  // --- EDIT MODAL STATES ---
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [selectedCoupon, setSelectedCoupon] = useState(null);
 
   // --- LIMIT MODAL STATES ---
   const [isManageLimitOpen, setIsManageLimitOpen] = useState(false);
@@ -53,26 +57,29 @@ const PromoManagement = () => {
 
   useEffect(() => { fetchData(); }, []);
 
-  // +++ HELPER TO SHOW SUCCESS ALERT +++
   const showSuccess = (message) => {
     setSuccessMessage(message);
     setTimeout(() => {
       setSuccessMessage("");
-    }, 3000); // Hide after 3 seconds
+    }, 3000); 
   };
 
   const handleDelete = async (id) => {
     try {
         await api.delete(`/firstapp/coupons/${id}/`);
         setCoupons((prev) => prev.filter((coupon) => coupon.id !== id));
-        showSuccess("Coupon deleted successfully!"); // +++ SHOW ALERT ON DELETE +++
+        showSuccess("Coupon deleted successfully!"); 
     } catch (error) {
         console.error("Failed to delete coupon:", error);
         alert("Failed to delete coupon. It may have dependencies.");
     }
   };
 
-  // Helper: Format Date
+  const handleEditClick = (coupon) => {
+    setSelectedCoupon(coupon);
+    setIsEditOpen(true);
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return "No Expiration";
     const date = new Date(dateString);
@@ -95,7 +102,6 @@ const PromoManagement = () => {
     }
   };
 
-  // --- PAGINATION LOGIC ---
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentCoupons = coupons.slice(indexOfFirstItem, indexOfLastItem);
@@ -108,7 +114,6 @@ const PromoManagement = () => {
   return (
     <div className="p-6 space-y-6 min-h-screen">
       
-      {/* HEADER & ACTIONS */}
       <div className="flex justify-between items-center">
         <div>
             <h1 className="text-2xl font-bold text-gray-800">Coupon Management</h1>
@@ -126,12 +131,8 @@ const PromoManagement = () => {
         </div>
       </div>
 
-      {/* +++ RENDER SUCCESS ALERT CONDITIONAL +++ */}
-      {successMessage && (
-        <SuccessAlert message={successMessage} />
-      )}
+      {successMessage && <SuccessAlert message={successMessage} />}
 
-      {/* ACTIVE COUPONS TABLE */}
       <div className="bg-white rounded-lg shadow p-4 border border-gray-200 flex flex-col h-full">
         <h2 className="text-lg font-semibold mb-4 text-gray-800">Active Coupons</h2>
         {loading ? (
@@ -218,8 +219,13 @@ const PromoManagement = () => {
                         </div>
                     </TableCell>
 
+                    {/* +++ UPDATED TABLE CELL WITH EDIT BUTTON +++ */}
                     <TableCell className="text-right">
-                        <div className="flex justify-end">
+                        <div className="flex justify-end items-center gap-1">
+                             <Button variant="ghost" size="icon" className="h-9 w-9 text-blue-600 hover:text-blue-800 hover:bg-blue-50" onClick={() => handleEditClick(coupon)}>
+                                <Edit className="w-5 h-5"/>
+                             </Button>
+
                              <DeleteConfirmDialog 
                                 title="Delete Coupon"
                                 description={`Are you sure you want to delete coupon "${coupon.code}"? This cannot be undone.`}
@@ -268,17 +274,27 @@ const PromoManagement = () => {
         onOpenChange={setIsCreateOpen}
         onSaved={() => {
             fetchData();
-            showSuccess("Coupon created successfully!"); // +++ SHOW ALERT ON CREATE +++
+            showSuccess("Coupon created successfully!"); 
         }}
         products={products} 
       />
 
-      {/* +++ CALL THE SEPARATED MODAL HERE +++ */}
       <ManagePosLimitDialog 
         open={isManageLimitOpen} 
         onOpenChange={setIsManageLimitOpen} 
         currentLimit={maxCouponsLimit} 
         onSaved={fetchData} 
+      />
+
+      {/* +++ ADDED THE EDIT DIALOG HERE +++ */}
+      <EditCouponDialog 
+        open={isEditOpen} 
+        onOpenChange={setIsEditOpen} 
+        coupon={selectedCoupon} 
+        onSaved={() => {
+            fetchData();
+            showSuccess("Coupon updated successfully!");
+        }}
       />
 
     </div>

@@ -6,6 +6,7 @@ import api from "../../api";
 import ReceiptModal2 from "../../Components/ReceiptModal2";
 import VoidConfirmDialog from "../../Components/VoidConfirmDialog";
 import CustomerCouponModal from "../../Components/CustomerCouponModal";
+import GCashPaymentModal from "../../Components/GCashPaymentModal";
 import { SelectDiscount } from "../../Components/SelectDiscount";
 import AlertModal from "../../Components/AlertModal";
 import { Skeleton } from "../../Components/ui/skeleton";
@@ -66,6 +67,13 @@ const Pos = () => {
   });
   const [couponError, setCouponError] = useState("");
   const [couponLoading, setCouponLoading] = useState(false);
+
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [gcashModalOpen, setGcashModalOpen] = useState(false);
+  const [gcashCheckoutUrl, setGcashCheckoutUrl] = useState("");
+  const [gcashTransactionId, setGcashTransactionId] = useState(null);
+  const [gcashReference, setGcashReference] = useState("");
+  const [gcashStatus, setGcashStatus] = useState("PENDING");
 
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
@@ -226,45 +234,61 @@ const Pos = () => {
     setCouponError("");
   };
 
-  const handleFoodClick = (food) => {
-    if (!food.track_stock && !food.is_available) {
-        return triggerAlert("Unavailable", "This product is currently unavailable!");
+  const getCurrentProductStock = (productId, fallbackStock = 0) => {
+    const liveProduct = products.find((p) => p.id === productId);
+    if (!liveProduct) return Number(fallbackStock || 0);
+    return Number(liveProduct.stock_quantity || 0);
+  };
+
+  const getRemainingServings = (productId, fallbackStock = 0) => {
+    const currentStock = getCurrentProductStock(productId, fallbackStock);
+    const inCart = cartItems.find((item) => item.id === productId);
+    const inCartQty = inCart ? Number(inCart.qty || 0) : 0;
+    return Math.max(currentStock - inCartQty, 0);
+  };
+
+  const remindIfTenRemaining = (productName, remainingServings) => {
+    if (remainingServings === 10) {
+      triggerAlert("Low Servings", `${productName} now has only 10 servings remaining.`);
     }
-    if (food.track_stock && food.stock_quantity <= 0) {
-        return triggerAlert("Out of Stock", "This item is currently Out of Stock.");
+  };
+
+  const handleFoodClick = (food) => {
+    const baseStock = getCurrentProductStock(food.id, food.stock_quantity);
+    if (baseStock <= 0) {
+      return triggerAlert("Unavailable", "This product has no available servings.");
     }
 
     const exist = cartItems.find((item) => item.id === food.id);
+    const nextQty = exist ? exist.qty + 1 : 1;
+
+    if (nextQty > baseStock) {
+      return triggerAlert("Serving Limit", `Cannot add more. Only ${baseStock} servings available.`);
+    }
 
     if (exist) {
-      if (food.track_stock && exist.qty + 1 > food.stock_quantity) {
-          return triggerAlert("Stock Limit", `Cannot add more. Only ${food.stock_quantity} units available.`);
-      }
       setCartItems(cartItems.map((item) => item.id === food.id ? { ...item, qty: item.qty + 1 } : item));
     } else {
       setCartItems([...cartItems, { ...food, qty: 1 }]);
     }
+
+    const remainingServings = baseStock - nextQty;
+    remindIfTenRemaining(food.product_name, remainingServings);
   };
 
   const autoAddItemToCart = (productId) => {
     if (!productId) return;
     const exist = cartItems.find((item) => item.id === productId);
-    if (exist) return; 
+    if (exist) return;
 
     const product = products.find(p => p.id === productId);
     if (product) {
-       if (product.track_stock) {
-            if (product.stock_quantity > 0) {
-                setCartItems(prev => [...prev, { ...product, qty: 1 }]);
-            } else {
-                setCouponError(`Cannot apply coupon: Free item (${product.product_name}) is out of stock.`);
-            }
+       if (product.stock_quantity > 0) {
+         setCartItems(prev => [...prev, { ...product, qty: 1 }]);
+         const remainingServings = Number(product.stock_quantity) - 1;
+         remindIfTenRemaining(product.product_name, remainingServings);
        } else {
-           if (product.is_available) {
-               setCartItems(prev => [...prev, { ...product, qty: 1 }]);
-           } else {
-               setCouponError(`Cannot apply coupon: The required item (${product.product_name}) is unavailable.`);
-           }
+         setCouponError(`Cannot apply coupon: ${product.product_name} has no available servings.`);
        }
     }
   };
@@ -484,9 +508,113 @@ const Pos = () => {
     }
   };
 
+  const buildReceiptPayload = () => {
+    const isCash = paymentMethod === "cash";
+
+    return {
+      subtotal: subTotal.toFixed(2),
+      vat: vat.toFixed(2),
+      total: total.toFixed(2),
+      cash_given: isCash ? cash : total.toFixed(2),
+      change: isCash ? change : "0.00",
+      payment_method: isCash ? "CASH" : "GCASH",
+      coupons: appliedCoupons.map(c => c.id),
+      discount_type: selectedDiscount !== "none" ? selectedDiscount : null,
+      customer_id: selectedCustomer,
+      items: cartItems.map((i) => ({
+        product: i.id,
+        product_name: i.product_name,
+        price: i.price,
+        quantity: i.qty,
+      })),
+    };
+  };
+
+  const attachPaymentToReceipt = async (transactionId, receiptId) => {
+    if (!transactionId || !receiptId) return;
+    try {
+      await api.post("/firstapp/payments/gcash/attach-receipt/", {
+        transaction_id: transactionId,
+        receipt_id: receiptId,
+      });
+    } catch (error) {
+      console.error("Failed to attach payment to receipt:", error);
+    }
+  };
+
+  const finalizePaidGcashReceipt = async (transactionId) => {
+    setLoading(true);
+    try {
+      const payload = buildReceiptPayload();
+      const response = await api.post("/firstapp/receipt/", payload);
+      setReceiptDetails(response.data);
+      setIsReceiptModalOpen(true);
+      await attachPaymentToReceipt(transactionId, response.data.receipt_id || response.data.id);
+      setGcashModalOpen(false);
+    } catch (error) {
+      console.error("Failed to finalize GCash receipt:", error);
+      triggerAlert("Order Finalization Failed", error.response?.data?.error || "Payment succeeded but receipt finalization failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkGcashStatus = async (transactionId, options = { autoFinalize: false }) => {
+    if (!transactionId) return;
+    try {
+      const response = await api.get(`/firstapp/payments/gcash/${transactionId}/status/`);
+      const status = response.data?.status || "PENDING";
+      setGcashStatus(status);
+
+      if (status === "PAID" && options.autoFinalize) {
+        await finalizePaidGcashReceipt(transactionId);
+      }
+
+      if (["FAILED", "EXPIRED", "CANCELLED"].includes(status)) {
+        setGcashModalOpen(false);
+        triggerAlert("GCash Payment", `Payment status is ${status}.`);
+      }
+    } catch (error) {
+      console.error("Failed to check GCash status:", error);
+    }
+  };
+
+  const createGcashPayment = async () => {
+    const orderPayload = buildReceiptPayload();
+    const amountInCentavos = Math.max(Math.round(Number(total || 0) * 100), 1);
+
+    const response = await api.post("/firstapp/payments/gcash/create/", {
+      amount: amountInCentavos,
+      currency: "PHP",
+      description: `VenDish POS Order - ₱${total.toFixed(2)}`,
+      customer_id: selectedCustomer,
+      order_payload: orderPayload,
+    });
+
+    setGcashTransactionId(response.data.transaction_id);
+    setGcashCheckoutUrl(response.data.checkout_url || "");
+    setGcashReference(response.data.reference || "");
+    setGcashStatus(response.data.status || "PENDING");
+    setGcashModalOpen(true);
+
+    if (response.data.checkout_url) {
+      window.open(response.data.checkout_url, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  useEffect(() => {
+    if (!gcashModalOpen || !gcashTransactionId) return;
+
+    const intervalId = setInterval(() => {
+      checkGcashStatus(gcashTransactionId, { autoFinalize: true });
+    }, 3000);
+
+    return () => clearInterval(intervalId);
+  }, [gcashModalOpen, gcashTransactionId]);
+
   const handleSubmitOrder = async () => {
     if (cartItems.length === 0) return triggerAlert("Empty Cart", "Cart is empty!");
-    if (!cash || parseFloat(cash) < total) return triggerAlert("Insufficient Cash", "The cash provided is less than the total amount!");
+    if (paymentMethod === "cash" && (!cash || parseFloat(cash) < total)) return triggerAlert("Insufficient Cash", "The cash provided is less than the total amount!");
     if (appliedCoupons.length > 0 && !selectedCustomer) {
       return triggerAlert("Customer Required", "Select a customer first. Coupons are tied to user accounts.");
     }
@@ -502,26 +630,15 @@ const Pos = () => {
     }
 
     setLoading(true);
-    const payload = {
-      subtotal: subTotal.toFixed(2),
-      vat: vat.toFixed(2),
-      total: total.toFixed(2), 
-      cash_given: cash,
-      change,
-      coupons: appliedCoupons.map(c => c.id), 
-      discount_type: selectedDiscount !== "none" ? selectedDiscount : null,
-      customer_id: selectedCustomer, 
-      items: cartItems.map((i) => ({
-        product: i.id, 
-        product_name: i.product_name, 
-        price: i.price, 
-        quantity: i.qty,
-      })),
-    };
     try {
-      const response = await api.post("/firstapp/receipt/", payload);
-      setReceiptDetails(response.data);
-      setIsReceiptModalOpen(true);
+      if (paymentMethod === "gcash") {
+        await createGcashPayment();
+      } else {
+        const payload = buildReceiptPayload();
+        const response = await api.post("/firstapp/receipt/", payload);
+        setReceiptDetails(response.data);
+        setIsReceiptModalOpen(true);
+      }
 
     } catch (error) {
       console.error("Submit failed:", error);
@@ -542,6 +659,12 @@ const Pos = () => {
       setSelectedCustomer(null); 
       setCustomerCoupons([]);
       setIsCustomerModalOpen(false);
+      setPaymentMethod("cash");
+      setGcashModalOpen(false);
+      setGcashCheckoutUrl("");
+      setGcashTransactionId(null);
+      setGcashReference("");
+      setGcashStatus("PENDING");
 
       setIsReceiptModalOpen(false);
       // Refresh both products and categories after order reset
@@ -618,22 +741,14 @@ const Pos = () => {
                   <div className="w-full flex justify-between items-end border-t pt-2 mt-1">
                     <span className="text-red-600 font-bold">₱{food.price}</span>
                     
-                    {food.track_stock ? (
-                        food.stock_quantity > 0 ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800 border border-green-200">
-                                Stock: {food.stock_quantity}
-                              </span>
-                        ) : (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 border border-red-200">
-                                Out of Stock
-                              </span>
-                        )
+                    {getRemainingServings(food.id, food.stock_quantity) > 0 ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800 border border-green-200">
+                        Servings: {getRemainingServings(food.id, food.stock_quantity)}
+                      </span>
                     ) : (
-                        food.is_available ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800 border border-green-200">Available</span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 border border-red-200">Unavailable</span>
-                        )
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 border border-red-200">
+                        Unavailable
+                      </span>
                     )}
                   </div>
                 </div>
@@ -747,7 +862,24 @@ const Pos = () => {
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 mb-3">
+                      <select
+                        value={paymentMethod}
+                        onChange={(e) => setPaymentMethod(e.target.value)}
+                        className="w-full px-3 py-2 border rounded-md text-sm font-medium"
+                      >
+                        <option value="cash">Cash</option>
+                        <option value="gcash">GCash</option>
+                      </select>
+
+                      {paymentMethod === "cash" ? (
                       <SelectDiscount options={discountOptions} onSelect={setSelectedDiscount} placeholder="Discount Type"/>
+                      ) : (
+                        <div className="w-full px-3 py-2 border rounded-md text-sm font-medium bg-white text-blue-700">
+                          GCash Selected
+                        </div>
+                      )}
+
+                      {paymentMethod === "cash" ? (
                       <div className="relative">
                         <span className="absolute left-3 top-2 text-gray-400">₱</span>
                          <input 
@@ -759,6 +891,11 @@ const Pos = () => {
                            maxLength={20}
                          />
                       </div>
+                      ) : (
+                        <div className="w-full px-3 py-2 border rounded-md text-sm font-semibold text-green-700 bg-green-50 text-right">
+                          GCash: ₱{total.toFixed(2)}
+                        </div>
+                      )}
                 </div>
 
                 <div className="flex gap-2 mb-2">
@@ -822,14 +959,14 @@ const Pos = () => {
 
                 <button 
                     onClick={handleSubmitOrder}
-                    disabled={loading || parseFloat(cash || 0) < total || cartItems.length === 0}
+                  disabled={loading || (paymentMethod === "cash" && parseFloat(cash || 0) < total) || cartItems.length === 0}
                     className={`w-full py-3 rounded-xl font-bold text-white transition-all ${
-                        parseFloat(cash || 0) >= total && cartItems.length > 0
+                    (paymentMethod === "gcash" || parseFloat(cash || 0) >= total) && cartItems.length > 0
                         ? 'bg-red-600 hover:bg-red-700 shadow-lg' 
                         : 'bg-gray-300 cursor-not-allowed'
                     }`}
                 >
-                    {loading ? "Processing..." : "PAY & PRINT"}
+                  {loading ? "Processing..." : paymentMethod === "gcash" ? "PAY VIA GCASH" : "PAY & PRINT"}
                 </button>
 
              </div>
@@ -846,6 +983,16 @@ const Pos = () => {
           customerCouponsLoading={customerCouponsLoading}
           appliedCoupons={appliedCoupons}
           onApplyCoupon={applyClaimedCoupon}
+        />
+
+        <GCashPaymentModal
+          open={gcashModalOpen}
+          onOpenChange={setGcashModalOpen}
+          checkoutUrl={gcashCheckoutUrl}
+          status={gcashStatus}
+          reference={gcashReference}
+          onRefresh={() => checkGcashStatus(gcashTransactionId, { autoFinalize: true })}
+          onCancel={() => setGcashModalOpen(false)}
         />
     </div>
   );

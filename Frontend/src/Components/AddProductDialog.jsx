@@ -21,6 +21,7 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
   const [productName, setProductName] = useState("");
   const [category, setCategory] = useState("");
   const [price, setPrice] = useState("");
+  const [servings, setServings] = useState("0");
   
   const [loading, setLoading] = useState(false);
   const [image, setImage] = useState(null);
@@ -56,10 +57,12 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
       formData.append("category", category); 
       formData.append("price", parseFloat(price));
 
-      // Send boolean values as explicit strings to ensure backend parses them correctly
-      formData.append("is_available", "true"); 
-      formData.append("track_stock", "false");
-      formData.append("stock_quantity", 0);
+      const parsedServings = parseInt(servings || "0", 10);
+      const servingCount = Number.isFinite(parsedServings) ? Math.max(0, parsedServings) : 0;
+
+      formData.append("is_available", String(servingCount > 0));
+      formData.append("track_stock", "true");
+      formData.append("stock_quantity", servingCount);
       
       if (image) formData.append("image", image);
 
@@ -75,6 +78,7 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
       setProductName("");
       setCategory("");
       setPrice("");
+      setServings("0");
       setImage(null);
       setError("");
     } catch (err) {
@@ -148,6 +152,19 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
               onChange={(e) => setPrice(e.target.value)}
               required
               />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="servings">Servings Available</Label>
+            <Input
+              id="servings"
+              type="number"
+              min="0"
+              step="1"
+              value={servings}
+              onChange={(e) => setServings(e.target.value)}
+              required
+            />
           </div>
 
           {/* Image Input */}
