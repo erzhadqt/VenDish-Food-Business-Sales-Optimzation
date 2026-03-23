@@ -170,6 +170,16 @@ class Receipt(models.Model):
         COMPLETED = 'COMPLETED', 'Completed'
         VOIDED = 'VOIDED', 'Voided'
 
+    class PaymentMethod(models.TextChoices):
+        CASH = 'CASH', 'Cash'
+        GCASH = 'GCASH', 'GCash'
+
+    class PaymentStatus(models.TextChoices):
+        PENDING = 'PENDING', 'Pending'
+        PAID = 'PAID', 'Paid'
+        FAILED = 'FAILED', 'Failed'
+        EXPIRED = 'EXPIRED', 'Expired'
+
     coupons = models.ManyToManyField(Coupon, blank=True, related_name='receipts')
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
     vat = models.DecimalField(max_digits=10, decimal_places=2)
@@ -179,6 +189,12 @@ class Receipt(models.Model):
     change = models.DecimalField(max_digits=10, decimal_places=2)
 
     created_at = models.DateTimeField(default=timezone.now)
+
+    payment_method = models.CharField(max_length=20, choices=PaymentMethod.choices, default=PaymentMethod.CASH)
+    payment_status = models.CharField(max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PAID)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    provider_payment_id = models.CharField(max_length=100, null=True, blank=True)
+    provider_reference = models.CharField(max_length=100, null=True, blank=True)
 
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.COMPLETED)
     void_reason = models.TextField(null=True, blank=True)
@@ -208,6 +224,45 @@ class ReceiptItem(models.Model):
 
     def __str__(self):
         return f"{self.quantity} × {self.product_name}"
+
+class PaymentTransaction(models.Model):
+    class Provider(models.TextChoices):
+        PAYMONGO = 'PAYMONGO', 'PayMongo'
+
+    class Status(models.TextChoices):
+        PENDING = 'PENDING', 'Pending'
+        PAID = 'PAID', 'Paid'
+        FAILED = 'FAILED', 'Failed'
+        EXPIRED = 'EXPIRED', 'Expired'
+        CANCELLED = 'CANCELLED', 'Cancelled'
+
+    provider = models.CharField(max_length=20, choices=Provider.choices, default=Provider.PAYMONGO)
+    reference = models.CharField(max_length=64, unique=True)
+    transaction_idempotency_key = models.CharField(max_length=64, unique=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+
+    amount = models.PositiveIntegerField(help_text='Amount in centavos')
+    currency = models.CharField(max_length=10, default='PHP')
+    checkout_url = models.URLField(null=True, blank=True)
+
+    provider_checkout_id = models.CharField(max_length=100, null=True, blank=True)
+    provider_payment_id = models.CharField(max_length=100, null=True, blank=True)
+    provider_event_id = models.CharField(max_length=100, null=True, blank=True)
+    webhook_verified = models.BooleanField(default=False)
+
+    order_payload = models.JSONField(default=dict, blank=True)
+    raw_provider_payload = models.JSONField(default=dict, blank=True)
+
+    customer = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='payment_transactions')
+    cashier = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_payment_transactions')
+    receipt = models.OneToOneField(Receipt, on_delete=models.SET_NULL, null=True, blank=True, related_name='payment_transaction')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.reference} ({self.status})"
 
 class Review(models.Model):
     REVIEW_TYPES = [

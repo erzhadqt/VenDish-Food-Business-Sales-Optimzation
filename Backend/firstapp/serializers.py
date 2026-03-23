@@ -2,6 +2,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from django.db import transaction
+from django.db.models import F
 from django.utils import timezone
 
 from .models import Product, Category, Receipt, ReceiptItem, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, Review, UserProfile, OTP
@@ -18,6 +19,19 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ["id", "username", "email", "first_name", "last_name", "middle_name", "phone", "address", "profile_pic", "password", "is_superuser", "is_staff", "is_active"]
         extra_kwargs = {"password": {"write_only": True},
                         "is_superuser": {"read_only": True}}
+
+    def validate_email(self, value):
+        if value:
+            # Case-insensitive check to see if email exists
+            qs = User.objects.filter(email__iexact=value)
+            
+            # If we are updating an existing user, exclude them from the check
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+                
+            if qs.exists():
+                raise serializers.ValidationError("A user with this email address already exists.")
+        return value
 
     def validate_password(self, value):
         if value is None or value == "":
@@ -91,6 +105,19 @@ class ProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = '__all__'
         extra_kwargs = {'date_added': {'read_only': True}}
+
+    def validate(self, attrs):
+        instance = getattr(self, 'instance', None)
+        if 'stock_quantity' in attrs:
+            stock_quantity = attrs.get('stock_quantity')
+        elif instance is not None:
+            stock_quantity = instance.stock_quantity
+        else:
+            stock_quantity = 0
+
+        attrs['track_stock'] = True
+        attrs['is_available'] = stock_quantity > 0
+        return attrs
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
@@ -258,10 +285,16 @@ class ReceiptSerializer(serializers.ModelSerializer):
             'items', 
             'coupons',          # <--- Renamed from coupon
             'coupon_details',
+            'payment_method',
+            'payment_status',
+            'paid_at',
+            'provider_payment_id',
+            'provider_reference',
             'status',
             'void_reason',
             'cashier_name'
         ]
+        read_only_fields = ['payment_status', 'paid_at', 'provider_payment_id', 'provider_reference']
 
     def get_cashier_name(self, obj):
         return obj.cashier.username if obj.cashier else "Unknown"
@@ -270,7 +303,31 @@ class ReceiptSerializer(serializers.ModelSerializer):
         items_data = validated_data.pop("items") 
         coupons_data = validated_data.pop("coupons", []) # Extract list
 
+        requested_per_product = {}
+        for item_data in items_data:
+            product = item_data.get("product")
+            quantity = item_data.get("quantity", 0)
+            if product is None:
+                continue
+            product_id = product.id
+            requested_per_product[product_id] = requested_per_product.get(product_id, 0) + quantity
+
         with transaction.atomic():  
+            if requested_per_product:
+                locked_products = {
+                    product.id: product
+                    for product in Product.objects.select_for_update().filter(id__in=requested_per_product.keys())
+                }
+
+                for product_id, requested_qty in requested_per_product.items():
+                    product = locked_products.get(product_id)
+                    if not product:
+                        raise serializers.ValidationError({"error": f"Product {product_id} not found."})
+                    if requested_qty > product.stock_quantity:
+                        raise serializers.ValidationError({
+                            "error": f"Not enough servings for {product.product_name}. Only {product.stock_quantity} left."
+                        })
+
             # Note: cashier and customer are added in ViewSet
             receipt = Receipt.objects.create(**validated_data)
 
@@ -283,6 +340,21 @@ class ReceiptSerializer(serializers.ModelSerializer):
                 items_to_create.append(ReceiptItem(receipt=receipt, **item_data))
             
             ReceiptItem.objects.bulk_create(items_to_create)
+
+            for product_id, requested_qty in requested_per_product.items():
+                Product.objects.filter(id=product_id).update(
+                    stock_quantity=F('stock_quantity') - requested_qty
+                )
+
+            Product.objects.filter(
+                id__in=requested_per_product.keys(),
+                stock_quantity=0
+            ).update(is_available=False)
+
+            Product.objects.filter(
+                id__in=requested_per_product.keys(),
+                stock_quantity__gt=0
+            ).update(is_available=True)
 
         return receipt
 

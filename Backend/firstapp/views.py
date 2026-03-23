@@ -18,9 +18,17 @@ from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from django.utils.dateparse import parse_datetime
+
 from django.db.models import Sum, Count, Q, Exists, OuterRef
 
 from django.contrib.auth.hashers import make_password, check_password
+import base64
+import hashlib
+import hmac
+import json
+import requests
+import uuid
 
 import secrets
 
@@ -30,9 +38,61 @@ from rest_framework.permissions import AllowAny
 from .serializers import (
     UserSerializer, FeedbackSerializer, ProductSerializer, CategorySerializer, ReceiptSerializer, CouponSerializer, HomePageSerializer, ServicesPageSerializer, AboutPageSerializer, ContactPageSerializer, CouponCriteriaSerializer, StaffPerformanceSerializer, ReviewSerializer, OTPSerializer
 )   
-from .models import Product, Category, Receipt, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, ReceiptItem, Review, OTP, PasswordResetToken, StoreSettings, StaffInvitationToken
+from .models import Product, Category, Receipt, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, ReceiptItem, Review, OTP, PasswordResetToken, StoreSettings, StaffInvitationToken, PaymentTransaction
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.exceptions import AuthenticationFailed
+
+
+def _paymongo_headers(idempotency_key=None):
+    secret_key = getattr(settings, 'PAYMONGO_SECRET_KEY', '')
+    if not secret_key:
+        raise ValueError('PayMongo secret key is not configured.')
+
+    auth_token = base64.b64encode(f"{secret_key}:".encode('utf-8')).decode('utf-8')
+    headers = {
+        'Authorization': f'Basic {auth_token}',
+        'Content-Type': 'application/json',
+    }
+    if idempotency_key:
+        headers['Idempotency-Key'] = idempotency_key
+    return headers
+
+
+def _verify_paymongo_signature(raw_body, signature_header):
+    webhook_secret = getattr(settings, 'PAYMONGO_WEBHOOK_SECRET', '')
+    if not webhook_secret:
+        return False
+    if not signature_header:
+        return False
+
+    parsed_parts = {}
+    for part in signature_header.split(','):
+        token = part.strip()
+        if '=' not in token:
+            continue
+        key, value = token.split('=', 1)
+        parsed_parts[key.strip()] = value.strip()
+
+    timestamp = parsed_parts.get('t')
+    if not timestamp:
+        return False
+
+    computed = hmac.new(
+        webhook_secret.encode('utf-8'),
+        f"{timestamp}.{raw_body.decode('utf-8')}".encode('utf-8'),
+        hashlib.sha256,
+    ).hexdigest()
+
+    signatures = [
+        parsed_parts.get('v1'),
+        parsed_parts.get('te'),
+        parsed_parts.get('li'),
+    ]
+
+    for signature in signatures:
+        if signature and hmac.compare_digest(computed, signature):
+            return True
+    return False
 
 
 # -------------------------------
@@ -345,6 +405,11 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                         customer=target_customer
                     )
 
+                    if receipt.payment_method == Receipt.PaymentMethod.CASH and not receipt.paid_at:
+                        receipt.paid_at = timezone.now()
+                        receipt.payment_status = Receipt.PaymentStatus.PAID
+                        receipt.save(update_fields=['paid_at', 'payment_status'])
+
                     # 3. UPDATE COUPONS (Loop through all applied)
                     # FIX: Iterate over receipt.coupons.all()
                     for coupon_ref in receipt.coupons.all():
@@ -447,6 +512,255 @@ class ReceiptViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({"error": str(e)}, status=500)
 
+
+class GCashPaymentCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        amount = request.data.get('amount')
+        currency = (request.data.get('currency') or 'PHP').upper()
+        description = request.data.get('description') or 'VenDish POS Order'
+        order_payload = request.data.get('order_payload') or {}
+        customer_id = request.data.get('customer_id')
+
+        try:
+            amount = int(amount)
+            if amount <= 0:
+                raise ValueError
+        except Exception:
+            return Response({'error': 'Amount must be a positive integer in centavos.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        customer = None
+        if customer_id:
+            customer = User.objects.filter(id=customer_id).first()
+
+        reference = uuid.uuid4().hex[:20].upper()
+        idempotency_key = uuid.uuid4().hex
+
+        payment_txn = PaymentTransaction.objects.create(
+            reference=reference,
+            transaction_idempotency_key=idempotency_key,
+            amount=amount,
+            currency=currency,
+            status=PaymentTransaction.Status.PENDING,
+            order_payload=order_payload if isinstance(order_payload, dict) else {},
+            customer=customer,
+            cashier=request.user,
+        )
+
+        success_url = f"{settings.FRONTEND_URL.rstrip('/')}/gcash/success?ref={reference}"
+        cancel_url = f"{settings.FRONTEND_URL.rstrip('/')}/gcash/cancel?ref={reference}"
+
+        paymongo_payload = {
+            'data': {
+                'attributes': {
+                    'line_items': [
+                        {
+                            'currency': currency,
+                            'amount': amount,
+                            'name': description[:120],
+                            'quantity': 1,
+                        }
+                    ],
+                    'payment_method_types': ['gcash'],
+                    'description': description[:255],
+                    'reference_number': reference,
+                    'show_line_items': True,
+                    'show_description': True,
+                    'success_url': success_url,
+                    'cancel_url': cancel_url,
+                    'metadata': {
+                        'reference': reference,
+                        'transaction_id': str(payment_txn.id),
+                    },
+                }
+            }
+        }
+
+        try:
+            response = requests.post(
+                'https://api.paymongo.com/v1/checkout_sessions',
+                headers=_paymongo_headers(idempotency_key=idempotency_key),
+                json=paymongo_payload,
+                timeout=30,
+            )
+            response_data = response.json()
+        except Exception as exc:
+            payment_txn.status = PaymentTransaction.Status.FAILED
+            payment_txn.raw_provider_payload = {'error': str(exc)}
+            payment_txn.save(update_fields=['status', 'raw_provider_payload', 'updated_at'])
+            return Response({'error': 'Failed to connect to PayMongo.'}, status=status.HTTP_502_BAD_GATEWAY)
+
+        if response.status_code >= 400:
+            payment_txn.status = PaymentTransaction.Status.FAILED
+            payment_txn.raw_provider_payload = response_data if isinstance(response_data, dict) else {'raw': str(response_data)}
+            payment_txn.save(update_fields=['status', 'raw_provider_payload', 'updated_at'])
+            return Response({'error': 'PayMongo rejected checkout creation.', 'details': response_data}, status=status.HTTP_400_BAD_REQUEST)
+
+        checkout_data = response_data.get('data', {})
+        checkout_attributes = checkout_data.get('attributes', {})
+        checkout_url = checkout_attributes.get('checkout_url')
+
+        payment_txn.provider_checkout_id = checkout_data.get('id')
+        payment_txn.checkout_url = checkout_url
+        payment_txn.raw_provider_payload = response_data if isinstance(response_data, dict) else {}
+        payment_txn.save(update_fields=['provider_checkout_id', 'checkout_url', 'raw_provider_payload', 'updated_at'])
+
+        return Response({
+            'transaction_id': payment_txn.id,
+            'reference': payment_txn.reference,
+            'status': payment_txn.status,
+            'checkout_url': payment_txn.checkout_url,
+        }, status=status.HTTP_201_CREATED)
+
+
+class GCashPaymentStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, transaction_id):
+        payment_txn = get_object_or_404(PaymentTransaction, id=transaction_id)
+
+        if not (request.user.is_superuser or request.user.id == payment_txn.cashier_id):
+            return Response({'error': 'Not allowed to view this transaction.'}, status=status.HTTP_403_FORBIDDEN)
+
+        return Response({
+            'transaction_id': payment_txn.id,
+            'reference': payment_txn.reference,
+            'status': payment_txn.status,
+            'checkout_url': payment_txn.checkout_url,
+            'paid_at': payment_txn.paid_at,
+            'receipt_id': payment_txn.receipt_id,
+        })
+
+
+class GCashAttachReceiptView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        transaction_id = request.data.get('transaction_id')
+        receipt_id = request.data.get('receipt_id')
+
+        if not transaction_id or not receipt_id:
+            return Response({'error': 'transaction_id and receipt_id are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        payment_txn = get_object_or_404(PaymentTransaction, id=transaction_id)
+        receipt = get_object_or_404(Receipt, id=receipt_id)
+
+        if not (request.user.is_superuser or request.user.id == payment_txn.cashier_id):
+            return Response({'error': 'Not allowed to update this transaction.'}, status=status.HTTP_403_FORBIDDEN)
+
+        payment_txn.receipt = receipt
+        payment_txn.save(update_fields=['receipt', 'updated_at'])
+
+        if payment_txn.status == PaymentTransaction.Status.PAID:
+            receipt.payment_method = Receipt.PaymentMethod.GCASH
+            receipt.payment_status = Receipt.PaymentStatus.PAID
+            receipt.provider_reference = payment_txn.reference
+            receipt.provider_payment_id = payment_txn.provider_payment_id
+            if not receipt.paid_at:
+                receipt.paid_at = payment_txn.paid_at or timezone.now()
+            receipt.save(update_fields=['payment_method', 'payment_status', 'provider_reference', 'provider_payment_id', 'paid_at'])
+
+        return Response({'status': 'ok'})
+
+
+class GCashPaymentWebhookView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        raw_body = request.body
+        signature_header = request.headers.get('Paymongo-Signature') or request.headers.get('paymongo-signature')
+
+        webhook_secret = getattr(settings, 'PAYMONGO_WEBHOOK_SECRET', '')
+        if webhook_secret and not _verify_paymongo_signature(raw_body, signature_header):
+            return Response({'error': 'Invalid webhook signature.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            payload = json.loads(raw_body.decode('utf-8'))
+        except Exception:
+            return Response({'error': 'Invalid JSON payload.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = payload.get('data') or {}
+        event_id = data.get('id')
+        event_attributes = data.get('attributes') or {}
+        event_type = (event_attributes.get('type') or '').lower()
+        event_data = event_attributes.get('data') or {}
+        event_data_attributes = event_data.get('attributes') or {}
+        metadata = event_data_attributes.get('metadata') or {}
+
+        reference = metadata.get('reference') or event_data_attributes.get('reference_number')
+        provider_checkout_id = event_data.get('id')
+
+        payment_txn = None
+        if reference:
+            payment_txn = PaymentTransaction.objects.filter(reference=reference).first()
+        if not payment_txn and provider_checkout_id:
+            payment_txn = PaymentTransaction.objects.filter(provider_checkout_id=provider_checkout_id).first()
+        if not payment_txn:
+            return Response({'status': 'ignored'})
+
+        if event_id and payment_txn.provider_event_id == event_id:
+            return Response({'status': 'duplicate'})
+
+        normalized_status = None
+        event_payment_status = (event_data_attributes.get('status') or '').lower()
+
+        if 'paid' in event_type or event_payment_status in ['paid', 'succeeded']:
+            normalized_status = PaymentTransaction.Status.PAID
+        elif 'expired' in event_type or event_payment_status == 'expired':
+            normalized_status = PaymentTransaction.Status.EXPIRED
+        elif 'failed' in event_type or event_payment_status in ['failed', 'cancelled', 'canceled']:
+            normalized_status = PaymentTransaction.Status.FAILED
+
+        update_fields = ['raw_provider_payload', 'webhook_verified', 'updated_at']
+        payment_txn.raw_provider_payload = payload if isinstance(payload, dict) else {}
+        payment_txn.webhook_verified = True
+
+        if provider_checkout_id:
+            payment_txn.provider_checkout_id = provider_checkout_id
+            update_fields.append('provider_checkout_id')
+        if event_id:
+            payment_txn.provider_event_id = event_id
+            update_fields.append('provider_event_id')
+
+        payments_list = event_data_attributes.get('payments')
+        if isinstance(payments_list, list) and payments_list:
+            first_payment = payments_list[0] or {}
+            if isinstance(first_payment, dict):
+                payment_txn.provider_payment_id = first_payment.get('id') or payment_txn.provider_payment_id
+        if payment_txn.provider_payment_id:
+            update_fields.append('provider_payment_id')
+
+        if normalized_status:
+            payment_txn.status = normalized_status
+            update_fields.append('status')
+
+        if normalized_status == PaymentTransaction.Status.PAID and not payment_txn.paid_at:
+            payment_txn.paid_at = timezone.now()
+            update_fields.append('paid_at')
+
+        payment_txn.save(update_fields=list(set(update_fields)))
+
+        if payment_txn.receipt_id:
+            receipt = payment_txn.receipt
+            if normalized_status == PaymentTransaction.Status.PAID:
+                receipt.payment_method = Receipt.PaymentMethod.GCASH
+                receipt.payment_status = Receipt.PaymentStatus.PAID
+                receipt.provider_reference = payment_txn.reference
+                receipt.provider_payment_id = payment_txn.provider_payment_id
+                if not receipt.paid_at:
+                    receipt.paid_at = payment_txn.paid_at or timezone.now()
+                receipt.save(update_fields=['payment_method', 'payment_status', 'provider_reference', 'provider_payment_id', 'paid_at'])
+            elif normalized_status == PaymentTransaction.Status.EXPIRED:
+                receipt.payment_status = Receipt.PaymentStatus.EXPIRED
+                receipt.save(update_fields=['payment_status'])
+            elif normalized_status == PaymentTransaction.Status.FAILED:
+                receipt.payment_status = Receipt.PaymentStatus.FAILED
+                receipt.save(update_fields=['payment_status'])
+
+        return Response({'status': 'ok'})
+
     @action(detail=True, methods=['post'], url_path='void')
     def void_receipt(self, request, pk=None, id=None):
         receipt = self.get_object() 
@@ -459,6 +773,17 @@ class ReceiptViewSet(viewsets.ModelViewSet):
 
         try:
             with transaction.atomic():
+                # Restore servings for tracked products from this completed receipt
+                receipt_items = receipt.items.select_related('product').all()
+                for receipt_item in receipt_items:
+                    product = receipt_item.product
+                    if not product:
+                        continue
+                    Product.objects.filter(id=product.id).update(
+                        stock_quantity=F('stock_quantity') + receipt_item.quantity,
+                        is_available=True
+                    )
+
                 # FIX: Revert ALL coupons
                 for coupon_ref in receipt.coupons.all():
                     coupon = Coupon.objects.select_for_update().get(id=coupon_ref.id)
@@ -580,6 +905,54 @@ class CouponViewSet(viewsets.ModelViewSet):
             data[index]['is_used'] = coupon.is_used_by_user
 
         return Response(data)
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        data = request.data
+
+        try:
+            with transaction.atomic():
+                # 1. Update Expiration in Criteria
+                if 'valid_to' in data and instance.criteria:
+                    val = data['valid_to']
+                    if val in [None, '']:
+                        instance.criteria.valid_to = None
+                    else:
+                        # Convert the string to a timezone-aware datetime object
+                        parsed_date = parse_datetime(val)
+                        if parsed_date:
+                            if timezone.is_naive(parsed_date):
+                                parsed_date = timezone.make_aware(parsed_date)
+                            instance.criteria.valid_to = parsed_date
+                            
+                    instance.criteria.save()
+
+                # 2. Update Coupon Limits
+                if 'usage_limit' in data:
+                    val = data['usage_limit']
+                    instance.usage_limit = int(val) if val not in [None, ''] else None
+                    
+                if 'claim_limit' in data:
+                    val = data['claim_limit']
+                    instance.claim_limit = int(val) if val not in [None, ''] else None
+
+                # 3. Recalculate Status manually
+                is_expired = instance.criteria and instance.criteria.valid_to and instance.criteria.valid_to < timezone.now()
+                is_sold_out = instance.usage_limit is not None and instance.times_used >= instance.usage_limit
+
+                if is_expired:
+                    instance.status = 'Expired'
+                elif is_sold_out:
+                    instance.status = 'Redeemed'
+                else:
+                    instance.status = 'Active'
+
+                instance.save()
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
 
 class CouponCriteriaViewSet(viewsets.ModelViewSet):
     queryset = CouponCriteria.objects.all().order_by('-id')
