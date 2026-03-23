@@ -786,6 +786,12 @@ class GCashPaymentStatusView(APIView):
         if not (request.user.is_superuser or request.user.id == payment_txn.cashier_id):
             return Response({'error': 'Not allowed to view this transaction.'}, status=status.HTTP_403_FORBIDDEN)
 
+        # Developer testing override
+        if request.query_params.get('dev_override_paid') == 'true' and payment_txn.status == PaymentTransaction.Status.PENDING:
+            payment_txn.status = PaymentTransaction.Status.PAID
+            payment_txn.paid_at = timezone.now()
+            payment_txn.save(update_fields=['status', 'paid_at'])
+
         if payment_txn.status == PaymentTransaction.Status.PENDING:
             payment_txn = _sync_transaction_from_paymongo(payment_txn)
 

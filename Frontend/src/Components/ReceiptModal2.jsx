@@ -107,8 +107,14 @@ export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, 
                 </div>
 
                 <div className="rounded-md mt-4 space-y-1">
+                    <div className="flex justify-between text-md border-b pb-1 mb-1">
+                        <span className="text-muted-foreground">Payment Method</span>
+                        <span className="font-semibold text-foreground uppercase">
+                            {receiptDetails.payment_method === 'GCASH' ? 'GCash' : 'Cash'}
+                        </span>
+                    </div>
                     <div className="flex justify-between text-md">
-                        <span className="text-muted-foreground">Cash Given</span>
+                        <span className="text-muted-foreground">Amount Given</span>
                         <span className="font-mono text-md">₱{receiptDetails.cash_given}</span>
                     </div>
                     <div className="flex justify-between">

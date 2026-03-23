@@ -8,7 +8,7 @@ import ReceiptModal2 from "../../Components/ReceiptModal2";
 import VoidConfirmDialog from "../../Components/VoidConfirmDialog";
 import CustomerCouponModal from "../../Components/CustomerCouponModal";
 import GCashPaymentModal from "../../Components/GCashPaymentModal";
-import GCashReconciliationModal from "../../Components/GCashReconciliationModal";
+// import GCashReconciliationModal from "../../Components/GCashReconciliationModal";
 import { SelectDiscount } from "../../Components/SelectDiscount";
 import AlertModal from "../../Components/AlertModal";
 import { Skeleton } from "../../Components/ui/skeleton";
@@ -78,7 +78,7 @@ const Pos = () => {
   const [gcashTransactionId, setGcashTransactionId] = useState(null);
   const [gcashReference, setGcashReference] = useState("");
   const [gcashStatus, setGcashStatus] = useState("PENDING");
-  const [gcashReconcileOpen, setGcashReconcileOpen] = useState(false);
+  // const [gcashReconcileOpen, setGcashReconcileOpen] = useState(false);
 
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
@@ -576,10 +576,13 @@ const Pos = () => {
     }
   };
 
-  const checkGcashStatus = async (transactionId, options = { autoFinalize: false }) => {
+  const checkGcashStatus = async (transactionId, options = { autoFinalize: false, devOverrideOverride: false }) => {
     if (!transactionId) return;
     try {
-      const response = await api.get(`/firstapp/payments/gcash/${transactionId}/status/`);
+      const url = options.devOverrideOverride 
+        ? `/firstapp/payments/gcash/${transactionId}/status/?dev_override_paid=true`
+        : `/firstapp/payments/gcash/${transactionId}/status/`;
+      const response = await api.get(url);
       const status = response.data?.status || "PENDING";
       const returnedReceiptId = response.data?.receipt_id;
       setGcashStatus(status);
@@ -632,9 +635,10 @@ const Pos = () => {
       })
     );
 
-    if (response.data.checkout_url) {
-      window.open(response.data.checkout_url, "_blank", "noopener,noreferrer");
-    }
+    // QR Code modal handles this elegantly now; no auto-opening needed
+    // if (response.data.checkout_url) {
+    //   window.open(response.data.checkout_url, "_blank", "noopener,noreferrer");
+    // }
   };
 
   useEffect(() => {
@@ -908,13 +912,13 @@ const Pos = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <button
+                      {/* <button
                         type="button"
                         onClick={() => setGcashReconcileOpen(true)}
                         className="text-xs px-2 py-1 rounded border text-blue-700 hover:bg-blue-50"
                       >
                         GCash Reconcile
-                      </button>
+                      </button> */}
 
                       {selectedCustomer && (
                         <button
@@ -1088,13 +1092,14 @@ const Pos = () => {
           reference={gcashReference}
           onRefresh={() => checkGcashStatus(gcashTransactionId, { autoFinalize: true })}
           onCancel={() => setGcashModalOpen(false)}
+          onDevOverride={() => checkGcashStatus(gcashTransactionId, { autoFinalize: true, devOverrideOverride: true })}
         />
 
-        <GCashReconciliationModal
+        {/* <GCashReconciliationModal
           open={gcashReconcileOpen}
           onOpenChange={setGcashReconcileOpen}
           onReceiptRecovered={openReceiptById}
-        />
+        /> */}
     </div>
   );
 };

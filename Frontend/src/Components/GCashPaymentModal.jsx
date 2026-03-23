@@ -1,6 +1,7 @@
 import React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../Components/ui/dialog";
 import { Button } from "../Components/ui/button";
+import { QRCodeSVG } from "qrcode.react";
 
 export default function GCashPaymentModal({
   open,
@@ -10,6 +11,7 @@ export default function GCashPaymentModal({
   reference,
   onRefresh,
   onCancel,
+  onDevOverride,
 }) {
   const isPaid = status === "PAID";
   const isFailed = status === "FAILED" || status === "EXPIRED" || status === "CANCELLED";
@@ -40,14 +42,36 @@ export default function GCashPaymentModal({
             </div>
           </div>
 
-          {checkoutUrl && (
-            <Button
-              type="button"
-              className="w-full bg-blue-600 hover:bg-blue-700"
-              onClick={() => window.open(checkoutUrl, "_blank", "noopener,noreferrer")}
-            >
-              Open GCash Checkout
-            </Button>
+          {checkoutUrl && !isPaid && (
+            <div className="flex flex-col items-center justify-center p-4 border rounded-md bg-white relative">
+              <span className="text-sm font-semibold mb-3 text-gray-700">Scan to Pay via GCash</span>
+
+              {/* DEV OVERRIDE BUTTON - FOR TESTING ONLY */}
+              {onDevOverride && (
+                <button 
+                  onClick={onDevOverride}
+                  className="absolute top-2 right-2 text-[10px] bg-red-100 text-red-700 px-2 py-1 rounded border border-red-200 hover:bg-red-200 transition-colors"
+                  title="Force successful payment (Dev Only)"
+                >
+                  Mock Pay
+                </button>
+              )}
+
+              <div className="p-3 bg-white border-2 border-blue-100 rounded-xl mb-3 shadow-sm">
+                <QRCodeSVG 
+                  value={checkoutUrl} 
+                  size={200}
+                  imageSettings={{
+                  src: "../../public/icon.jpeg",
+                  x: undefined, y: undefined, height: 30, width: 30, excavate: true
+                }}
+                  bgColor={"#ffffff"}
+                  fgColor={"#000000"}
+                  level={"Q"}
+                  includeMargin={false}
+                />
+              </div>
+            </div>
           )}
         </div>
 

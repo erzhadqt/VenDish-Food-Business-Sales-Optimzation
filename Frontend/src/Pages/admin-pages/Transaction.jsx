@@ -177,6 +177,7 @@ const Transaction = () => {
                                             <th className="px-4 md:px-6 py-4">Receipt ID</th>  
                                             <th className="px-4 md:px-6 py-4">Date</th>  
                                             <th className="px-4 md:px-6 py-4">Cashier</th>
+                                            <th className="px-4 md:px-6 py-4">Payment Mode</th>
                                             <th className="px-4 md:px-6 py-4">Status</th>  
                                             <th className="px-4 md:px-6 py-4">Coupon</th>  
                                             <th className="px-4 md:px-6 py-4 text-right">Total</th>  
@@ -194,6 +195,11 @@ const Transaction = () => {
                                                         <User size={14} className="text-gray-400 shrink-0"/>
                                                         <span className="font-medium text-gray-700">{receipt.cashier_name || "System"}</span>
                                                     </div>
+                                                </td>
+                                                <td className="px-4 md:px-6 py-4">
+                                                    <span className={`px-2 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1 ${receipt.payment_method === 'GCASH' ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'}`}>
+                                                        {receipt.payment_method === 'GCASH' ? 'GCASH' : 'CASH'}
+                                                    </span>
                                                 </td>
                                                 <td className="px-4 md:px-6 py-4">  
                                                     <span className={`px-2 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1 ${receipt.status === 'VOIDED' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-green-100 text-green-800 border border-green-200'}`}>  

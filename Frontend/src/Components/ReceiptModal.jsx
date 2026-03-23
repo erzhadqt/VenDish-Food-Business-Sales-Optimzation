@@ -125,6 +125,22 @@ const ReceiptModal = ({ open, onClose, receiptDetails }) => {
                                     <strong>Void Reason:</strong> {receiptDetails.void_reason}
                                 </div>
                             )}
+
+                            <div className="flex justify-between text-md border-b pb-2 mb-2">
+                                <span className="text-muted-foreground">Payment Method</span>
+                                <span className="font-bold text-gray-900 uppercase tracking-wide">
+                                    {receiptDetails.payment_method === 'GCASH' ? 'GCash' : 'Cash'}
+                                </span>
+                            </div>
+                            
+                            <div className="flex justify-between text-md">
+                                <span className="text-muted-foreground">Amount Given</span>
+                                <span className="font-mono">₱{receiptDetails.cash_given}</span>
+                            </div>
+                            <div className="flex justify-between text-md">
+                                <span className="text-muted-foreground">Change</span>
+                                <span className="font-mono">₱{receiptDetails.change}</span>
+                            </div>
                         </div>
                     </div>
 
