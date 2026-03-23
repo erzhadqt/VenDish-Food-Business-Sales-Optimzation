@@ -310,6 +310,69 @@ class Feedback(models.Model):
     date_submitted = models.DateTimeField(default=timezone.now)
     def __str__(self): return f"Feedback #{self.id}"
 
+class Notification(models.Model):
+    class Category(models.TextChoices):
+        ORDER = 'ORDER', 'Order Update'
+        SYSTEM = 'SYSTEM', 'System Alert'
+        PROMO = 'PROMO', 'Promo & Coupons'
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    category = models.CharField(max_length=20, choices=Category.choices, default=Category.SYSTEM)
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username} - {self.title}"
+
+# --- AUTOMATIC NOTIFICATION TRIGGERS ---
+@receiver(post_save, sender=Coupon)
+def notify_promo_updates(sender, instance, created, **kwargs):
+    """
+    Automatically creates a PROMO notification when a coupon is created 
+    or when its status changes to 'Expired'.
+    """
+    # Helper to safely extract details from the CouponCriteria
+    def get_coupon_details(coupon):
+        if coupon.criteria:
+            c_name = coupon.criteria.name
+            if coupon.criteria.target_product:
+                return f"{c_name} ({coupon.criteria.target_product.product_name})"
+            return c_name
+        return coupon.code
+
+    if created and instance.status == 'Active':
+        # 1. New Promo Created: Notify all active customers
+        customers = User.objects.filter(is_active=True, is_staff=False)
+        details = get_coupon_details(instance)
+        
+        notifications = [
+            Notification(
+                user=customer,
+                category=Notification.Category.PROMO,
+                title="New Coupon! 🎉",
+                message=f"New coupon: {details}. Tap to view and claim it before it's gone!"
+            ) for customer in customers
+        ]
+        Notification.objects.bulk_create(notifications)
+
+    elif not created and instance.status == 'Expired':
+        # 2. Promo Expired: Notify ONLY the users who claimed it
+        claimed_users = instance.claimed_by.all()
+        if claimed_users.exists():
+            details = get_coupon_details(instance)
+            
+            notifications = [
+                Notification(
+                    user=user,
+                    category=Notification.Category.PROMO,
+                    title="Coupon Expired ⏳",
+                    message=f"Expired coupon: {details} is no longer valid."
+                ) for user in claimed_users
+            ]
+            Notification.objects.bulk_create(notifications)
+
 class HomePage(models.Model):
     # Hero Section
     line1_start = models.CharField(max_length=100, default="SAVOR THE TASTE OF")

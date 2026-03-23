@@ -1,5 +1,5 @@
 from django.urls import path, include
-from .views import ProductViewSet, CategoryViewSet, FeedbackViewSet, ReceiptViewSet, CouponViewSet, HomePageViewSet, ServicesPageViewSet, AboutPageViewSet, ContactPageViewSet, UserViewSet, DailySalesReportViewSet, CouponCriteriaViewSet, ReviewViewSet, StoreSettingsView, GCashPaymentCreateView, GCashPaymentStatusView, GCashPaymentWebhookView, GCashAttachReceiptView, GCashPaymentFinalizeByReferenceView, GCashReconciliationView
+from .views import ProductViewSet, CategoryViewSet, FeedbackViewSet, ReceiptViewSet, CouponViewSet, HomePageViewSet, ServicesPageViewSet, AboutPageViewSet, ContactPageViewSet, UserViewSet, DailySalesReportViewSet, CouponCriteriaViewSet, ReviewViewSet, StoreSettingsView, GCashPaymentCreateView, GCashPaymentStatusView, GCashPaymentWebhookView, GCashAttachReceiptView, GCashPaymentFinalizeByReferenceView, GCashReconciliationView, NotificationViewSet
 
 from rest_framework.routers import DefaultRouter
 
@@ -21,6 +21,8 @@ router.register(r'users', UserViewSet)
 router.register(r'receipt', ReceiptViewSet)
 router.register(r'coupons', CouponViewSet, basename='coupon')
 router.register(r'coupons-criteria', CouponCriteriaViewSet, basename='coupons-criteria')
+
+router.register(r'notifications', NotificationViewSet, basename='notification')
 
 # router.register(r'settings', StoreSettingsView, basename='store-settings')
 
