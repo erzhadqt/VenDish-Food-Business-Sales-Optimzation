@@ -581,10 +581,17 @@ const Pos = () => {
     try {
       const response = await api.get(`/firstapp/payments/gcash/${transactionId}/status/`);
       const status = response.data?.status || "PENDING";
+      const returnedReceiptId = response.data?.receipt_id;
       setGcashStatus(status);
 
       if (status === "PAID" && options.autoFinalize) {
-        await finalizePaidGcashReceipt(transactionId);
+        if (returnedReceiptId) {
+            await openReceiptById(returnedReceiptId);
+            setGcashModalOpen(false);
+            localStorage.removeItem(POS_STORAGE_KEYS.gcashPending);
+        } else {
+            await finalizePaidGcashReceipt(transactionId);
+        }
       }
 
       if (["FAILED", "EXPIRED", "CANCELLED"].includes(status)) {

@@ -230,12 +230,21 @@ def _sync_transaction_from_paymongo(payment_txn):
         checkout_status = checkout_attributes.get('status') or ''
 
         payments_list = checkout_attributes.get('payments')
+        payment_status = ''
         if isinstance(payments_list, list) and payments_list:
             first_payment = payments_list[0] or {}
             if isinstance(first_payment, dict):
                 payment_txn.provider_payment_id = first_payment.get('id') or payment_txn.provider_payment_id
+                payment_status = first_payment.get('attributes', {}).get('status') or ''
+                
+        payment_intent = checkout_attributes.get('payment_intent') or {}
+        if isinstance(payment_intent, dict):
+            intent_status = payment_intent.get('attributes', {}).get('status') or ''
+            if intent_status in ['succeeded', 'paid']:
+                payment_status = intent_status
 
-        normalized = _normalize_payment_status(raw_status=checkout_status)
+        final_status_to_check = payment_status if payment_status in ['succeeded', 'paid'] else checkout_status
+        normalized = _normalize_payment_status(raw_status=final_status_to_check)
         if normalized:
             payment_txn.status = normalized
             if normalized == PaymentTransaction.Status.PAID and not payment_txn.paid_at:
