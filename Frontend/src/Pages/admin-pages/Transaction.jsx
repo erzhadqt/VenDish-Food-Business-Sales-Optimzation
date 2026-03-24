@@ -16,7 +16,8 @@ const Transaction = () => {
     const [filterStatus, setFilterStatus] = useState('ALL'); 
     const [filterCoupon, setFilterCoupon] = useState('ALL');
     const [filterCashier, setFilterCashier] = useState('ALL');
-    const [filterDate, setFilterDate] = useState(''); // New state for Date filter
+    const [filterDate, setFilterDate] = useState(''); 
+    const [filterPaymentMode, setFilterPaymentMode] = useState('ALL'); // New state for Payment Mode filter
 
     const formatCurrency = (amount) => {  
         return new Intl.NumberFormat('en-US', {  
@@ -57,6 +58,7 @@ const Transaction = () => {
         const statusMatch = filterStatus === 'ALL' || receipt.status === filterStatus;  
         const couponMatch = filterCoupon === 'ALL' || (filterCoupon === 'WITH' && receipt.coupon_details) || (filterCoupon === 'WITHOUT' && !receipt.coupon_details);  
         const cashierMatch = filterCashier === 'ALL' || (receipt.cashier_name || "System") === filterCashier;
+        const paymentModeMatch = filterPaymentMode === 'ALL' || receipt.payment_method === filterPaymentMode; // Added Payment Mode match logic
         
         // Date match logic
         let dateMatch = true;
@@ -71,7 +73,7 @@ const Transaction = () => {
             dateMatch = formattedReceiptDate === filterDate;
         }
 
-        return statusMatch && couponMatch && cashierMatch && dateMatch;  
+        return statusMatch && couponMatch && cashierMatch && dateMatch && paymentModeMatch;  
     });  
 
     const totalPages = Math.ceil(filteredTransactions.length / rowsPerPage);  
@@ -90,8 +92,8 @@ const Transaction = () => {
                     </h1>  
                 </nav>  
 
-                {/* Filters Grid for responsiveness */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">  
+                {/* CHANGED: Updated grid columns to lg:grid-cols-5 to accommodate the new filter nicely */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">  
                     <div className="flex flex-col">
                         <label className="text-sm font-medium text-gray-700 mb-1">Date</label>
                         <input 
@@ -101,6 +103,17 @@ const Transaction = () => {
                             className="border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none w-full"
                         />
                     </div>
+                    
+                    {/* NEW: Payment Mode Filter */}
+                    <div className="flex flex-col">  
+                        <label className="text-sm font-medium text-gray-700 mb-1">Payment Mode</label>  
+                        <select value={filterPaymentMode} onChange={(e) => { setFilterPaymentMode(e.target.value); setCurrentPage(1); }} className="border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none w-full">  
+                            <option value="ALL">All Modes</option>  
+                            <option value="CASH">Cash</option>  
+                            <option value="GCASH">GCash</option>  
+                        </select>  
+                    </div> 
+
                     <div className="flex flex-col">  
                         <label className="text-sm font-medium text-gray-700 mb-1">Status</label>  
                         <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }} className="border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none w-full">  

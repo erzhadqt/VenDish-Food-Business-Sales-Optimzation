@@ -16,11 +16,27 @@ import { Button } from "../Components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "../Components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
-// Example location data.
-const COUNTRIES = ["Philippines"];
-const PROVINCES = ["Zamboanga del Sur", "Zamboanga del Norte", "Zamboanga Sibugay", "Davao", "Cebu", "Other"];
-const CITIES = ["Zamboanga City", "Pagadian City", "Dipolog City", "Ipil", "Davao City", "Cebu City", "Other"];
-const BARANGAYS = ["Zone I", "Zone II", "Zone III", "Zone IV", "Tetuan", "Pasonanca", "Tumaga", "Sta. Maria", "San Roque", "Putik", "Divisoria", "Ayala", "Canelar", "Maasin", "Recodo", "San Jose Gusu", "Santa Maria", "Arena Blanco", "Boalan", "Bolong", "Buenavista", "Bunguiao", "Curuan", "Manicahan", "Mercedes", "Putik", "Tetuan", "Vitali", "Other"];
+// Helper function to sort alphabetically, remove duplicates, and keep "Other" at the bottom
+const sortLocations = (locations) => {
+  return [...new Set(locations)].sort((a, b) => {
+    if (a === "Other") return 1;
+    if (b === "Other") return -1;
+    return a.localeCompare(b);
+  });
+};
+
+// Example location data - Now automatically sorted
+const COUNTRIES = sortLocations(["Philippines"]);
+const PROVINCES = sortLocations(["Zamboanga del Sur", "Zamboanga del Norte", "Zamboanga Sibugay", "Davao", "Cebu", "Other"]);
+const CITIES = sortLocations(["Zamboanga City", "Pagadian City", "Dipolog City", "Ipil", "Davao City", "Cebu City", "Other"]);
+const BARANGAYS = sortLocations([
+  "Zone I", "Zone II", "Zone III", "Zone IV", "Tetuan", "Pasonanca", 
+  "Tumaga", "Sta. Maria", "San Roque", "Putik", "Divisoria", "Ayala", 
+  "Canelar", "Maasin", "Recodo", "San Jose Gusu", "Santa Maria", 
+  "Arena Blanco", "Boalan", "Bolong", "Buenavista", "Bunguiao", 
+  "Curuan", "Manicahan", "Mercedes", "Putik", "Tetuan", "Vitali", 
+  "Malagutay", "Other"
+]);
 
 export default function AddUserDialog({ onSaved, children }) {
   const [loading, setLoading] = useState(false);
@@ -105,7 +121,6 @@ export default function AddUserDialog({ onSaved, children }) {
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{children}</DialogTrigger>
 
-      {/* CHANGED: Increased max-width to 900px and added w-[95vw] to allow it to expand naturally */}
       <DialogContent className="sm:max-w-[900px] w-[95vw] max-h-[95vh] overflow-y-auto z-50">
         <DialogHeader>
           <DialogTitle>Add New User</DialogTitle>
@@ -125,7 +140,6 @@ export default function AddUserDialog({ onSaved, children }) {
 
         <form onSubmit={handleSubmit} className="grid gap-4 mt-2">
           
-          {/* CHANGED: Grouped Username and Password on the same row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="username">Username</Label>
@@ -137,7 +151,6 @@ export default function AddUserDialog({ onSaved, children }) {
             </div>
           </div>
 
-          {/* Full Name Row */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="grid gap-2">
                 <Label htmlFor="first_name">First Name</Label>
@@ -153,7 +166,6 @@ export default function AddUserDialog({ onSaved, children }) {
             </div>
           </div>
 
-          {/* Contact Info Row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="grid gap-2">
                 <Label htmlFor="email">Email</Label>
@@ -165,11 +177,9 @@ export default function AddUserDialog({ onSaved, children }) {
             </div>
           </div>
 
-          {/* Structured Address Section */}
           <div className="p-3 border rounded-md bg-slate-50/50 space-y-3">
             <Label className="text-base font-semibold">Address Information</Label>
             
-            {/* CHANGED: Converted to a 4-column layout on medium+ screens */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
               <div className="grid gap-2">
                 <Label htmlFor="country">Country</Label>

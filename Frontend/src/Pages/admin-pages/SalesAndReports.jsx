@@ -1,6 +1,4 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import Calendar from "react-calendar";
-import "react-calendar/dist/Calendar.css";
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   LineChart, Line, Legend, AreaChart, Area, PieChart, Pie, Cell
@@ -12,7 +10,7 @@ import {
 } from "date-fns";
 import { 
   TrendingUp, Package, CalendarDays, 
-  Download, RefreshCw, PhilippinePesoIcon, Users, BarChart3
+  Download, RefreshCw, PhilippinePesoIcon, Users, BarChart3, Clock
 } from "lucide-react";
 
 import api from '../../api'; 
@@ -98,8 +96,8 @@ export default function SalesAndReports() {
   const [viewMode, setViewMode] = useState('timeline'); 
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // Date state
-  const [dateRange, setDateRange] = useState([new Date(), new Date()]);
+  // Date & Time state defaults to start and end of current day
+  const [dateRange, setDateRange] = useState([startOfDay(new Date()), endOfDay(new Date())]);
   const [period, setPeriod] = useState("Custom Range");
   const [chartType, setChartType] = useState("Bar");
   const [showCalendar, setShowCalendar] = useState(false);
@@ -191,14 +189,17 @@ export default function SalesAndReports() {
   const filteredReports = useMemo(() => {
     return reports.filter((report) => {
       if (!report.report_date) return false;
-      const reportDate = parseISO(report.report_date);
+      
+      // Assumes report_date contains the full timestamp if backend is updated for exact time
+      const reportDate = parseISO(report.report_date); 
       const refDate = dateRange[0] || new Date(); 
       
       if (period === "Custom Range") {
         if (!dateRange[0] || !dateRange[1]) return true;
+        // CHANGED: Now using exact Date/Time selected instead of forcing to startOfDay/endOfDay
         return isWithinInterval(reportDate, { 
-          start: startOfDay(dateRange[0]), 
-          end: endOfDay(dateRange[1]) 
+          start: dateRange[0], 
+          end: dateRange[1] 
         });
       }
       else if (period === "Daily") {
@@ -232,13 +233,14 @@ export default function SalesAndReports() {
 
     if (period === "Custom Range") {
         if (!dateRange[0] || !dateRange[1]) return [];
+        // Keep charting X-axis by days to prevent chart layout breakage
         const start = startOfDay(dateRange[0]);
         const end = endOfDay(dateRange[1]);
         const days = eachDayOfInterval({ start, end });
 
         return days.map(day => {
             const dayStr = format(day, 'yyyy-MM-dd');
-            const found = filteredReports.find(r => r.report_date === dayStr);
+            const found = filteredReports.find(r => r.report_date.startsWith(dayStr));
             return {
                 label: format(day, "MMM d"), 
                 revenue: found ? getVal(found.total_revenue) : 0,
@@ -254,7 +256,7 @@ export default function SalesAndReports() {
 
         return days.map(day => {
             const dayStr = format(day, 'yyyy-MM-dd');
-            const found = filteredReports.find(r => r.report_date === dayStr);
+            const found = filteredReports.find(r => r.report_date.startsWith(dayStr));
             return {
                 label: format(day, "MMM d"), 
                 revenue: found ? getVal(found.total_revenue) : 0,
@@ -270,7 +272,7 @@ export default function SalesAndReports() {
         
         return days.map(day => {
             const dayStr = format(day, 'yyyy-MM-dd');
-            const found = filteredReports.find(r => r.report_date === dayStr);
+            const found = filteredReports.find(r => r.report_date.startsWith(dayStr));
             return {
                 label: format(day, 'EEE'), 
                 revenue: found ? getVal(found.total_revenue) : 0,
@@ -382,7 +384,7 @@ export default function SalesAndReports() {
         headers = ['Date', 'Revenue', 'Orders', 'Voided Orders', 'Top Seller']; 
         
         dataToExport = filteredReports.map(r => {
-            const dateStr = r.report_date ? format(parseISO(r.report_date), 'yyyy-MM-dd') : 'N/A';
+            const dateStr = r.report_date ? format(parseISO(r.report_date), 'yyyy-MM-dd HH:mm') : 'N/A';
             const productName = r.top_selling_product ? `"${r.top_selling_product.replace(/"/g, '""')}"` : 'N/A';
             
             return [
@@ -517,25 +519,55 @@ export default function SalesAndReports() {
                     >
                         <CalendarDays size={18} className={showCalendar ? "text-blue-600" : "text-gray-600"}/>
                         <span className="font-medium text-gray-700">
+                            {/* CHANGED: Shows Time as well on the button */}
                             {dateRange[0] && dateRange[1] && period === "Custom Range" 
-                            ? `${format(dateRange[0], "MMM d, yyyy")} - ${format(dateRange[1], "MMM d, yyyy")}`
-                            : format(dateRange[0] || new Date(), "MMM d, yyyy")}
+                            ? `${format(dateRange[0], "MMM d, h:mma")} - ${format(dateRange[1], "MMM d, h:mma")}`
+                            : "Select Date & Time"}
                         </span>
                     </button>
 
-                    {/* CALENDAR POPOVER */}
+                    {/* NEW: DATETIME PICKER POPOVER */}
                     {showCalendar && (
-                        <div className="absolute left-0 top-full mt-2 bg-white p-4 rounded-xl shadow-2xl border border-gray-100 z-50 min-w-[320px] animate-in fade-in slide-in-from-top-2 duration-200">
-                            <Calendar 
-                                selectRange={true}
-                                onChange={(val) => { 
-                                    setDateRange(val); 
-                                    setShowCalendar(false); 
-                                    setPeriod("Custom Range");
-                                }} 
-                                value={dateRange} 
-                                className="border-none !w-full"
-                            />
+                        <div className="absolute left-0 top-full mt-2 bg-white p-5 rounded-xl shadow-2xl border border-gray-100 z-50 min-w-[320px] animate-in fade-in slide-in-from-top-2 duration-200">
+                            <h4 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                                <Clock size={16}/> Set Date & Time Range
+                            </h4>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Start</label>
+                                    <input 
+                                        type="datetime-local" 
+                                        value={dateRange[0] ? format(dateRange[0], "yyyy-MM-dd'T'HH:mm") : ""}
+                                        onChange={(e) => {
+                                            if (e.target.value) {
+                                                setDateRange([new Date(e.target.value), dateRange[1]]);
+                                                setPeriod("Custom Range");
+                                            }
+                                        }}
+                                        className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-shadow"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">End</label>
+                                    <input 
+                                        type="datetime-local" 
+                                        value={dateRange[1] ? format(dateRange[1], "yyyy-MM-dd'T'HH:mm") : ""}
+                                        onChange={(e) => {
+                                            if (e.target.value) {
+                                                setDateRange([dateRange[0], new Date(e.target.value)]);
+                                                setPeriod("Custom Range");
+                                            }
+                                        }}
+                                        className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-shadow"
+                                    />
+                                </div>
+                                <button 
+                                    onClick={() => setShowCalendar(false)}
+                                    className="w-full mt-2 bg-blue-600 text-white rounded-md py-2 text-sm font-medium hover:bg-blue-700 transition"
+                                >
+                                    Apply Range
+                                </button>
+                            </div>
                         </div>
                     )}
                 </div>

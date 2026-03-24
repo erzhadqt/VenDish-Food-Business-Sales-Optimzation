@@ -78,8 +78,9 @@ const Pos = () => {
   const [gcashTransactionId, setGcashTransactionId] = useState(null);
   const [gcashReference, setGcashReference] = useState("");
   const [gcashStatus, setGcashStatus] = useState("PENDING");
-  // const [gcashReconcileOpen, setGcashReconcileOpen] = useState(false);
-
+  
+  // NEW: State to queue the receipt to open AFTER GCash modal is closed
+  const [pendingGcashReceipt, setPendingGcashReceipt] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
   const [alertConfig, setAlertConfig] = useState({
@@ -141,6 +142,7 @@ const Pos = () => {
     };
     fetchData();
   }, []);
+  
   const filteredFoods = selectedCategory === "All" ? products : products.filter((food) => food.category === selectedCategory);
 
   const selectedCustomerInfo = useMemo(
@@ -547,12 +549,18 @@ const Pos = () => {
     }
   };
 
-  const openReceiptById = async (receiptId) => {
+  // MODIFIED: Accepts a boolean to determine if we should delay opening the receipt
+  const openReceiptById = async (receiptId, delayForGcash = false) => {
     if (!receiptId) return;
     try {
       const response = await api.get(`/firstapp/receipt/${receiptId}/`);
       setReceiptDetails(response.data);
-      setIsReceiptModalOpen(true);
+      
+      if (delayForGcash) {
+          setPendingGcashReceipt(true);
+      } else {
+          setIsReceiptModalOpen(true);
+      }
     } catch (error) {
       console.error("Failed to load receipt details:", error);
     }
@@ -564,9 +572,11 @@ const Pos = () => {
       const payload = buildReceiptPayload();
       const response = await api.post("/firstapp/receipt/", payload);
       setReceiptDetails(response.data);
-      setIsReceiptModalOpen(true);
+      
+      // MODIFIED: Don't open the modal immediately. Put it in the queue instead.
+      setPendingGcashReceipt(true);
+      
       await attachPaymentToReceipt(transactionId, response.data.receipt_id || response.data.id);
-      setGcashModalOpen(false);
       localStorage.removeItem(POS_STORAGE_KEYS.gcashPending);
     } catch (error) {
       console.error("Failed to finalize GCash receipt:", error);
@@ -589,8 +599,8 @@ const Pos = () => {
 
       if (status === "PAID" && options.autoFinalize) {
         if (returnedReceiptId) {
-            await openReceiptById(returnedReceiptId);
-            setGcashModalOpen(false);
+            // MODIFIED: Pass 'true' to delay the opening of the receipt
+            await openReceiptById(returnedReceiptId, true);
             localStorage.removeItem(POS_STORAGE_KEYS.gcashPending);
         } else {
             await finalizePaidGcashReceipt(transactionId);
@@ -634,11 +644,6 @@ const Pos = () => {
         createdAt: Date.now(),
       })
     );
-
-    // QR Code modal handles this elegantly now; no auto-opening needed
-    // if (response.data.checkout_url) {
-    //   window.open(response.data.checkout_url, "_blank", "noopener,noreferrer");
-    // }
   };
 
   useEffect(() => {
@@ -666,8 +671,7 @@ const Pos = () => {
         const receiptId = response.data?.receipt_id;
 
         if (receiptId) {
-          await openReceiptById(receiptId);
-          setGcashModalOpen(false);
+          await openReceiptById(receiptId, false); // Here we open immediately since GCash modal isn't open anyway
           localStorage.removeItem(POS_STORAGE_KEYS.gcashPending);
         }
       } catch (error) {
@@ -701,6 +705,15 @@ const Pos = () => {
       localStorage.removeItem(POS_STORAGE_KEYS.gcashPending);
     }
   }, []);
+
+  // NEW: Watch for when the GCash modal fully closes. 
+  // If we have a pending receipt and the details are ready, pop the receipt!
+  useEffect(() => {
+      if (!gcashModalOpen && pendingGcashReceipt && receiptDetails) {
+          setIsReceiptModalOpen(true);
+          setPendingGcashReceipt(false);
+      }
+  }, [gcashModalOpen, pendingGcashReceipt, receiptDetails]);
 
   const handleSubmitOrder = async () => {
     if (cartItems.length === 0) return triggerAlert("Empty Cart", "Cart is empty!");
@@ -751,14 +764,12 @@ const Pos = () => {
       setIsCustomerModalOpen(false);
       setPaymentMethod("cash");
       setGcashModalOpen(false);
-      setGcashCheckoutUrl("");
-      setGcashTransactionId(null);
-      setGcashReference("");
-      setGcashStatus("PENDING");
+      
+      setPendingGcashReceipt(false); // Reset the queue state just in case
       localStorage.removeItem(POS_STORAGE_KEYS.gcashPending);
 
       setIsReceiptModalOpen(false);
-      // Refresh both products and categories after order reset
+      
       Promise.all([
         api.get("/firstapp/products/"),
         api.get("/firstapp/categories/")
@@ -912,14 +923,6 @@ const Pos = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {/* <button
-                        type="button"
-                        onClick={() => setGcashReconcileOpen(true)}
-                        className="text-xs px-2 py-1 rounded border text-blue-700 hover:bg-blue-50"
-                      >
-                        GCash Reconcile
-                      </button> */}
-
                       {selectedCustomer && (
                         <button
                           type="button"
@@ -1090,16 +1093,16 @@ const Pos = () => {
           checkoutUrl={gcashCheckoutUrl}
           status={gcashStatus}
           reference={gcashReference}
+          
+          // NEW PROPS PASSED HERE
+          amount={total} 
+          accountName="KUYA VINCE KARINDERYA" 
+          accountNumber="+63 912-345-XXXX"
+          
           onRefresh={() => checkGcashStatus(gcashTransactionId, { autoFinalize: true })}
           onCancel={() => setGcashModalOpen(false)}
           onDevOverride={() => checkGcashStatus(gcashTransactionId, { autoFinalize: true, devOverrideOverride: true })}
         />
-
-        {/* <GCashReconciliationModal
-          open={gcashReconcileOpen}
-          onOpenChange={setGcashReconcileOpen}
-          onReceiptRecovered={openReceiptById}
-        /> */}
     </div>
   );
 };

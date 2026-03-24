@@ -134,7 +134,7 @@ export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, 
         </AlertDialogHeader>
         
         <AlertDialogFooter>
-          <AlertDialogCancel onClick={() => onOpenChange(false)}>Close Preview</AlertDialogCancel>
+          {/* <AlertDialogCancel onClick={() => onOpenChange(false)}>Close Preview</AlertDialogCancel> */}
           
           <AlertDialogAction 
             onClick={(e) => {
