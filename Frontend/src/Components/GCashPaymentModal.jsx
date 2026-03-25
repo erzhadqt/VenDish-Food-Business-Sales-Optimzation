@@ -24,9 +24,6 @@ export default function GCashPaymentModal({
       <DialogContent className="sm:max-w-md z-50">
         <DialogHeader>
           <DialogTitle>GCash Payment</DialogTitle>
-          {/* <DialogDescription>
-            Ask the customer to complete payment using GCash.
-          </DialogDescription> */}
         </DialogHeader>
 
         <div className="space-y-4 text-sm">
@@ -104,7 +101,7 @@ export default function GCashPaymentModal({
                     x: undefined, y: undefined, height: 35, width: 35, excavate: true
                   }}
                   bgColor={"#ffffff"}
-                  fgColor={"#000000"} // GCash Blue color for the QR code
+                  fgColor={"#000000"}
                   level={"Q"}
                   includeMargin={false}
                 />

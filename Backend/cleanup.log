@@ -165,3 +165,84 @@ Traceback (most recent call last):
 django.db.utils.OperationalError: could not translate host name "dpg-d6cke8v5r7bs73agalb0-a" to address: Name or service not known
 
 No accounts are scheduled for deletion today.
+Traceback (most recent call last):
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/db/backends/base/base.py", line 279, in ensure_connection
+    self.connect()
+    ~~~~~~~~~~~~^^
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/utils/asyncio.py", line 26, in inner
+    return func(*args, **kwargs)
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/db/backends/base/base.py", line 256, in connect
+    self.connection = self.get_new_connection(conn_params)
+                      ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/utils/asyncio.py", line 26, in inner
+    return func(*args, **kwargs)
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/db/backends/postgresql/base.py", line 333, in get_new_connection
+    connection = self.Database.connect(**conn_params)
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+psycopg2.OperationalError: could not translate host name "dpg-d6cke8v5r7bs73agalb0-a" to address: Temporary failure in name resolution
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/Backend/manage.py", line 22, in <module>
+    main()
+    ~~~~^^
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/Backend/manage.py", line 18, in main
+    execute_from_command_line(sys.argv)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/core/management/__init__.py", line 443, in execute_from_command_line
+    utility.execute()
+    ~~~~~~~~~~~~~~~^^
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/core/management/__init__.py", line 437, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/core/management/base.py", line 420, in run_from_argv
+    self.execute(*args, **cmd_options)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/core/management/base.py", line 464, in execute
+    output = self.handle(*args, **options)
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/Backend/firstapp/management/commands/cleanup_deactivated_users.py", line 19, in handle
+    count = users_to_delete.count()
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/db/models/query.py", line 610, in count
+    return self.query.get_count(using=self.db)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/db/models/sql/query.py", line 651, in get_count
+    return obj.get_aggregation(using, {"__count": Count("*")})["__count"]
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/db/models/sql/query.py", line 633, in get_aggregation
+    result = compiler.execute_sql(SINGLE)
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/db/models/sql/compiler.py", line 1622, in execute_sql
+    cursor = self.connection.cursor()
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/utils/asyncio.py", line 26, in inner
+    return func(*args, **kwargs)
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/db/backends/base/base.py", line 320, in cursor
+    return self._cursor()
+           ~~~~~~~~~~~~^^
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/db/backends/base/base.py", line 296, in _cursor
+    self.ensure_connection()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/utils/asyncio.py", line 26, in inner
+    return func(*args, **kwargs)
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/db/backends/base/base.py", line 278, in ensure_connection
+    with self.wrap_database_errors:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/db/utils.py", line 94, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/db/backends/base/base.py", line 279, in ensure_connection
+    self.connect()
+    ~~~~~~~~~~~~^^
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/utils/asyncio.py", line 26, in inner
+    return func(*args, **kwargs)
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/db/backends/base/base.py", line 256, in connect
+    self.connection = self.get_new_connection(conn_params)
+                      ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/utils/asyncio.py", line 26, in inner
+    return func(*args, **kwargs)
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/django/db/backends/postgresql/base.py", line 333, in get_new_connection
+    connection = self.Database.connect(**conn_params)
+  File "/home/erzhadqt/Documents/Software_Engineering/VenDish-Food-Business-Sales-Optimzation-with-Dynamic-Pricing/venv/lib/python3.13/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+django.db.utils.OperationalError: could not translate host name "dpg-d6cke8v5r7bs73agalb0-a" to address: Temporary failure in name resolution
+

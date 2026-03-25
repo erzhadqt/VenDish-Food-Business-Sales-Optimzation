@@ -113,6 +113,15 @@ export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, 
                             {receiptDetails.payment_method === 'GCASH' ? 'GCash' : 'Cash'}
                         </span>
                     </div>
+                    {/* --- GCASH REFERENCE NUMBER --- */}
+                            {receiptDetails.payment_method === 'GCASH' && receiptDetails.provider_reference && (
+                                <div className="flex justify-between text-md border-b pb-2 mb-2">
+                                    <span className="text-muted-foreground">Reference No.</span>
+                                    <span className="font-mono text-gray-900 text-sm">
+                                        {receiptDetails.provider_reference}
+                                    </span>
+                                </div>
+                            )}
                     <div className="flex justify-between text-md">
                         <span className="text-muted-foreground">Amount Given</span>
                         <span className="font-mono text-md">₱{receiptDetails.cash_given}</span>

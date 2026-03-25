@@ -16,8 +16,8 @@ import ServicesPage from "./Pages/landing-pages/ServicesPage";
 import AboutPage from "./Pages/landing-pages/AboutPage";
 import ContactPage from "./Pages/landing-pages/ContactPage";
 
-import GCashSuccess from "./Components/GCashSuccess";
-import GCashCancel from "./Components/GCashCancel";
+// import GCashSuccess from "./Components/GCashSuccess";
+// import GCashCancel from "./Components/GCashCancel";
 
 import MenuAndProducts from "./Pages/admin-pages/MenuAndProducts";
 import SalesAndReports from "./Pages/admin-pages/SalesAndReports";
@@ -65,8 +65,8 @@ function App() {
 					<Route path="/admin/pos" element={<Pos />} />
 				</Route>
 
-				<Route path="/gcash/success" element={<GCashSuccess />} />
-				<Route path="/gcash/cancel" element={<GCashCancel />} />
+				{/* <Route path="/gcash/success" element={<GCashSuccess />} />
+				<Route path="/gcash/cancel" element={<GCashCancel />} /> */}
 
 				<Route path="/kuyavincekarinderya" element={<Login />} />
 				<Route path="/kuyavincekarinderya-signup" element={<RegisterAndLogout />} />

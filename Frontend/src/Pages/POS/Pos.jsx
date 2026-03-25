@@ -1094,9 +1094,10 @@ const Pos = () => {
           status={gcashStatus}
           reference={gcashReference}
           
+          
           // NEW PROPS PASSED HERE
           amount={total} 
-          accountName="KUYA VINCE KARINDERYA" 
+          accountName="KUYA VINCE KARINDERYA"
           accountNumber="+63 912-345-XXXX"
           
           onRefresh={() => checkGcashStatus(gcashTransactionId, { autoFinalize: true })}
