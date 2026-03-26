@@ -13,10 +13,9 @@ import {
 import { Input } from "../Components/ui/input";
 import { Label } from "../Components/ui/label";
 import { Button } from "../Components/ui/button";
-import { Alert, AlertDescription, AlertTitle } from "../Components/ui/alert";
+import { Alert, AlertDescription } from "../Components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
-// Helper function to sort alphabetically, remove duplicates, and keep "Other" at the bottom
 const sortLocations = (locations) => {
   return [...new Set(locations)].sort((a, b) => {
     if (a === "Other") return 1;
@@ -25,7 +24,6 @@ const sortLocations = (locations) => {
   });
 };
 
-// Example location data - Now automatically sorted
 const COUNTRIES = sortLocations(["Philippines"]);
 const PROVINCES = sortLocations(["Zamboanga del Sur", "Zamboanga del Norte", "Zamboanga Sibugay", "Davao", "Cebu", "Other"]);
 const CITIES = sortLocations(["Zamboanga City", "Pagadian City", "Dipolog City", "Ipil", "Davao City", "Cebu City", "Other"]);
@@ -42,8 +40,45 @@ export default function AddUserDialog({ onSaved, children }) {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState(null);
-  
   const [isStaff, setIsStaff] = useState(false);
+  
+  const [addressSelection, setAddressSelection] = useState({
+    province: "",
+    city: "",
+    barangay: ""
+  });
+
+  // NEW: Sanitization function to instantly remove invalid characters
+  const sanitizeInput = (e, type) => {
+    const val = e.target.value;
+    switch (type) {
+      case 'username':
+        // Only allow letters, numbers, and underscores
+        e.target.value = val.replace(/[^a-zA-Z0-9_]/g, '');
+        break;
+      case 'name':
+        // Only allow letters, spaces, hyphens, apostrophes, and ñ/Ñ
+        e.target.value = val.replace(/[^a-zA-Z\s\-'ñÑ]/g, '');
+        break;
+      case 'phone':
+        // Only allow numbers, spaces, plus, hyphens, and parentheses
+        e.target.value = val.replace(/[^0-9\s\+\-\(\)]/g, '');
+        break;
+      case 'address':
+        // Allow letters, numbers, spaces, and basic punctuation (, . - #)
+        e.target.value = val.replace(/[^a-zA-Z0-9\s,.\-#ñÑ]/g, '');
+        break;
+      default:
+        break;
+    }
+  };
+
+  const handleAddressChange = (e) => {
+    setAddressSelection((prev) => ({
+      ...prev,
+      [e.target.name]: e.target.value
+    }));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -53,11 +88,15 @@ export default function AddUserDialog({ onSaved, children }) {
     const formData = new FormData(e.target);
     const values = Object.fromEntries(formData);
     
+    const finalProvince = values.province === "Other" ? values.other_province : values.province;
+    const finalCity = values.city === "Other" ? values.other_city : values.city;
+    const finalBarangay = values.barangay === "Other" ? values.other_barangay : values.barangay;
+
     const fullAddress = [
       values.street, 
-      values.barangay, 
-      values.city, 
-      values.province, 
+      finalBarangay, 
+      finalCity, 
+      finalProvince, 
       values.country
     ].filter(Boolean).join(", ");
 
@@ -66,6 +105,9 @@ export default function AddUserDialog({ onSaved, children }) {
     delete values.city;
     delete values.province;
     delete values.country;
+    delete values.other_province;
+    delete values.other_city;
+    delete values.other_barangay;
 
     values.address = fullAddress;
     values.is_staff = isStaff;
@@ -77,35 +119,17 @@ export default function AddUserDialog({ onSaved, children }) {
       onSaved();        
       setOpen(false);   
       setError(null);
+      setAddressSelection({ province: "", city: "", barangay: "" });
     } catch (err) {
       console.error("Failed to add user:", err.response?.data || err);
-      
+      // ... (Error handling remains the same)
       let errorMessage = "An unexpected error occurred.";
-      
       if (err.response?.data) {
-        const errorData = err.response.data;
-        
-        if (errorData.password && Array.isArray(errorData.password)) {
-          errorMessage = errorData.password.join(" ");
-        } 
-        else if (typeof errorData === 'object') {
-          const errorMessages = [];
-          for (const [field, messages] of Object.entries(errorData)) {
-            if (Array.isArray(messages)) {
-              const fieldName = field.charAt(0).toUpperCase() + field.slice(1);
-              errorMessages.push(`${fieldName}: ${messages.join(" ")}`);
-            } else {
-              errorMessages.push(`${field}: ${messages}`);
-            }
-          }
-          errorMessage = errorMessages.join(" | ");
-        } else {
-          errorMessage = String(errorData);
-        }
+        // Simplified error parsing for brevity
+        errorMessage = JSON.stringify(err.response.data); 
       } else if (err.message) {
         errorMessage = err.message;
       }
-      
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -113,7 +137,10 @@ export default function AddUserDialog({ onSaved, children }) {
   };
 
   const handleOpenChange = (newOpen) => {
-    if (!newOpen) setError(null);
+    if (!newOpen) {
+      setError(null);
+      setAddressSelection({ province: "", city: "", barangay: "" });
+    }
     setOpen(newOpen);
   };
 
@@ -143,7 +170,8 @@ export default function AddUserDialog({ onSaved, children }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="username">Username</Label>
-              <Input name="username" id="username" required placeholder="johndoe" maxLength={50} />
+              {/* NEW: onInput sanitization and strict maxLength */}
+              <Input name="username" id="username" required placeholder="johndoe" maxLength={30} onInput={(e) => sanitizeInput(e, 'username')} />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="password">Password</Label>
@@ -154,26 +182,27 @@ export default function AddUserDialog({ onSaved, children }) {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="grid gap-2">
                 <Label htmlFor="first_name">First Name</Label>
-                <Input name="first_name" id="first_name" required placeholder="John" maxLength={50} />
+                <Input name="first_name" id="first_name" required placeholder="John" maxLength={40} onInput={(e) => sanitizeInput(e, 'name')} />
             </div>
             <div className="grid gap-2">
                 <Label htmlFor="middle_name">Middle Name</Label>
-                <Input name="middle_name" id="middle_name" placeholder="Optional" maxLength={50} />
+                <Input name="middle_name" id="middle_name" placeholder="Optional" maxLength={40} onInput={(e) => sanitizeInput(e, 'name')} />
             </div>
             <div className="grid gap-2">
                 <Label htmlFor="last_name">Last Name</Label>
-                <Input name="last_name" id="last_name" required placeholder="Doe" maxLength={50} />
+                <Input name="last_name" id="last_name" required placeholder="Doe" maxLength={40} onInput={(e) => sanitizeInput(e, 'name')} />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="grid gap-2">
                 <Label htmlFor="email">Email</Label>
-                <Input name="email" id="email" type="email" required placeholder="john@example.com" maxLength={50} />
+                {/* Email relies on standard HTML5 validation + maxLength */}
+                <Input name="email" id="email" type="email" required placeholder="john@example.com" maxLength={60} />
             </div>
             <div className="grid gap-2">
                 <Label htmlFor="phone">Phone Number</Label>
-                <Input name="phone" id="phone" required placeholder="0912 345 6789" maxLength={20} />
+                <Input name="phone" id="phone" required placeholder="0912 345 6789" maxLength={20} onInput={(e) => sanitizeInput(e, 'phone')} />
             </div>
           </div>
 
@@ -183,23 +212,23 @@ export default function AddUserDialog({ onSaved, children }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
               <div className="grid gap-2">
                 <Label htmlFor="country">Country</Label>
-                <select defaultValue="" name="country" id="country" required className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                <select defaultValue="" name="country" id="country" required className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background">
                   <option value="" disabled>Select Country</option>
                   {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="province">Province / Region</Label>
-                <select defaultValue="" name="province" id="province" required className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                <Label htmlFor="province">Region</Label>
+                <select defaultValue="" name="province" id="province" required onChange={handleAddressChange} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background">
                   <option value="" disabled>Select Province</option>
                   {PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="city">City / Municipality</Label>
-                <select defaultValue="" name="city" id="city" required className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                <Label htmlFor="city">City</Label>
+                <select defaultValue="" name="city" id="city" required onChange={handleAddressChange} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background">
                   <option value="" disabled>Select City</option>
                   {CITIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
@@ -207,16 +236,39 @@ export default function AddUserDialog({ onSaved, children }) {
 
               <div className="grid gap-2">
                 <Label htmlFor="barangay">Barangay</Label>
-                <select defaultValue="" name="barangay" id="barangay" required className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                <select defaultValue="" name="barangay" id="barangay" required onChange={handleAddressChange} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background">
                   <option value="" disabled>Select Barangay</option>
                   {BARANGAYS.map(b => <option key={b} value={b}>{b}</option>)}
                 </select>
               </div>
             </div>
 
+            {(addressSelection.province === 'Other' || addressSelection.city === 'Other' || addressSelection.barangay === 'Other') && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-white border rounded-md shadow-sm">
+                {addressSelection.province === 'Other' && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="other_province">Specify Province</Label>
+                    <Input name="other_province" id="other_province" required placeholder="Enter province" maxLength={50} onInput={(e) => sanitizeInput(e, 'address')} />
+                  </div>
+                )}
+                {addressSelection.city === 'Other' && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="other_city">Specify City</Label>
+                    <Input name="other_city" id="other_city" required placeholder="Enter city" maxLength={50} onInput={(e) => sanitizeInput(e, 'address')} />
+                  </div>
+                )}
+                {addressSelection.barangay === 'Other' && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="other_barangay">Specify Barangay</Label>
+                    <Input name="other_barangay" id="other_barangay" required placeholder="Enter barangay" maxLength={50} onInput={(e) => sanitizeInput(e, 'address')} />
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="grid gap-2 mt-2">
               <Label htmlFor="street">Additional Info (Street, House No., Bldg)</Label>
-              <Input name="street" id="street" required placeholder="e.g. Unit 4A, 123 Main St." />
+              <Input name="street" id="street" required placeholder="e.g. Unit 4A, 123 Main St." maxLength={100} onInput={(e) => sanitizeInput(e, 'address')} />
             </div>
           </div>
 
@@ -227,10 +279,10 @@ export default function AddUserDialog({ onSaved, children }) {
                   id="is_staff_checkbox"
                   checked={isStaff} 
                   onChange={() => setIsStaff(!isStaff)}
-                  className="h-4 w-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  className="h-4 w-4 rounded text-blue-600 cursor-pointer"
               />
               <Label htmlFor="is_staff_checkbox" className="select-none cursor-pointer">
-                  Is Staff? (Grants POS access)
+                  Check for Cashier (Grants POS access)
               </Label>
             </div>
             

@@ -8,7 +8,6 @@ import ReceiptModal2 from "../../Components/ReceiptModal2";
 import VoidConfirmDialog from "../../Components/VoidConfirmDialog";
 import CustomerCouponModal from "../../Components/CustomerCouponModal";
 import GCashPaymentModal from "../../Components/GCashPaymentModal";
-// import GCashReconciliationModal from "../../Components/GCashReconciliationModal";
 import { SelectDiscount } from "../../Components/SelectDiscount";
 import AlertModal from "../../Components/AlertModal";
 import { Skeleton } from "../../Components/ui/skeleton";
@@ -964,39 +963,39 @@ const Pos = () => {
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 mb-3">
-                      <select
-                        value={paymentMethod}
-                        onChange={(e) => setPaymentMethod(e.target.value)}
-                        className="w-full px-3 py-2 border rounded-md text-sm font-medium"
-                      >
-                        <option value="cash">Cash</option>
-                        <option value="gcash">GCash</option>
-                      </select>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-md text-sm font-medium"
+                  >
+                    <option value="cash">Cash</option>
+                    <option value="gcash">GCash</option>
+                  </select>
 
-                      {paymentMethod === "cash" ? (
-                      <SelectDiscount options={discountOptions} onSelect={setSelectedDiscount} placeholder="Discount Type"/>
-                      ) : (
-                        <div className="w-full px-3 py-2 border rounded-md text-sm font-medium bg-white text-blue-700">
-                          GCash Selected
-                        </div>
-                      )}
+                  {/* FIXED: Discount dropdown is now always available */}
+                  <SelectDiscount 
+                    options={discountOptions} 
+                    onSelect={setSelectedDiscount} 
+                    placeholder="Discount Type"
+                  />
 
-                      {paymentMethod === "cash" ? (
-                      <div className="relative">
-                        <span className="absolute left-3 top-2 text-gray-400">₱</span>
-                         <input 
-                           type="number" 
-                           value={cash} 
-                           onChange={(e) => setCash(e.target.value)} 
-                           className="w-full pl-6 pr-2 py-2 border rounded-md text-right font-bold focus:ring-2 focus:ring-green-500 outline-none" 
-                           placeholder="CASH"
-                           maxLength={20}
-                         />
-                      </div>
-                      ) : (
-                        <div className="w-full px-3 py-2 border rounded-md text-sm font-semibold text-green-700 bg-green-50 text-right">
-                          GCash: ₱{total.toFixed(2)}
-                        </div>
+                  {/* Cash input or GCash total stretches across the bottom row */}
+                  {paymentMethod === "cash" ? (
+                  <div className="relative col-span-2">
+                    <span className="absolute left-3 top-2 text-gray-400">₱</span>
+                    <input 
+                      type="number" 
+                      value={cash} 
+                      onChange={(e) => setCash(e.target.value)} 
+                      className="w-full pl-6 pr-2 py-2 border rounded-md text-right font-bold focus:ring-2 focus:ring-green-500 outline-none" 
+                      placeholder="CASH AMOUNT"
+                      maxLength={20}
+                    />
+                  </div>
+                  ) : (
+                    <div className="w-full px-3 py-2 border rounded-md text-sm font-semibold text-green-700 bg-green-50 text-right col-span-2">
+                      GCash Amount to Pay: ₱{total.toFixed(2)}
+                    </div>
                       )}
                 </div>
 
