@@ -9,9 +9,7 @@ import { Wand2, Tag, CalendarClock, Hash, AlertCircle } from "lucide-react";
 import api from "../api"; 
 
 export default function AddDiscountDialog({ open, onOpenChange, onSaved, products = [] }) {
-  // ... (State declarations remain the same)
   const [code, setCode] = useState("");
-  const [usageLimit, setUsageLimit] = useState("");
   const [claimLimit, setClaimLimit] = useState("");
   const [ruleName, setRuleName] = useState(""); 
   const [discountType, setDiscountType] = useState("percentage"); 
@@ -19,10 +17,18 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
   const [minSpend, setMinSpend] = useState("0");
   const [selectedFreeProduct, setSelectedFreeProduct] = useState("");
   const [targetProductId, setTargetProductId] = useState("all"); 
-  const [validTo, setValidTo] = useState(""); // Stores "YYYY-MM-DDTHH:MM"
+  const [validTo, setValidTo] = useState(""); 
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const getMinDateTime = () => {
+    const now = new Date();
+    // Adjust for local timezone offset so it matches the user's clock
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    // Slice at 16 to get "YYYY-MM-DDTHH:mm" format required by datetime-local
+    return now.toISOString().slice(0, 16);
+  };
 
   const generateRandomCode = () => {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -33,17 +39,46 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
     setCode(result);
   };
 
+  // 🔴 Strict sanitization for Claim Limit (Whole numbers only)
+  const handleClaimLimitChange = (e) => {
+    let val = e.target.value.replace(/[^0-9]/g, '');
+    setClaimLimit(val);
+  };
+
+  // 🔴 Strict sanitization for Discount Value (Allows decimals)
+  const handleDiscountValueChange = (e) => {
+    let val = e.target.value.replace(/[^0-9.]/g, '');
+    const parts = val.split('.');
+    if (parts.length > 2) {
+      val = parts[0] + '.' + parts.slice(1).join('');
+    }
+    setDiscountValue(val);
+  };
+
+  // 🔴 Strict sanitization for Minimum Spend (Allows decimals)
+  const handleMinSpendChange = (e) => {
+    let val = e.target.value.replace(/[^0-9.]/g, '');
+    const parts = val.split('.');
+    if (parts.length > 2) {
+      val = parts[0] + '.' + parts.slice(1).join('');
+    }
+    setMinSpend(val);
+  };
+
   const handleSave = async () => {
     setError(null);
 
-    // ... (Validation checks remain the same)
     if(!code || !ruleName) { setError("Please fill in required fields"); return; }
     if(discountType !== 'free_item' && !discountValue) { setError("Enter discount value"); return; }
+
+    if (validTo && new Date(validTo) < new Date()) {
+      setError("The validity period cannot be set in the past.");
+      return;
+    }
 
     setLoading(true);
 
     try {
-      // ✅ FIX: Ensure date is properly formatted for Backend
       let formattedValidTo = null;
       if (validTo) {
           formattedValidTo = new Date(validTo).toISOString(); 
@@ -59,7 +94,7 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
         target_product: targetProductId === "all" ? null : targetProductId,
         
         valid_from: new Date().toISOString(), 
-        valid_to: formattedValidTo // ✅ Sends ISO string
+        valid_to: formattedValidTo 
       };
 
       const criteriaRes = await api.post("/firstapp/coupons-criteria/", criteriaPayload);
@@ -70,15 +105,15 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
         code: code.toUpperCase(),
         criteria_id: newCriteriaId,
         status: "Active",
-        usage_limit: usageLimit ? parseInt(usageLimit) : null,
-        claim_limit: claimLimit ? parseInt(claimLimit) : null // --- NEW PAYLOAD ARG ---
+        usage_limit: claimLimit ? parseInt(claimLimit) : null,
+        claim_limit: claimLimit ? parseInt(claimLimit) : null
       });
 
       onSaved(); 
       onOpenChange(false);
       
       // Reset Form
-      setCode(""); setUsageLimit(""); setClaimLimit(""); setRuleName("");
+      setCode(""); setClaimLimit(""); setRuleName("");
       setMinSpend("0"); setSelectedFreeProduct(""); setTargetProductId("all");
       setValidTo(""); setError(null);
 
@@ -119,19 +154,24 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                       <div className="space-y-1">
                           <Label>Code</Label>
                           <div className="flex gap-2">
-                              <Input placeholder="CODE123" maxLength={50} value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className="uppercase font-mono tracking-widest"/>
+                              <Input placeholder="CODE123" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className="uppercase font-mono tracking-widest"/>
                               <Button variant="outline" size="icon" onClick={generateRandomCode}><Wand2 className="h-4 w-4" /></Button>
                           </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      
+                      <div className="grid gap-2">
                         <div className="space-y-1">
-                            <Label className="flex items-center gap-1">POS Usage Limit <Hash size={12}/></Label>
-                            <Input type="number" placeholder="e.g. 50" value={usageLimit} onChange={(e) => setUsageLimit(e.target.value)} />
-                            <p className="text-[10px] text-gray-500">Leave blank for unlimited</p>
-                        </div>
-                        <div className="space-y-1">
-                            <Label className="flex items-center gap-1">App Claim Limit <Hash size={12}/></Label>
-                            <Input type="number" placeholder="e.g. 100" value={claimLimit} onChange={(e) => setClaimLimit(e.target.value)} />
+                            <Label className="flex items-center gap-1">Total Claim & Usage Limit <Hash size={12}/></Label>
+                            {/* 🔴 Updated Claim Limit Input */}
+                            <Input 
+                              type="text" 
+                              inputMode="numeric"
+                              placeholder="e.g. 100" 
+                              value={claimLimit} 
+                              onChange={handleClaimLimitChange}
+                              maxLength={10} 
+                            />
+                            <p className="text-[10px] text-gray-500">Leave blank for unlimited. This limits how many total users can claim and use this code.</p>
                         </div>
                     </div>
                    </div>
@@ -149,6 +189,7 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                           type="datetime-local" 
                           value={validTo} 
                           onChange={(e) => setValidTo(e.target.value)} 
+                          min={getMinDateTime()}
                       />
                       <p className="text-[10px] text-gray-400">Coupon is valid starting immediately upon creation.</p>
                   </div>
@@ -194,7 +235,14 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                                 <SelectContent>{products.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.product_name}</SelectItem>)}</SelectContent>
                             </Select>
                         ) : (
-                            <Input type="number" placeholder="10" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} />
+                            <Input
+                              type="text" 
+                              inputMode="decimal"
+                              placeholder="10" 
+                              value={discountValue} 
+                              onChange={handleDiscountValueChange}
+                              maxLength={10}
+                            />
                         )}
                     </div>
                 </div>
@@ -202,7 +250,14 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                     <Label>Minimum Spend</Label>
                     <div className="relative">
                         <span className="absolute left-3 top-2.5 text-gray-500">₱</span>
-                        <Input type="number" className="pl-7" value={minSpend} onChange={(e) => setMinSpend(e.target.value)}/>
+                        <Input 
+                          type="text" 
+                          inputMode="decimal"
+                          className="pl-7" 
+                          value={minSpend} 
+                          onChange={handleMinSpendChange}
+                          maxLength={10}
+                        />
                     </div>
                 </div>
             </div>

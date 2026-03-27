@@ -357,6 +357,16 @@ const Pos = () => {
   const total = tempTotal > 0 ? tempTotal : 0;
   const change = cash ? (parseFloat(cash) - total).toFixed(2) : 0;
 
+  // 🔴 Strict sanitization for Cash Amount Input (Allows numbers and decimals)
+  const handleCashChange = (e) => {
+    let val = e.target.value.replace(/[^0-9.]/g, '');
+    const parts = val.split('.');
+    if (parts.length > 2) {
+      val = parts[0] + '.' + parts.slice(1).join('');
+    }
+    setCash(val);
+  };
+
   const handleApplyPromo = async () => {
     if (!selectedCustomer) {
       setCouponError("Select a customer first. Coupons are tied to user accounts.");
@@ -548,7 +558,6 @@ const Pos = () => {
     }
   };
 
-  // MODIFIED: Accepts a boolean to determine if we should delay opening the receipt
   const openReceiptById = async (receiptId, delayForGcash = false) => {
     if (!receiptId) return;
     try {
@@ -572,7 +581,6 @@ const Pos = () => {
       const response = await api.post("/firstapp/receipt/", payload);
       setReceiptDetails(response.data);
       
-      // MODIFIED: Don't open the modal immediately. Put it in the queue instead.
       setPendingGcashReceipt(true);
       
       await attachPaymentToReceipt(transactionId, response.data.receipt_id || response.data.id);
@@ -598,7 +606,6 @@ const Pos = () => {
 
       if (status === "PAID" && options.autoFinalize) {
         if (returnedReceiptId) {
-            // MODIFIED: Pass 'true' to delay the opening of the receipt
             await openReceiptById(returnedReceiptId, true);
             localStorage.removeItem(POS_STORAGE_KEYS.gcashPending);
         } else {
@@ -670,7 +677,7 @@ const Pos = () => {
         const receiptId = response.data?.receipt_id;
 
         if (receiptId) {
-          await openReceiptById(receiptId, false); // Here we open immediately since GCash modal isn't open anyway
+          await openReceiptById(receiptId, false);
           localStorage.removeItem(POS_STORAGE_KEYS.gcashPending);
         }
       } catch (error) {
@@ -705,8 +712,6 @@ const Pos = () => {
     }
   }, []);
 
-  // NEW: Watch for when the GCash modal fully closes. 
-  // If we have a pending receipt and the details are ready, pop the receipt!
   useEffect(() => {
       if (!gcashModalOpen && pendingGcashReceipt && receiptDetails) {
           setIsReceiptModalOpen(true);
@@ -764,7 +769,7 @@ const Pos = () => {
       setPaymentMethod("cash");
       setGcashModalOpen(false);
       
-      setPendingGcashReceipt(false); // Reset the queue state just in case
+      setPendingGcashReceipt(false); 
       localStorage.removeItem(POS_STORAGE_KEYS.gcashPending);
 
       setIsReceiptModalOpen(false);
@@ -972,21 +977,21 @@ const Pos = () => {
                     <option value="gcash">GCash</option>
                   </select>
 
-                  {/* FIXED: Discount dropdown is now always available */}
                   <SelectDiscount 
                     options={discountOptions} 
                     onSelect={setSelectedDiscount} 
                     placeholder="Discount Type"
                   />
 
-                  {/* Cash input or GCash total stretches across the bottom row */}
                   {paymentMethod === "cash" ? (
                   <div className="relative col-span-2">
                     <span className="absolute left-3 top-2 text-gray-400">₱</span>
+                    {/* 🔴 Updated Cash Input Field */}
                     <input 
-                      type="number" 
+                      type="text" 
+                      inputMode="decimal"
                       value={cash} 
-                      onChange={(e) => setCash(e.target.value)} 
+                      onChange={handleCashChange} 
                       className="w-full pl-6 pr-2 py-2 border rounded-md text-right font-bold focus:ring-2 focus:ring-green-500 outline-none" 
                       placeholder="CASH AMOUNT"
                       maxLength={20}
@@ -1005,7 +1010,7 @@ const Pos = () => {
                       onChange={(e) => setPromoCode(e.target.value.toUpperCase())} 
                       onKeyPress={(e) => e.key === 'Enter' && handleApplyPromo()}
                       placeholder="PROMO CODE" 
-                      maxLength={50}
+                      maxLength={6}
                       className={`flex-1 border rounded-md px-3 py-2 uppercase text-sm outline-none focus:ring-2 transition ${couponError ? 'border-red-300 focus:ring-red-200' : 'focus:ring-blue-200'}`} 
                     />
                     <button 
@@ -1092,13 +1097,9 @@ const Pos = () => {
           checkoutUrl={gcashCheckoutUrl}
           status={gcashStatus}
           reference={gcashReference}
-          
-          
-          // NEW PROPS PASSED HERE
           amount={total} 
           accountName="KUYA VINCE KARINDERYA"
           accountNumber="+63 912-345-XXXX"
-          
           onRefresh={() => checkGcashStatus(gcashTransactionId, { autoFinalize: true })}
           onCancel={() => setGcashModalOpen(false)}
           onDevOverride={() => checkGcashStatus(gcashTransactionId, { autoFinalize: true, devOverrideOverride: true })}

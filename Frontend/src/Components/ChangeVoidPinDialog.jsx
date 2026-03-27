@@ -7,7 +7,6 @@ import { AlertCircle, CheckCircle2 } from "lucide-react";
 import api from "../api"; 
 
 export default function ChangeVoidPinDialog({ open, onOpenChange }) {
-  // Removed currentPin state
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   
@@ -27,6 +26,18 @@ export default function ChangeVoidPinDialog({ open, onOpenChange }) {
     onOpenChange(false);
   };
 
+  // 🔴 Strict sanitization for New PIN (Numbers only)
+  const handleNewPinChange = (e) => {
+    let val = e.target.value.replace(/[^0-9]/g, '');
+    setNewPin(val);
+  };
+
+  // 🔴 Strict sanitization for Confirm PIN (Numbers only)
+  const handleConfirmPinChange = (e) => {
+    let val = e.target.value.replace(/[^0-9]/g, '');
+    setConfirmPin(val);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -44,7 +55,6 @@ export default function ChangeVoidPinDialog({ open, onOpenChange }) {
 
     setLoading(true);
     try {
-      // Sent only new_pin to the backend
       await api.post("/update-void-pin/", {
         new_pin: newPin
       });
@@ -87,16 +97,17 @@ export default function ChangeVoidPinDialog({ open, onOpenChange }) {
         )}
 
         <form onSubmit={handleSubmit} className="grid gap-4 py-2">
-          {/* Current PIN field removed */}
           
           <div className="space-y-2">
             <Label htmlFor="newPin">New PIN</Label>
+            {/* 🔴 Updated New PIN Input */}
             <Input 
               id="newPin"
               type="password"
+              inputMode="numeric"
               placeholder="Enter new 4-6 digit PIN" 
               value={newPin} 
-              onChange={(e) => setNewPin(e.target.value)} 
+              onChange={handleNewPinChange} 
               required
               maxLength={6}
               autoFocus
@@ -105,12 +116,14 @@ export default function ChangeVoidPinDialog({ open, onOpenChange }) {
 
           <div className="space-y-2">
             <Label htmlFor="confirmPin">Confirm New PIN</Label>
+            {/* 🔴 Updated Confirm PIN Input */}
             <Input 
               id="confirmPin"
               type="password"
+              inputMode="numeric"
               placeholder="Re-enter new PIN" 
               value={confirmPin} 
-              onChange={(e) => setConfirmPin(e.target.value)} 
+              onChange={handleConfirmPinChange} 
               required
               maxLength={6}
             />

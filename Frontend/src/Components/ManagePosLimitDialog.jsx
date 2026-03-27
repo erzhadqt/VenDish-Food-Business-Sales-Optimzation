@@ -21,10 +21,16 @@ const ManagePosLimitDialog = ({ open, onOpenChange, currentLimit, onSaved }) => 
       setLimitValue(currentLimit || 2);
       setShowSuccessAlert(false); // Reset the alert state every time it opens
     }
-  }, [open]);
+  }, [open, currentLimit]);
+
+  // 🔴 Strict sanitization for POS Limit (Whole numbers only)
+  const handleLimitChange = (e) => {
+    let val = e.target.value.replace(/[^0-9]/g, '');
+    setLimitValue(val);
+  };
 
   const handleSave = async () => {
-    if (!limitValue || limitValue < 1) {
+    if (!limitValue || parseInt(limitValue, 10) < 1) {
       alert("Please enter a valid number (minimum 1).");
       return;
     }
@@ -70,13 +76,15 @@ const ManagePosLimitDialog = ({ open, onOpenChange, currentLimit, onSaved }) => 
         <div className="py-2 space-y-4">
           <div className="space-y-2">
             <Label htmlFor="coupon-limit">Maximum Coupons Allowed Per Order</Label>
+            {/* 🔴 Updated POS Limit Input */}
             <Input
               id="coupon-limit"
-              type="number"
-              min="1"
+              type="text"
+              inputMode="numeric"
               value={limitValue}
-              onChange={(e) => setLimitValue(e.target.value)}
+              onChange={handleLimitChange}
               placeholder="e.g. 2"
+              maxLength={3} // Limit input to 3 digits (up to 999)
             />
             <p className="text-xs text-gray-500">
               Set the strict maximum number of promo codes a cashier can apply to a single transaction during checkout.

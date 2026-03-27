@@ -231,6 +231,7 @@ export default function ManageCategoryDialog({ open, onOpenChange, onSaved }) {
                 required
                 autoFocus
                 className={error ? "border-red-500 focus-visible:ring-red-500" : ""}
+                maxLength={20}
               />
             </div>
 

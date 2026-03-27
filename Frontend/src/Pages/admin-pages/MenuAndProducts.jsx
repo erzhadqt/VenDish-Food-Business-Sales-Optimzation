@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import Searchbar from "../../Components/Searchbar";
 import api from "../../api";
@@ -30,7 +30,7 @@ function ProductList() {
   const categoryParam = searchParams.get("category") || "";
 
   // Fetch dynamic categories from API
-  const fetchCategories = async () => {
+  const fetchCategories = useCallback(async () => {
     try {
       const res = await api.get("/firstapp/categories/");
       const formattedCategories = res.data.map(c => ({
@@ -41,14 +41,13 @@ function ProductList() {
     } catch (error) {
       console.error("Failed to fetch categories:", error);
     }
-  };
+  }, []);
 
   // Fetch products from API
-  const fetchProducts = (query = "", category = "") => {
+  const fetchProducts = useCallback((query = "", category = "") => {
     setLoading(true);
 
     let url = `/firstapp/products/?search=${query}`;
-    
     if (category) url += `&category__name=${category}`;
 
     api
@@ -58,26 +57,28 @@ function ProductList() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  };
+  }, []);
 
-  const handleSearch = (query, category) => {
-    fetchProducts(query, category);
+  const handleSearch = useCallback((query, category) => {
     const params = {};
     if (query) params.search = query;
     if (category) params.category = category;
     setSearchParams(params);
-  };
+  }, [setSearchParams]);
 
   useEffect(() => {
     fetchProducts(queryParam, categoryParam);
-    fetchCategories();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [queryParam, categoryParam, fetchProducts]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleUpdatedProduct = () => {
-    fetchProducts(searchParams.get("search") || "", searchParams.get("category") || "");
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
+
+  const handleUpdatedProduct = useCallback(() => {
+    fetchProducts(queryParam, categoryParam);
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 2500);
-  };
+  }, [queryParam, categoryParam, fetchProducts]);
 
   const handleDeleteProduct = async (productId) => {
     try {

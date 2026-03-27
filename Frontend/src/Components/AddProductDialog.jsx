@@ -15,7 +15,6 @@ import { Label } from "../Components/ui/label";
 import { AlertCircle } from "lucide-react"; 
 import api from "../api";
 
-// 🔴 ADDED `categories = []` to the props here
 export default function AddProductDialog({ onSaved, children, existingProducts = [], categories = [] }) {
   const [open, setOpen] = useState(false);
   const [productName, setProductName] = useState("");
@@ -27,11 +26,30 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
   const [image, setImage] = useState(null);
   const [error, setError] = useState("");
 
-  // 🔴 REMOVED THE HARDCODED CATEGORIES ARRAY FROM HERE
-
   const handleOpenChange = (val) => {
     setOpen(val);
     if (!val) setError("");
+  };
+
+  // 🔴 NEW: Strict sanitization for Price
+  const handlePriceChange = (e) => {
+    // 1. Strip out all alphabets and symbols except numbers and decimals
+    let val = e.target.value.replace(/[^0-9.]/g, '');
+    
+    // 2. Prevent the user from typing multiple decimal points (e.g., "12.50.5")
+    const parts = val.split('.');
+    if (parts.length > 2) {
+      val = parts[0] + '.' + parts.slice(1).join('');
+    }
+    
+    setPrice(val);
+  };
+
+  // 🔴 NEW: Strict sanitization for Servings
+  const handleServingsChange = (e) => {
+    // 1. Strip out everything except pure numbers (removes letters and decimals)
+    let val = e.target.value.replace(/[^0-9]/g, '');
+    setServings(val);
   };
 
   const handleSubmit = async (e) => {
@@ -53,9 +71,8 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
       const formData = new FormData();
       formData.append("product_name", productName);
       
-      // Because we used SlugRelatedField in Django, sending the name string here is perfectly correct!
       formData.append("category", category); 
-      formData.append("price", parseFloat(price));
+      formData.append("price", parseFloat(price || "0"));
 
       const parsedServings = parseInt(servings || "0", 10);
       const servingCount = Number.isFinite(parsedServings) ? Math.max(0, parsedServings) : 0;
@@ -115,6 +132,7 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
               onChange={(e) => setProductName(e.target.value)}
               required
               className={error.includes("name") ? "border-red-500 focus-visible:ring-red-500" : ""}
+              maxLength={20}
             />
           </div>
 
@@ -129,7 +147,6 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
               className="px-3 py-2 border rounded-md"
             >
               <option value="" disabled>Select category</option>
-              {/* 🔴 Now mapping over the dynamic categories passed from ProductList */}
               {categories.length > 0 ? (
                 categories.map((c) => (
                   <option key={c.value} value={c.value}>{c.label}</option>
@@ -144,25 +161,25 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
           <div className="grid gap-2">
               <Label htmlFor="price">Price (₱)</Label>
               <Input
-              id="price"
-              type="number"
-              step="0.01"
-              min="0"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              required
+                id="price"
+                type="text"           // 🔴 Changed to text for regex control
+                inputMode="decimal"   // 🔴 Shows numeric keyboard with decimals on mobile
+                value={price}
+                onChange={handlePriceChange}
+                placeholder="0.00"
+                required
               />
           </div>
 
+          {/* Servings Input */}
           <div className="grid gap-2">
             <Label htmlFor="servings">Servings Available</Label>
             <Input
               id="servings"
-              type="number"
-              min="0"
-              step="1"
+              type="text"           // 🔴 Changed to text for regex control
+              inputMode="numeric"   // 🔴 Shows integer numeric keyboard on mobile
               value={servings}
-              onChange={(e) => setServings(e.target.value)}
+              onChange={handleServingsChange}
               required
             />
           </div>

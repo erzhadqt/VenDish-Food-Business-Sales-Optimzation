@@ -49,6 +49,18 @@ export default function EditCouponDialog({ open, onOpenChange, coupon, onSaved }
     }
   };
 
+  // 🔴 Strict sanitization for Claim Limit (Whole numbers only)
+  const handleClaimLimitChange = (e) => {
+    let val = e.target.value.replace(/[^0-9]/g, '');
+    setFormData({ ...formData, claim_limit: val });
+  };
+
+  // 🔴 Strict sanitization for Usage Limit (Whole numbers only)
+  const handleUsageLimitChange = (e) => {
+    let val = e.target.value.replace(/[^0-9]/g, '');
+    setFormData({ ...formData, usage_limit: val });
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
@@ -69,23 +81,29 @@ export default function EditCouponDialog({ open, onOpenChange, coupon, onSaved }
 
           <div className="grid gap-2">
             <Label htmlFor="claim_limit">Max App Claims (Leave blank for unlimited)</Label>
+            {/* 🔴 Updated Claim Limit Input */}
             <Input 
               id="claim_limit" 
-              type="number" min="1"
+              type="text" 
+              inputMode="numeric"
               value={formData.claim_limit}
-              onChange={(e) => setFormData({...formData, claim_limit: e.target.value})}
+              onChange={handleClaimLimitChange}
               placeholder="e.g. 100"
+              maxLength={10}
             />
           </div>
 
           <div className="grid gap-2">
             <Label htmlFor="usage_limit">Max POS Uses (Leave blank for unlimited)</Label>
+            {/* 🔴 Updated Usage Limit Input */}
             <Input 
               id="usage_limit" 
-              type="number" min="1"
+              type="text" 
+              inputMode="numeric"
               value={formData.usage_limit}
-              onChange={(e) => setFormData({...formData, usage_limit: e.target.value})}
+              onChange={handleUsageLimitChange}
               placeholder="e.g. 50"
+              maxLength={10}
             />
           </div>
 

@@ -48,24 +48,30 @@ export default function AddUserDialog({ onSaved, children }) {
     barangay: ""
   });
 
-  // NEW: Sanitization function to instantly remove invalid characters
   const sanitizeInput = (e, type) => {
     const val = e.target.value;
     switch (type) {
       case 'username':
-        // Only allow letters, numbers, and underscores
         e.target.value = val.replace(/[^a-zA-Z0-9_]/g, '');
         break;
       case 'name':
-        // Only allow letters, spaces, hyphens, apostrophes, and ñ/Ñ
         e.target.value = val.replace(/[^a-zA-Z\s\-'ñÑ]/g, '');
         break;
       case 'phone':
-        // Only allow numbers, spaces, plus, hyphens, and parentheses
-        e.target.value = val.replace(/[^0-9\s\+\-\(\)]/g, '');
+        // NEW: Smart Philippine Phone Number formatting
+        // 1. Strip everything except numbers
+        let num = val.replace(/[^0-9]/g, '');
+        // 2. If they pasted a number starting with 63, change it to 0
+        if (num.startsWith('63')) {
+          num = '0' + num.slice(2);
+        }
+        // 3. Force length to 11 digits maximum
+        e.target.value = num.slice(0, 11);
+        break;
+      case 'location_text':
+        e.target.value = val.replace(/[^a-zA-Z\s\-.ñÑ]/g, '');
         break;
       case 'address':
-        // Allow letters, numbers, spaces, and basic punctuation (, . - #)
         e.target.value = val.replace(/[^a-zA-Z0-9\s,.\-#ñÑ]/g, '');
         break;
       default:
@@ -122,10 +128,8 @@ export default function AddUserDialog({ onSaved, children }) {
       setAddressSelection({ province: "", city: "", barangay: "" });
     } catch (err) {
       console.error("Failed to add user:", err.response?.data || err);
-      // ... (Error handling remains the same)
       let errorMessage = "An unexpected error occurred.";
       if (err.response?.data) {
-        // Simplified error parsing for brevity
         errorMessage = JSON.stringify(err.response.data); 
       } else if (err.message) {
         errorMessage = err.message;
@@ -170,7 +174,6 @@ export default function AddUserDialog({ onSaved, children }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="username">Username</Label>
-              {/* NEW: onInput sanitization and strict maxLength */}
               <Input name="username" id="username" required placeholder="johndoe" maxLength={30} onInput={(e) => sanitizeInput(e, 'username')} />
             </div>
             <div className="grid gap-2">
@@ -197,12 +200,22 @@ export default function AddUserDialog({ onSaved, children }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="grid gap-2">
                 <Label htmlFor="email">Email</Label>
-                {/* Email relies on standard HTML5 validation + maxLength */}
                 <Input name="email" id="email" type="email" required placeholder="john@example.com" maxLength={60} />
             </div>
             <div className="grid gap-2">
                 <Label htmlFor="phone">Phone Number</Label>
-                <Input name="phone" id="phone" required placeholder="0912 345 6789" maxLength={20} onInput={(e) => sanitizeInput(e, 'phone')} />
+                {/* UPDATED: Added minLength, pattern, and strict placeholder */}
+                <Input 
+                  name="phone" 
+                  id="phone" 
+                  required 
+                  placeholder="09123456789" 
+                  maxLength={11} 
+                  minLength={11}
+                  pattern="^09[0-9]{9}$"
+                  title="Please enter a valid 11-digit mobile number starting with 09 (e.g. 09123456789)"
+                  onInput={(e) => sanitizeInput(e, 'phone')} 
+                />
             </div>
           </div>
 
@@ -248,19 +261,19 @@ export default function AddUserDialog({ onSaved, children }) {
                 {addressSelection.province === 'Other' && (
                   <div className="grid gap-2">
                     <Label htmlFor="other_province">Specify Province</Label>
-                    <Input name="other_province" id="other_province" required placeholder="Enter province" maxLength={50} onInput={(e) => sanitizeInput(e, 'address')} />
+                    <Input name="other_province" id="other_province" required placeholder="Enter province" maxLength={30} onInput={(e) => sanitizeInput(e, 'location_text')} />
                   </div>
                 )}
                 {addressSelection.city === 'Other' && (
                   <div className="grid gap-2">
                     <Label htmlFor="other_city">Specify City</Label>
-                    <Input name="other_city" id="other_city" required placeholder="Enter city" maxLength={50} onInput={(e) => sanitizeInput(e, 'address')} />
+                    <Input name="other_city" id="other_city" required placeholder="Enter city" maxLength={30} onInput={(e) => sanitizeInput(e, 'location_text')} />
                   </div>
                 )}
                 {addressSelection.barangay === 'Other' && (
                   <div className="grid gap-2">
                     <Label htmlFor="other_barangay">Specify Barangay</Label>
-                    <Input name="other_barangay" id="other_barangay" required placeholder="Enter barangay" maxLength={50} onInput={(e) => sanitizeInput(e, 'address')} />
+                    <Input name="other_barangay" id="other_barangay" required placeholder="Enter barangay" maxLength={30} onInput={(e) => sanitizeInput(e, 'address')} />
                   </div>
                 )}
               </div>
@@ -268,7 +281,7 @@ export default function AddUserDialog({ onSaved, children }) {
 
             <div className="grid gap-2 mt-2">
               <Label htmlFor="street">Additional Info (Street, House No., Bldg)</Label>
-              <Input name="street" id="street" required placeholder="e.g. Unit 4A, 123 Main St." maxLength={100} onInput={(e) => sanitizeInput(e, 'address')} />
+              <Input name="street" id="street" required placeholder="e.g. Unit 4A, 123 Main St." maxLength={55} onInput={(e) => sanitizeInput(e, 'address')} />
             </div>
           </div>
 
