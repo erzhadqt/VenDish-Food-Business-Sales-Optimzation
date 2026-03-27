@@ -40,6 +40,13 @@ const VoidConfirmDialog = ({ onConfirm, trigger, cartItems }) => {
     }
   };
 
+  // 🔴 Strict sanitization for Manager PIN (Numbers only)
+  const handlePinChange = (e) => {
+    let val = e.target.value.replace(/[^0-9]/g, '');
+    setCode(val);
+    setError(""); // Clear error when user types
+  };
+
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
     if (!code) return;
@@ -152,17 +159,17 @@ const VoidConfirmDialog = ({ onConfirm, trigger, cartItems }) => {
             <div className="flex flex-col gap-4 py-4">
               <div className="relative">
                 <LockKeyhole className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
+                {/* 🔴 Updated PIN Input Field */}
                 <Input
                   type="password"
+                  inputMode="numeric"
                   placeholder="Enter PIN Code"
                   className={`pl-9 ${error ? "border-red-500 focus-visible:ring-red-500" : ""}`}
                   value={code}
-                  onChange={(e) => {
-                    setCode(e.target.value);
-                    setError("");
-                  }}
+                  onChange={handlePinChange}
                   onKeyDown={(e) => e.key === 'Enter' && handleAuthSubmit(e)}
                   autoFocus
+                  maxLength={6}
                 />
               </div>
               {error && <p className="text-sm text-red-500 font-medium ml-1">{error}</p>}
