@@ -688,8 +688,8 @@ class GCashPaymentCreateView(APIView):
 
         try:
             amount = int(amount)
-            if amount <= 0:
-                raise ValueError
+            if amount < 2000:
+                return Response({'error': 'Minimum GCash transaction amount is ₱20.00.'}, status=status.HTTP_400_BAD_REQUEST)
         except Exception:
             return Response({'error': 'Amount must be a positive integer in centavos.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -725,7 +725,7 @@ class GCashPaymentCreateView(APIView):
                             'quantity': 1,
                         }
                     ],
-                    'payment_method_types': ['gcash'],
+                    'payment_method_types': ['gcash', 'paymaya', 'card'],
                     'description': description[:255],
                     'reference_number': reference,
                     'show_line_items': True,
