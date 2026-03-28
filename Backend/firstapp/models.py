@@ -243,7 +243,7 @@ class PaymentTransaction(models.Model):
 
     amount = models.PositiveIntegerField(help_text='Amount in centavos')
     currency = models.CharField(max_length=10, default='PHP')
-    checkout_url = models.URLField(null=True, blank=True)
+    checkout_url = models.TextField(null=True, blank=True)
 
     provider_checkout_id = models.CharField(max_length=100, null=True, blank=True)
     provider_payment_id = models.CharField(max_length=100, null=True, blank=True)
