@@ -1101,7 +1101,10 @@ const Pos = () => {
           accountName="KUYA VINCE KARINDERYA"
           accountNumber="+63 912-345-XXXX"
           onRefresh={() => checkGcashStatus(gcashTransactionId, { autoFinalize: true })}
-          onCancel={() => setGcashModalOpen(false)}
+          onCancel={() => {
+            setGcashModalOpen(false); // Closes the modal
+            localStorage.removeItem(POS_STORAGE_KEYS.gcashPending); // Deletes the saved pending state so it doesn't pop up on refresh
+          }}
           onDevOverride={() => checkGcashStatus(gcashTransactionId, { autoFinalize: true, devOverrideOverride: true })}
         />
     </div>

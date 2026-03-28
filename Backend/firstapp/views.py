@@ -216,35 +216,39 @@ def _sync_transaction_from_paymongo(payment_txn):
         return payment_txn
 
     try:
-        response = requests.get(
-            f"https://api.paymongo.com/v1/checkout_sessions/{payment_txn.provider_checkout_id}",
-            headers=_paymongo_headers(),
-            timeout=20,
-        )
-        if response.status_code >= 400:
-            return payment_txn
+        # Check if it's a Payment Intent (Starts with pi_)
+        if payment_txn.provider_checkout_id.startswith('pi_'):
+            response = requests.get(
+                f"https://api.paymongo.com/v1/payment_intents/{payment_txn.provider_checkout_id}",
+                headers=_paymongo_headers(),
+                timeout=20,
+            )
+            if response.status_code >= 400:
+                return payment_txn
 
-        response_data = response.json()
-        checkout_data = response_data.get('data') or {}
-        checkout_attributes = checkout_data.get('attributes') or {}
-        checkout_status = checkout_attributes.get('status') or ''
+            response_data = response.json()
+            intent_attributes = response_data.get('data', {}).get('attributes') or {}
+            intent_status = intent_attributes.get('status') or ''
 
-        payments_list = checkout_attributes.get('payments')
-        payment_status = ''
-        if isinstance(payments_list, list) and payments_list:
-            first_payment = payments_list[0] or {}
-            if isinstance(first_payment, dict):
-                payment_txn.provider_payment_id = first_payment.get('id') or payment_txn.provider_payment_id
-                payment_status = first_payment.get('attributes', {}).get('status') or ''
-                
-        payment_intent = checkout_attributes.get('payment_intent') or {}
-        if isinstance(payment_intent, dict):
-            intent_status = payment_intent.get('attributes', {}).get('status') or ''
-            if intent_status in ['succeeded', 'paid']:
-                payment_status = intent_status
-
-        final_status_to_check = payment_status if payment_status in ['succeeded', 'paid'] else checkout_status
-        normalized = _normalize_payment_status(raw_status=final_status_to_check)
+            payments_list = intent_attributes.get('payments')
+            payment_status = ''
+            if isinstance(payments_list, list) and payments_list:
+                first_payment = payments_list[0] or {}
+                if isinstance(first_payment, dict):
+                    payment_txn.provider_payment_id = first_payment.get('id') or payment_txn.provider_payment_id
+                    payment_status = first_payment.get('attributes', {}).get('status') or ''
+                    
+            # Use 'succeeded' or 'paid' as our success marker
+            final_status_to_check = payment_status if payment_status in ['succeeded', 'paid'] else intent_status
+            normalized = _normalize_payment_status(raw_status=final_status_to_check)
+            
+        else:
+            # Fallback for old Checkout Sessions (Keeps existing DB entries from breaking)
+            response = requests.get(
+                f"https://api.paymongo.com/v1/checkout_sessions/{payment_txn.provider_checkout_id}",
+                headers=_paymongo_headers(),
+                timeout=20,
+            )
         if normalized:
             payment_txn.status = normalized
             if normalized == PaymentTransaction.Status.PAID and not payment_txn.paid_at:
@@ -714,67 +718,85 @@ class GCashPaymentCreateView(APIView):
         success_url = f"{settings.FRONTEND_URL.rstrip('/')}/gcash/success?ref={reference}"
         cancel_url = f"{settings.FRONTEND_URL.rstrip('/')}/gcash/cancel?ref={reference}"
 
-        paymongo_payload = {
-            'data': {
-                'attributes': {
-                    'line_items': [
-                        {
-                            'currency': currency,
-                            'amount': amount,
-                            'name': description[:120],
-                            'quantity': 1,
+        # === NEW QR PH PAYMENT INTENT WORKFLOW ===
+        try:
+            # 1. Create Payment Intent
+            intent_payload = {
+                'data': {
+                    'attributes': {
+                        'amount': amount,
+                        'payment_method_allowed': ['qrph'],
+                        'currency': currency,
+                        'description': description[:255],
+                        'metadata': {
+                            'reference': reference,
+                            'transaction_id': str(payment_txn.id),
                         }
-                    ],
-                    'payment_method_types': ['gcash', 'paymaya', 'card'],
-                    'description': description[:255],
-                    'reference_number': reference,
-                    'show_line_items': True,
-                    'show_description': True,
-                    'success_url': success_url,
-                    'cancel_url': cancel_url,
-                    'metadata': {
-                        'reference': reference,
-                        'transaction_id': str(payment_txn.id),
-                    },
+                    }
                 }
             }
-        }
-
-        try:
-            response = requests.post(
-                'https://api.paymongo.com/v1/checkout_sessions',
+            intent_res = requests.post(
+                'https://api.paymongo.com/v1/payment_intents',
                 headers=_paymongo_headers(idempotency_key=idempotency_key),
-                json=paymongo_payload,
+                json=intent_payload,
                 timeout=30,
             )
-            response_data = response.json()
+            intent_data = intent_res.json().get('data', {})
+            intent_id = intent_data.get('id')
+            client_key = intent_data.get('attributes', {}).get('client_key')
+
+            if not intent_id:
+                raise ValueError("Failed to create Payment Intent")
+
+            # 2. Create Payment Method (QR Ph)
+            pm_payload = {'data': {'attributes': {'type': 'qrph'}}}
+            pm_res = requests.post(
+                'https://api.paymongo.com/v1/payment_methods',
+                headers=_paymongo_headers(),
+                json=pm_payload,
+                timeout=30,
+            )
+            pm_id = pm_res.json().get('data', {}).get('id')
+
+            # 3. Attach Payment Method to Intent
+            attach_payload = {
+                'data': {
+                    'attributes': {
+                        'payment_method': pm_id,
+                        'client_key': client_key
+                    }
+                }
+            }
+            attach_res = requests.post(
+                f'https://api.paymongo.com/v1/payment_intents/{intent_id}/attach',
+                headers=_paymongo_headers(),
+                json=attach_payload,
+                timeout=30,
+            )
+            
+            # Extract the Base64 Image string from the response
+            attach_data = attach_res.json().get('data', {}).get('attributes', {})
+            qr_image_url = attach_data.get('next_action', {}).get('code', {}).get('image_url', '')
+
         except Exception as exc:
             payment_txn.status = PaymentTransaction.Status.FAILED
             payment_txn.raw_provider_payload = {'error': str(exc)}
             payment_txn.save(update_fields=['status', 'raw_provider_payload', 'updated_at'])
-            return Response({'error': 'Failed to connect to PayMongo.'}, status=status.HTTP_502_BAD_GATEWAY)
+            return Response({'error': 'Failed to connect to PayMongo QR.'}, status=status.HTTP_502_BAD_GATEWAY)
 
-        if response.status_code >= 400:
-            payment_txn.status = PaymentTransaction.Status.FAILED
-            payment_txn.raw_provider_payload = response_data if isinstance(response_data, dict) else {'raw': str(response_data)}
-            payment_txn.save(update_fields=['status', 'raw_provider_payload', 'updated_at'])
-            return Response({'error': 'PayMongo rejected checkout creation.', 'details': response_data}, status=status.HTTP_400_BAD_REQUEST)
-
-        checkout_data = response_data.get('data', {})
-        checkout_attributes = checkout_data.get('attributes', {})
-        checkout_url = checkout_attributes.get('checkout_url')
-
-        payment_txn.provider_checkout_id = checkout_data.get('id')
-        payment_txn.checkout_url = checkout_url
-        payment_txn.raw_provider_payload = response_data if isinstance(response_data, dict) else {}
-        payment_txn.save(update_fields=['provider_checkout_id', 'checkout_url', 'raw_provider_payload', 'updated_at'])
+        # 4. Save the intent_id and the image string to your transaction record
+        payment_txn.provider_checkout_id = intent_id
+        payment_txn.checkout_url = qr_image_url  # Repurposed to hold the Base64 Image String
+        payment_txn.save(update_fields=['provider_checkout_id', 'checkout_url', 'updated_at'])
 
         return Response({
             'transaction_id': payment_txn.id,
             'reference': payment_txn.reference,
             'status': payment_txn.status,
-            'checkout_url': payment_txn.checkout_url,
+            'checkout_url': payment_txn.checkout_url, # Frontend will receive the image string here
         }, status=status.HTTP_201_CREATED)
+    
+    
 
 
 class GCashPaymentStatusView(APIView):

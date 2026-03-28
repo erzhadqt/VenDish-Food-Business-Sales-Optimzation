@@ -77,37 +77,29 @@ export default function GCashPaymentModal({
           </div>
 
           {/* QR Code Section */}
-          {checkoutUrl && !isPaid && (
-            <div className="flex flex-col items-center justify-center p-5 border rounded-xl bg-white relative shadow-inner">
-              <span className="text-sm font-bold mb-4 text-gray-700 uppercase tracking-wide">Scan to Pay via GCash</span>
-
-              {/* DEV OVERRIDE BUTTON - FOR TESTING ONLY */}
-              {onDevOverride && (
-                <button 
-                  onClick={onDevOverride}
-                  className="absolute top-3 right-3 text-[10px] bg-red-100 text-red-700 px-2 py-1 rounded border border-red-200 hover:bg-red-200 transition-colors font-bold"
-                  title="Force successful payment (Dev Only)"
-                >
-                  Mock Pay
-                </button>
-              )}
-
-              <div className="p-4 bg-white border-2 border-blue-100 rounded-2xl shadow-md transition-transform hover:scale-105">
-                <QRCodeSVG 
-                  value={checkoutUrl}
-                  size={200}
-                  imageSettings={{
-                    src: "../../public/icon.jpeg",
-                    x: undefined, y: undefined, height: 35, width: 35, excavate: true
-                  }}
-                  bgColor={"#ffffff"}
-                  fgColor={"#000000"}
-                  level={"Q"}
-                  includeMargin={false}
-                />
+          <div className="p-4 bg-white border-2 border-blue-100 rounded-2xl shadow-md transition-transform hover:scale-105">
+                {/* Check if the URL is a base64 image string from PayMongo QR Ph */}
+                {checkoutUrl.startsWith('data:image') ? (
+                  <img 
+                    src={checkoutUrl} 
+                    alt="Scan to Pay via QR Ph" 
+                    className="w-[200px] h-[200px] object-contain" 
+                  />
+                ) : (
+                  <QRCodeSVG 
+                    value={checkoutUrl}
+                    size={200}
+                    imageSettings={{
+                      src: "../../public/icon.jpeg",
+                      x: undefined, y: undefined, height: 35, width: 35, excavate: true
+                    }}
+                    bgColor={"#ffffff"}
+                    fgColor={"#000000"}
+                    level={"Q"}
+                    includeMargin={false}
+                  />
+                )}
               </div>
-            </div>
-          )}
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0 mt-2">
