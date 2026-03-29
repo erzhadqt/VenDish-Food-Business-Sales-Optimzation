@@ -574,10 +574,15 @@ const Pos = () => {
     }
   };
 
-  const finalizePaidGcashReceipt = async (transactionId) => {
+  const finalizePaidGcashReceipt = async (transactionId, manualReference = "") => {
     setLoading(true);
     try {
       const payload = buildReceiptPayload();
+      
+      // NEW: Inject the manual reference into the receipt payload
+      // Assuming your backend Receipt model uses provider_reference
+      payload.provider_reference = manualReference; 
+
       const response = await api.post("/firstapp/receipt/", payload);
       setReceiptDetails(response.data);
       
@@ -585,6 +590,10 @@ const Pos = () => {
       
       await attachPaymentToReceipt(transactionId, response.data.receipt_id || response.data.id);
       localStorage.removeItem(POS_STORAGE_KEYS.gcashPending);
+      
+      // Close the modal now that we are done
+      setGcashModalOpen(false); 
+      
     } catch (error) {
       console.error("Failed to finalize GCash receipt:", error);
       triggerAlert("Order Finalization Failed", error.response?.data?.error || "Payment succeeded but receipt finalization failed.");
@@ -604,13 +613,11 @@ const Pos = () => {
       const returnedReceiptId = response.data?.receipt_id;
       setGcashStatus(status);
 
-      if (status === "PAID" && options.autoFinalize) {
-        if (returnedReceiptId) {
-            await openReceiptById(returnedReceiptId, true);
-            localStorage.removeItem(POS_STORAGE_KEYS.gcashPending);
-        } else {
-            await finalizePaidGcashReceipt(transactionId);
-        }
+      if (status === "PAID") {
+          if (returnedReceiptId && options.autoFinalize) {
+              await openReceiptById(returnedReceiptId, true);
+              localStorage.removeItem(POS_STORAGE_KEYS.gcashPending);
+          }
       }
 
       if (["FAILED", "EXPIRED", "CANCELLED"].includes(status)) {
@@ -1100,7 +1107,8 @@ const Pos = () => {
           amount={total} 
           accountName="KUYA VINCE KARINDERYA"
           accountNumber="+63 912-345-XXXX"
-          onRefresh={() => checkGcashStatus(gcashTransactionId, { autoFinalize: true })}
+          onRefresh={() => checkGcashStatus(gcashTransactionId, { autoFinalize: false })}
+          onFinalize={(manualRef) => finalizePaidGcashReceipt(gcashTransactionId, manualRef)}
           onCancel={() => {
             setGcashModalOpen(false); // Closes the modal
             localStorage.removeItem(POS_STORAGE_KEYS.gcashPending); // Deletes the saved pending state so it doesn't pop up on refresh
