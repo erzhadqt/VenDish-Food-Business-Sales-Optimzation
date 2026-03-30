@@ -2,18 +2,14 @@ import React from 'react';
 import { X, Printer } from 'lucide-react';
 
 const ReceiptModal = ({ open, onClose, receiptDetails }) => {
-    // If modal is not open or no data, don't render anything
     if (!open || !receiptDetails) return null;
 
-    // Helper to print (optional functionality)
     const handlePrint = () => {
         window.print();
     };
 
     return (
-        // The Z-index here must be high to sit on top of everything
         <div className="relative z-50">
-            
             {/* --- THE BLUR EFFECT LAYER --- */}
             <div 
                 className="fixed inset-0 bg-black/30 backdrop-blur-sm transition-opacity" 
@@ -95,7 +91,6 @@ const ReceiptModal = ({ open, onClose, receiptDetails }) => {
                                     {receiptDetails.coupon_details.map((coupon, idx) => (
                                         <div key={idx} className="flex justify-between text-sm text-green-600">
                                             <span>Discount ({coupon.code})</span>
-                                            {/* Note: This assumes 'rate' is the deducted amount. If it's percentage, you might need extra logic */}
                                             <span>- {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'PHP' }).format(coupon.rate)}</span>
                                         </div>
                                     ))}
@@ -109,47 +104,38 @@ const ReceiptModal = ({ open, onClose, receiptDetails }) => {
                                 </span>
                             </div>
 
-                             <div className=" rounded-md mt-4 space-y-1">
-                                <div className="flex justify-between text-md">
-                                    <span className="text-muted-foreground">Cash Given</span>
-                                    <span className="font-mono">₱{receiptDetails.cash_given}</span>
-                                </div>
-                                <div className="flex justify-between text-md">
-                                    <span className="text-muted-foreground">Change</span>
-                                    <span className="font-mono">₱{receiptDetails.change}</span>
-                                </div>
-                            </div>
-
                             {receiptDetails.status === 'VOIDED' && receiptDetails.void_reason && (
                                 <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded text-xs text-red-600">
                                     <strong>Void Reason:</strong> {receiptDetails.void_reason}
                                 </div>
                             )}
 
-                            <div className="flex justify-between text-md border-b pb-2 mb-2">
-                                <span className="text-muted-foreground">Payment Method</span>
-                                <span className="font-bold text-gray-900 uppercase tracking-wide">
-                                    {receiptDetails.payment_method === 'GCASH' ? 'GCash' : 'Cash'}
-                                </span>
-                            </div>
-
-                            {/* --- GCASH REFERENCE NUMBER --- */}
-                            {receiptDetails.payment_method === 'GCASH' && receiptDetails.provider_reference && (
+                            <div className="rounded-md mt-4 space-y-1">
                                 <div className="flex justify-between text-md border-b pb-2 mb-2">
-                                    <span className="text-muted-foreground">Reference No.</span>
-                                    <span className="font-mono text-gray-900 text-sm">
-                                        {receiptDetails.provider_reference}
+                                    <span className="text-muted-foreground">Payment Method</span>
+                                    <span className="font-bold text-gray-900 uppercase tracking-wide">
+                                        {receiptDetails.payment_method === 'GCASH' ? 'GCash' : 'Cash'}
                                     </span>
                                 </div>
-                            )}
-                            
-                            <div className="flex justify-between text-md">
-                                <span className="text-muted-foreground">Amount Given</span>
-                                <span className="font-mono">₱{receiptDetails.cash_given}</span>
-                            </div>
-                            <div className="flex justify-between text-md">
-                                <span className="text-muted-foreground">Change</span>
-                                <span className="font-mono">₱{receiptDetails.change}</span>
+
+                                {/* --- GCASH REFERENCE NUMBER --- */}
+                                {receiptDetails.payment_method === 'GCASH' && receiptDetails.provider_reference && (
+                                    <div className="flex justify-between text-md border-b pb-2 mb-2">
+                                        <span className="text-muted-foreground">Reference No.</span>
+                                        <span className="font-mono text-gray-900 text-sm">
+                                            {receiptDetails.provider_reference}
+                                        </span>
+                                    </div>
+                                )}
+                                
+                                <div className="flex justify-between text-md">
+                                    <span className="text-muted-foreground">Amount Given</span>
+                                    <span className="font-mono">₱{receiptDetails.cash_given}</span>
+                                </div>
+                                <div className="flex justify-between text-md">
+                                    <span className="text-muted-foreground">Change</span>
+                                    <span className="font-mono">₱{receiptDetails.change}</span>
+                                </div>
                             </div>
                         </div>
                     </div>

@@ -163,7 +163,11 @@ def _sync_receipt_with_payment(payment_txn):
     if payment_txn.status == PaymentTransaction.Status.PAID:
         receipt.payment_method = Receipt.PaymentMethod.GCASH
         receipt.payment_status = Receipt.PaymentStatus.PAID
-        receipt.provider_reference = payment_txn.reference
+        
+        # FIX 1: Only set internal reference if manual reference is empty
+        if not receipt.provider_reference:
+            receipt.provider_reference = payment_txn.reference
+            
         receipt.provider_payment_id = payment_txn.provider_payment_id
         if not receipt.paid_at:
             receipt.paid_at = payment_txn.paid_at or timezone.now()
@@ -200,7 +204,10 @@ def _finalize_receipt_from_paid_transaction(payment_txn):
 
         receipt.payment_method = Receipt.PaymentMethod.GCASH
         receipt.payment_status = Receipt.PaymentStatus.PAID
-        receipt.provider_reference = payment_txn.reference
+        
+        # FIX 2: Prefer the manual reference from the frontend payload
+        receipt.provider_reference = payload.get('provider_reference') or payment_txn.reference
+        
         receipt.provider_payment_id = payment_txn.provider_payment_id
         receipt.paid_at = payment_txn.paid_at or timezone.now()
         receipt.save(update_fields=['payment_method', 'payment_status', 'provider_reference', 'provider_payment_id', 'paid_at'])
@@ -856,7 +863,11 @@ class GCashAttachReceiptView(APIView):
         if payment_txn.status == PaymentTransaction.Status.PAID:
             receipt.payment_method = Receipt.PaymentMethod.GCASH
             receipt.payment_status = Receipt.PaymentStatus.PAID
-            receipt.provider_reference = payment_txn.reference
+            
+            # FIX 3: Don't overwrite if manual reference exists
+            if not receipt.provider_reference:
+                receipt.provider_reference = payment_txn.reference
+                
             receipt.provider_payment_id = payment_txn.provider_payment_id
             if not receipt.paid_at:
                 receipt.paid_at = payment_txn.paid_at or timezone.now()

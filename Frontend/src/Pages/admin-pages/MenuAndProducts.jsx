@@ -2,15 +2,16 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import Searchbar from "../../Components/Searchbar";
 import api from "../../api";
-import { EditIcon, Trash2Icon, PlusSquareIcon, ListIcon, Settings, LockKeyhole } from "lucide-react";
+import { EditIcon, Trash2Icon, PlusSquareIcon, ListIcon, Settings, LockKeyhole, RadarIcon } from "lucide-react";
 
 import EditProductDialog from "../../Components/EditProductDialog";
 import SuccessAlert from "../../Components/SuccessAlert";
 import DeleteConfirmDialog from "../../Components/DeleteConfirmDialog";
 import AddProductDialog from "../../Components/AddProductDialog";
 import ManageCategoryDialog from "../../Components/ManageCategoryDialog";
-// 🔴 Import the new Modal
 import ChangeVoidPinDialog from "../../Components/ChangeVoidPinDialog";
+// 1. IMPORT THE NEW GCASH INFO DIALOG
+import ManageGcashInfoDialog from "../../Components/ManageGcashInfoDialog";
 import { Skeleton } from "../../Components/ui/skeleton";
 
 function ProductList() {
@@ -22,14 +23,14 @@ function ProductList() {
   const [categories, setCategories] = useState([]);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   
-  // 🔴 State to control the Void PIN modal
   const [pinModalOpen, setPinModalOpen] = useState(false);
+  // 2. ADD STATE FOR GCASH INFO MODAL
+  const [gcashInfoModalOpen, setGcashInfoModalOpen] = useState(false);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const queryParam = searchParams.get("search") || "";
   const categoryParam = searchParams.get("category") || "";
 
-  // Fetch dynamic categories from API
   const fetchCategories = useCallback(async () => {
     try {
       const res = await api.get("/firstapp/categories/");
@@ -43,7 +44,6 @@ function ProductList() {
     }
   }, []);
 
-  // Fetch products from API
   const fetchProducts = useCallback((query = "", category = "") => {
     setLoading(true);
 
@@ -68,7 +68,7 @@ function ProductList() {
 
   useEffect(() => {
     fetchProducts(queryParam, categoryParam);
-  }, [queryParam, categoryParam, fetchProducts]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [queryParam, categoryParam, fetchProducts]);
 
   useEffect(() => {
     fetchCategories();
@@ -93,14 +93,21 @@ function ProductList() {
   return (
     <div className="w-full min-h-screen p-4">
       <div className="max-w-8xl mx-auto p-2">
-        {/* Header */}
         <nav className="flex items-center justify-between mb-8">
           <h1 className="flex items-center gap-2 text-3xl font-bold text-gray-900"><ListIcon size={26}/> Product List</h1>
 
           <div className="flex gap-2">
+            <div>
+              {/* 3. ATTACH THE ONCLICK EVENT TO OPEN THE GCASH INFO MODAL */}
+              <button 
+                onClick={() => setGcashInfoModalOpen(true)}
+                className="flex gap-2 items-center bg-gray-900 hover:bg-gray-700 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
+              >
+                <RadarIcon size={26}/> GCash Infos
+              </button>
+            </div>
 
             <div>
-              {/* 🔴 Added onClick to open the PIN Modal */}
               <button 
                 onClick={() => setPinModalOpen(true)}
                 className="flex gap-2 items-center bg-gray-900 hover:bg-gray-700 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
@@ -132,7 +139,6 @@ function ProductList() {
           </div>
         </nav>
 
-        {/* Searchbar using dynamic categories */}
         <div className="mb-8">
           <Searchbar
             categories={categories}
@@ -142,7 +148,6 @@ function ProductList() {
           />
         </div>
 
-        {/* Loading */}
         {loading && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
             {Array.from({ length: 8 }).map((_, index) => (
@@ -167,28 +172,24 @@ function ProductList() {
           </div>
         )}
 
-        {/* No products */}
         {!loading && products.length === 0 && (
           <div className="text-center py-16">
             <p className="text-gray-400 text-lg">No products found.</p>
           </div>
         )}
 
-        {/* Success alert */}
         {showSuccess && (
           <div className="mb-6">
             <SuccessAlert />
           </div>
         )}
 
-        {/* Product grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {products.map((p) => (
             <div
               key={p.id}
               className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 p-3 border border-gray-200 flex flex-col"
             >
-              {/* Action buttons */}
               <div className="flex justify-end mb-1 -mt-3 ">
                 <button
                   onClick={() => setSelectedProduct(p)}
@@ -220,7 +221,6 @@ function ProductList() {
                 </div>
                 )}
 
-              {/* Product info */}
               <div className="flex-1">
                 <h3 className="text-xl font-semibold text-gray-900 mb-2 line-clamp-2">
                   {p.product_name}
@@ -269,13 +269,17 @@ function ProductList() {
         </div>
       </div>
       
-      {/* 🔴 Mount the Change Void PIN Dialog */}
+      {/* 4. MOUNT THE GCASH INFO MODAL */}
+      <ManageGcashInfoDialog
+        open={gcashInfoModalOpen}
+        onOpenChange={setGcashInfoModalOpen}
+      />
+
       <ChangeVoidPinDialog 
         open={pinModalOpen} 
         onOpenChange={setPinModalOpen} 
       />
 
-      {/* Category Manager Dialog */}
       <ManageCategoryDialog 
         open={categoryModalOpen}
         onOpenChange={setCategoryModalOpen}
@@ -285,7 +289,6 @@ function ProductList() {
         }}
       />
 
-      {/* Edit Dialog */}
       {selectedProduct && (
         <EditProductDialog
           product={selectedProduct}
