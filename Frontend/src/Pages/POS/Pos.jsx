@@ -86,6 +86,11 @@ const Pos = () => {
   const [pendingGcashReceipt, setPendingGcashReceipt] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
+  const [posBalance, setPosBalance] = useState(0);
+  const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
+  const [newBalanceInput, setNewBalanceInput] = useState("");
+  const [isUpdatingBalance, setIsUpdatingBalance] = useState(false);
+
   useEffect(() => {
     setGcashAccountName(localStorage.getItem("GCASH_ACCOUNT_NAME") || "KUYA VINCE KARINDERYA");
     setGcashAccountNumber(localStorage.getItem("GCASH_ACCOUNT_NUMBER") || "+63 912-345-XXXX");
@@ -137,6 +142,9 @@ const Pos = () => {
         setUsers(userRes.data);
         if (settingsRes.data.max_coupons_per_order !== undefined) {
              setMaxCoupons(settingsRes.data.max_coupons_per_order);
+        }
+        if (settingsRes.data.pos_cash_balance !== undefined) {
+             setPosBalance(settingsRes.data.pos_cash_balance);
         }
         if (catRes.data && Array.isArray(catRes.data)) {
           const catNames = catRes.data.map(c => c.name).filter(Boolean);
@@ -781,6 +789,16 @@ const Pos = () => {
         const response = await api.post("/firstapp/receipt/", payload);
         setReceiptDetails(response.data);
         setIsReceiptModalOpen(true);
+
+        // [FIX]: Optimistic UI Update - Immediately add the total to the local drawer state
+        setPosBalance(prev => Number(prev) + Number(total));
+
+        // Background sync to ensure it matches the database exactly
+        api.get("/firstapp/settings/").then(res => {
+           if(res.data && res.data.pos_cash_balance !== undefined) {
+               setPosBalance(res.data.pos_cash_balance);
+           }
+        }).catch(err => console.error("Failed to refresh balance", err));
       }
 
     } catch (error) {
@@ -788,6 +806,24 @@ const Pos = () => {
       triggerAlert("Order Failed", error.response?.data?.error || "Failed to submit order.");
     } finally {
         setLoading(false);
+    }
+  };
+
+  // [NEW] Function to set balance via modal
+  const handleSetBalance = async () => {
+    setIsUpdatingBalance(true);
+    try {
+      const res = await api.post("/firstapp/settings/", {
+        pos_cash_balance: parseFloat(newBalanceInput)
+      });
+      setPosBalance(res.data.pos_cash_balance);
+      setIsBalanceModalOpen(false);
+      setNewBalanceInput("");
+      triggerAlert("Success", "POS Initial Balance updated successfully.");
+    } catch (error) {
+      triggerAlert("Error", error.response?.data?.error || "Failed to update balance. Admin rights required.");
+    } finally {
+      setIsUpdatingBalance(false);
     }
   };
 
@@ -900,8 +936,7 @@ const Pos = () => {
         </div>
 
         {/* RIGHT: ORDER SUMMARY */}
-        <div className="w-full lg:w-[400px] bg-white rounded-xl shadow-lg flex flex-col h-[calc(100vh-2rem)]">
-             
+        <div className="w-full lg:w-[400px] bg-white rounded-xl shadow-lg flex flex-col h-[calc(100vh-2rem)]">                
              <div className="p-5 border-b flex justify-between items-center bg-gray-50 rounded-t-xl">
                 <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2"><ShoppingBag size={20} /> Current Order</h3>
                 
@@ -1110,6 +1145,12 @@ const Pos = () => {
                 >
                   {loading ? "Processing..." : paymentMethod === "gcash" ? "PAY VIA GCASH" : "PAY & PRINT"}
                 </button>
+
+                <div className="flex flex-col pt-5">
+                    <div className="text-sm font-semibold text-gray-600 mt-1">
+                        Drawer Balance: <span className="text-green-700">₱{parseFloat(posBalance || 0).toFixed(2)}</span>
+                    </div>
+                </div>
 
              </div>
         </div>

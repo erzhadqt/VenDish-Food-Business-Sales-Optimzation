@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import Searchbar from "../../Components/Searchbar";
 import api from "../../api";
-import { EditIcon, Trash2Icon, PlusSquareIcon, ListIcon, Settings, LockKeyhole, RadarIcon } from "lucide-react";
+import { EditIcon, Trash2Icon, PlusSquareIcon, ListIcon, Settings, LockKeyhole, RadarIcon, PhilippinePeso } from "lucide-react";
 
 import EditProductDialog from "../../Components/EditProductDialog";
 import SuccessAlert from "../../Components/SuccessAlert";
@@ -10,8 +10,9 @@ import DeleteConfirmDialog from "../../Components/DeleteConfirmDialog";
 import AddProductDialog from "../../Components/AddProductDialog";
 import ManageCategoryDialog from "../../Components/ManageCategoryDialog";
 import ChangeVoidPinDialog from "../../Components/ChangeVoidPinDialog";
-// 1. IMPORT THE NEW GCASH INFO DIALOG
 import ManageGcashInfoDialog from "../../Components/ManageGcashInfoDialog";
+// 1. IMPORT THE NEW POS BALANCE DIALOG
+import ManagePosBalanceDialog from "../../Components/ManagePosBalanceDialog"; 
 import { Skeleton } from "../../Components/ui/skeleton";
 
 function ProductList() {
@@ -24,8 +25,10 @@ function ProductList() {
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   
   const [pinModalOpen, setPinModalOpen] = useState(false);
-  // 2. ADD STATE FOR GCASH INFO MODAL
   const [gcashInfoModalOpen, setGcashInfoModalOpen] = useState(false);
+  
+  // 2. ADD STATE FOR POS BALANCE MODAL
+  const [posBalanceModalOpen, setPosBalanceModalOpen] = useState(false);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const queryParam = searchParams.get("search") || "";
@@ -98,10 +101,19 @@ function ProductList() {
 
           <div className="flex gap-2">
             <div>
-              {/* 3. ATTACH THE ONCLICK EVENT TO OPEN THE GCASH INFO MODAL */}
+              {/* 3. ATTACH THE onClick EVENT TO OPEN THE POS BALANCE MODAL */}
+              <button 
+                onClick={() => setPosBalanceModalOpen(true)}
+                className="flex gap-2 items-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
+              >
+                <PhilippinePeso size={26}/> POS Initial Balance
+              </button>
+            </div>
+
+            <div>
               <button 
                 onClick={() => setGcashInfoModalOpen(true)}
-                className="flex gap-2 items-center bg-gray-900 hover:bg-gray-700 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
+                className="flex gap-2 items-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
               >
                 <RadarIcon size={26}/> GCash Infos
               </button>
@@ -110,7 +122,7 @@ function ProductList() {
             <div>
               <button 
                 onClick={() => setPinModalOpen(true)}
-                className="flex gap-2 items-center bg-gray-900 hover:bg-gray-700 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
+                className="flex gap-2 items-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
               >
                 <LockKeyhole size={26}/> Change Void Pin
               </button>
@@ -119,7 +131,7 @@ function ProductList() {
             <div>
               <button 
                 onClick={() => setCategoryModalOpen(true)}
-                className="flex gap-2 items-center bg-gray-900 hover:bg-gray-700 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
+                className="flex gap-2 items-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
               >
                 <Settings size={26}/> Manage Categories
               </button>
@@ -131,7 +143,7 @@ function ProductList() {
                   existingProducts={products}
                   categories={categories}
               >
-                <button className="flex gap-2 items-center bg-gray-900 hover:bg-gray-700 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm">
+                <button className="flex gap-2 items-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm">
                   <PlusSquareIcon size={22} /> Product
                 </button>
               </AddProductDialog>
@@ -269,7 +281,7 @@ function ProductList() {
         </div>
       </div>
       
-      {/* 4. MOUNT THE GCASH INFO MODAL */}
+      {/* 4. MOUNT ALL MODALS AT THE BOTTOM */}
       <ManageGcashInfoDialog
         open={gcashInfoModalOpen}
         onOpenChange={setGcashInfoModalOpen}
@@ -287,6 +299,12 @@ function ProductList() {
           fetchCategories(); 
           fetchProducts(searchParams.get("search") || "", searchParams.get("category") || "");
         }}
+      />
+
+      {/* POS BALANCE MODAL */}
+      <ManagePosBalanceDialog 
+        open={posBalanceModalOpen}
+        onOpenChange={setPosBalanceModalOpen}
       />
 
       {selectedProduct && (

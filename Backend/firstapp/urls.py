@@ -1,5 +1,5 @@
 from django.urls import path, include
-from .views import ProductViewSet, CategoryViewSet, FeedbackViewSet, ReceiptViewSet, CouponViewSet, HomePageViewSet, ServicesPageViewSet, AboutPageViewSet, ContactPageViewSet, UserViewSet, DailySalesReportViewSet, CouponCriteriaViewSet, ReviewViewSet, StoreSettingsView, GCashPaymentCreateView, GCashPaymentStatusView, GCashPaymentWebhookView, GCashAttachReceiptView, GCashPaymentFinalizeByReferenceView, GCashReconciliationView, NotificationViewSet
+from .views import ProductViewSet, CategoryViewSet, FeedbackViewSet, ReceiptViewSet, CouponViewSet, HomePageViewSet, ServicesPageViewSet, AboutPageViewSet, ContactPageViewSet, UserViewSet, DailySalesReportViewSet, CouponCriteriaViewSet, ReviewViewSet, GCashPaymentCreateView, GCashPaymentStatusView, GCashPaymentWebhookView, GCashAttachReceiptView, GCashPaymentFinalizeByReferenceView, GCashReconciliationView, NotificationViewSet, google_login
 
 from rest_framework.routers import DefaultRouter
 
@@ -26,7 +26,6 @@ router.register(r'notifications', NotificationViewSet, basename='notification')
 
 # router.register(r'settings', StoreSettingsView, basename='store-settings')
 
-
 urlpatterns = [
     path('', include(router.urls)),
     path('payments/gcash/create/', GCashPaymentCreateView.as_view(), name='gcash-payment-create'),
@@ -35,4 +34,5 @@ urlpatterns = [
     path('payments/gcash/attach-receipt/', GCashAttachReceiptView.as_view(), name='gcash-payment-attach-receipt'),
     path('payments/gcash/finalize-by-reference/', GCashPaymentFinalizeByReferenceView.as_view(), name='gcash-payment-finalize-by-reference'),
     path('payments/gcash/reconcile/', GCashReconciliationView.as_view(), name='gcash-reconciliation'),
+    path('api/google-login/', google_login, name='google_login'),
 ]

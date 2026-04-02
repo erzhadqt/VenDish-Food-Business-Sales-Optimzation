@@ -1603,13 +1603,17 @@ class VerifyVoidPinView(APIView):
                 return Response({"message": "Default PIN verified"}, status=status.HTTP_200_OK)
             else:
                 return Response({"error": "Invalid Manager PIN"}, status=status.HTTP_400_BAD_REQUEST)
+
+from decimal import Decimal
+            
 class StoreSettingsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         settings, _ = StoreSettings.objects.get_or_create(id=1)
         return Response({
-            "max_coupons_per_order": settings.max_coupons_per_order
+            "max_coupons_per_order": settings.max_coupons_per_order,
+            "pos_cash_balance": settings.pos_cash_balance # [NEW] Return balance
         }, status=status.HTTP_200_OK)
 
     def post(self, request):
@@ -1622,9 +1626,71 @@ class StoreSettingsView(APIView):
         max_coupons = request.data.get('max_coupons_per_order')
         if max_coupons is not None:
             settings.max_coupons_per_order = int(max_coupons)
-            settings.save()
+            
+        # [NEW] Handle Initial Balance setting
+        pos_cash_balance = request.data.get('pos_cash_balance')
+        if pos_cash_balance is not None:
+            settings.pos_cash_balance = Decimal(str(pos_cash_balance))
+
+        settings.save()
 
         return Response({
             "message": "Settings updated successfully.",
-            "max_coupons_per_order": settings.max_coupons_per_order
+            "max_coupons_per_order": settings.max_coupons_per_order,
+            "pos_cash_balance": settings.pos_cash_balance # [NEW] Return updated balance
         }, status=status.HTTP_200_OK)
+
+
+# -------------------------------
+# GOOGLE LOGIN
+# -------------------------------
+
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+from django.contrib.auth.models import User
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+
+# Using your web client ID strictly as required by Google
+WEB_CLIENT_ID = "237740845578-63er3d1u7p1ebte89tm00o7asfpjhtp5.apps.googleusercontent.com"
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def google_login(request):
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Token is missing'}, status=400)
+
+    try:
+        # Verify Token
+        idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), WEB_CLIENT_ID)
+        email = idinfo['email']
+
+        # Get or create the user
+        user, created = User.objects.get_or_create(username=email, defaults={
+            'email': email,
+            'first_name': idinfo.get('given_name', ''),
+            'last_name': idinfo.get('family_name', '')
+        })
+
+        # Generate standard JWT Tokens matching your format (SimpleJWT)
+        from rest_framework_simplejwt.tokens import RefreshToken
+        refresh = RefreshToken.for_user(user)
+
+        return Response({
+            'message': 'Login successful',
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'name': f"{user.first_name} {user.last_name}".strip()
+            }
+        })
+        
+    except ValueError:
+        return Response({'error': 'Invalid token'}, status=403)
