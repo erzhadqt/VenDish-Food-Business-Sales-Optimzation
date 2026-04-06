@@ -3,11 +3,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { AlertCircle, CheckCircle2, PhilippinePeso } from "lucide-react"; 
+import { AlertCircle, CheckCircle2, PhilippinePeso, Wallet } from "lucide-react"; 
 import api from "../api"; 
 
 export default function ManagePosBalanceDialog({ open, onOpenChange }) {
   const [balance, setBalance] = useState("");
+  const [currentBalance, setCurrentBalance] = useState(null); // Added state for preview
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -29,11 +30,13 @@ export default function ManagePosBalanceDialog({ open, onOpenChange }) {
         .then((res) => {
           if (res.data && res.data.pos_cash_balance !== undefined) {
             setBalance(res.data.pos_cash_balance);
+            setCurrentBalance(res.data.pos_cash_balance); // Save fetched balance for preview
           }
         })
         .catch((err) => console.error("Failed to fetch current balance:", err));
     } else {
       setBalance("");
+      setCurrentBalance(null); // Clear preview when closed
       resetForm();
     }
   }, [open]);
@@ -64,6 +67,7 @@ export default function ManagePosBalanceDialog({ open, onOpenChange }) {
         pos_cash_balance: parseFloat(balance),
       });
 
+      setCurrentBalance(balance); // Update preview immediately on success
       setSuccess("POS Initial Balance successfully updated!");
       
       setTimeout(() => {
@@ -90,6 +94,19 @@ export default function ManagePosBalanceDialog({ open, onOpenChange }) {
           </DialogDescription>
         </DialogHeader>
 
+        {/* --- CURRENT BALANCE PREVIEW --- */}
+        {currentBalance !== null && (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex items-center justify-between mt-2">
+            <div className="flex items-center gap-2 text-gray-600">
+              <Wallet size={18} />
+              <span className="text-sm font-medium">Current Drawer Balance</span>
+            </div>
+            <span className="text-lg font-bold text-gray-900">
+              ₱{parseFloat(currentBalance).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          </div>
+        )}
+
         {error && (
           <div className="bg-red-50 text-red-600 p-3 rounded-md flex items-center gap-2 border border-red-200 text-sm mt-2">
             <AlertCircle size={16} className="shrink-0" />
@@ -106,7 +123,7 @@ export default function ManagePosBalanceDialog({ open, onOpenChange }) {
         <form onSubmit={handleSubmit} className="grid gap-4 py-2">
           
           <div className="space-y-2">
-            <Label htmlFor="balanceAmount">Drawer Amount</Label>
+            <Label htmlFor="balanceAmount">Set New Drawer Amount</Label>
             <div className="relative">
               <span className="absolute left-3 top-2.5 text-gray-500 font-bold">₱</span>
               <Input 

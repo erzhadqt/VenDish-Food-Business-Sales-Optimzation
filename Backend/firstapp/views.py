@@ -580,10 +580,16 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                         customer=target_customer
                     )
 
-                    if receipt.payment_method == Receipt.PaymentMethod.CASH and not receipt.paid_at:
-                        receipt.paid_at = timezone.now()
-                        receipt.payment_status = Receipt.PaymentStatus.PAID
-                        receipt.save(update_fields=['paid_at', 'payment_status'])
+                    if receipt.payment_method == Receipt.PaymentMethod.CASH:
+                        if not receipt.paid_at:
+                            receipt.paid_at = timezone.now()
+                            receipt.payment_status = Receipt.PaymentStatus.PAID
+                            receipt.save(update_fields=['paid_at', 'payment_status'])
+                        
+                        # Add cash to the POS Drawer Balance
+                        settings_obj, _ = StoreSettings.objects.get_or_create(id=1)
+                        settings_obj.pos_cash_balance += Decimal(str(receipt.total))
+                        settings_obj.save(update_fields=['pos_cash_balance'])
 
                     if target_customer:
                         _process_coupon_usage(receipt, target_customer)
@@ -680,6 +686,11 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                 receipt.voided_at = timezone.now()
                 receipt.voided_by = request.user
                 receipt.save()
+
+                if receipt.payment_method == Receipt.PaymentMethod.CASH:
+                    settings_obj, _ = StoreSettings.objects.get_or_create(id=1)
+                    settings_obj.pos_cash_balance -= Decimal(str(receipt.total))
+                    settings_obj.save(update_fields=['pos_cash_balance'])
 
                 return Response({"status": "Receipt voided successfully", "receipt_id": receipt.id})
 

@@ -3,6 +3,28 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "../Components/ui/button";
 import { Input } from "../Components/ui/input";
 
+// Helper to mask name (e.g., JUAN DELA CRUZ -> J**N D**A C**Z)
+const formatGcashName = (name) => {
+  if (!name) return "";
+  return name
+    .split(" ")
+    .map((word) => {
+      if (word.length <= 2) return word; // Don't mask short words like "DE" or "JR"
+      return `${word[0]}${"*".repeat(word.length - 2)}${word[word.length - 1]}`;
+    })
+    .join(" ");
+};
+
+// Helper to mask number (e.g., 09123456789 -> 0912***6789)
+const formatGcashNumber = (num) => {
+  if (!num) return "";
+  const digits = num.replace(/\D/g, ""); // Extract only digits
+  if (digits.length >= 10) {
+    return `${digits.slice(0, 4)}***${digits.slice(-4)}`;
+  }
+  return num; // Fallback if number is too short
+};
+
 export default function GCashPaymentModal({
   open,
   onOpenChange,
@@ -61,13 +83,17 @@ export default function GCashPaymentModal({
                 {accountName && (
                   <div className="flex justify-between items-center">
                     <span className="text-gray-500 text-xs uppercase tracking-wider">Account Name</span>
-                    <span className="font-semibold text-gray-800">{accountName}</span>
+                    <span className="font-semibold text-gray-800">
+                      {formatGcashName(accountName)}
+                    </span>
                   </div>
                 )}
                 {accountNumber && (
                   <div className="flex justify-between items-center">
                     <span className="text-gray-500 text-xs uppercase tracking-wider">Account Number</span>
-                    <span className="font-mono font-semibold text-gray-800 tracking-wide">{accountNumber}</span>
+                    <span className="font-mono font-semibold text-gray-800 tracking-wide">
+                      {accountNumber}
+                    </span>
                   </div>
                 )}
               </div>
@@ -122,10 +148,13 @@ export default function GCashPaymentModal({
                     <p className="text-sm text-gray-700">
                       Send exactly <span className="font-bold text-red-600 text-lg">₱{parseFloat(amount).toFixed(2)}</span> to:
                     </p>
+                    {/* Unmasked Number so the customer can type it in their phone */}
                     <p className="text-3xl font-mono font-black tracking-widest mt-3 mb-2 text-gray-900 drop-shadow-sm">
                       {accountNumber || "09XX-XXX-XXXX"}
                     </p>
-                    <p className="text-sm text-blue-700 font-bold uppercase tracking-wide">{accountName || "Account Name"}</p>
+                    <p className="text-sm text-blue-700 font-bold uppercase tracking-wide">
+                      {formatGcashName(accountName) || "Account Name"}
+                    </p>
                   </div>
                   
                   {/* Toggle Button -> Back to QR */}

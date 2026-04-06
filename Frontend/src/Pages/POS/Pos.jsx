@@ -74,7 +74,7 @@ const Pos = () => {
 
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [gcashAccountName, setGcashAccountName] = useState("KUYA VINCE KARINDERYA");
-  const [gcashAccountNumber, setGcashAccountNumber] = useState("+63 912-345-XXXX");
+  const [gcashAccountNumber, setGcashAccountNumber] = useState("+63 912-345-6789");
 
   const [gcashModalOpen, setGcashModalOpen] = useState(false);
   const [gcashCheckoutUrl, setGcashCheckoutUrl] = useState("");
@@ -86,14 +86,11 @@ const Pos = () => {
   const [pendingGcashReceipt, setPendingGcashReceipt] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
-  const [posBalance, setPosBalance] = useState(0);
-  const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
-  const [newBalanceInput, setNewBalanceInput] = useState("");
-  const [isUpdatingBalance, setIsUpdatingBalance] = useState(false);
+  const [posBalance, setPosBalance] = useState(0)
 
   useEffect(() => {
     setGcashAccountName(localStorage.getItem("GCASH_ACCOUNT_NAME") || "KUYA VINCE KARINDERYA");
-    setGcashAccountNumber(localStorage.getItem("GCASH_ACCOUNT_NUMBER") || "+63 912-345-XXXX");
+    setGcashAccountNumber(localStorage.getItem("GCASH_ACCOUNT_NUMBER"));
   }, [gcashModalOpen]);
 
   const [alertConfig, setAlertConfig] = useState({
@@ -794,7 +791,7 @@ const Pos = () => {
         setPosBalance(prev => Number(prev) + Number(total));
 
         // Background sync to ensure it matches the database exactly
-        api.get("/firstapp/settings/").then(res => {
+        api.get("/settings/").then(res => {
            if(res.data && res.data.pos_cash_balance !== undefined) {
                setPosBalance(res.data.pos_cash_balance);
            }
@@ -806,24 +803,6 @@ const Pos = () => {
       triggerAlert("Order Failed", error.response?.data?.error || "Failed to submit order.");
     } finally {
         setLoading(false);
-    }
-  };
-
-  // [NEW] Function to set balance via modal
-  const handleSetBalance = async () => {
-    setIsUpdatingBalance(true);
-    try {
-      const res = await api.post("/firstapp/settings/", {
-        pos_cash_balance: parseFloat(newBalanceInput)
-      });
-      setPosBalance(res.data.pos_cash_balance);
-      setIsBalanceModalOpen(false);
-      setNewBalanceInput("");
-      triggerAlert("Success", "POS Initial Balance updated successfully.");
-    } catch (error) {
-      triggerAlert("Error", error.response?.data?.error || "Failed to update balance. Admin rights required.");
-    } finally {
-      setIsUpdatingBalance(false);
     }
   };
 
