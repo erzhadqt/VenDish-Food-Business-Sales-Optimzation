@@ -26,7 +26,7 @@ export default function ManagePosBalanceDialog({ open, onOpenChange }) {
   // Fetch the current balance whenever the modal opens
   useEffect(() => {
     if (open) {
-      api.get("/settings/")
+      api.get(`/settings/?t=${new Date().getTime()}`)
         .then((res) => {
           if (res.data && res.data.pos_cash_balance !== undefined) {
             setBalance(res.data.pos_cash_balance);

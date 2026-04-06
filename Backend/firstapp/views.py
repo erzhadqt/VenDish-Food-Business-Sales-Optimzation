@@ -1337,12 +1337,25 @@ class ReviewViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         user = request.user
+
+        # VERIFIED TRANSACTION CHECK
+        has_completed_transaction = Receipt.objects.filter(customer=user, status=Receipt.Status.COMPLETED).exists()
+        if not has_completed_transaction:
+            return Response(
+                {"error": "You must have at least one successfully completed transaction at our physical POS before you can write a review. Please provide your registered account details to the cashier on your next visit!"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         review_type = request.data.get('review_type', 'shop')
 
         if review_type == 'food':
             product_id = request.data.get('product')
             if not product_id:
                 return Response({"error": "Product ID is required for food reviews."}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # NOTE: If you want to restrict product-specific reviews so the user must have purchased this exact product:
+            # has_bought_product = Receipt.objects.filter(customer=user, status=Receipt.Status.COMPLETED, items__product_id=product_id).exists()
+            # if not has_bought_product: return Response({"error": "You haven't bought this product."}, status=403)
             
             # RULE 1: User can only write a review once per food ever
             if Review.objects.filter(user=user, review_type='food', product_id=product_id).exists():

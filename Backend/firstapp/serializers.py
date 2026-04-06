@@ -13,12 +13,18 @@ class UserSerializer(serializers.ModelSerializer):
     phone = serializers.CharField(source='profile.phone', required=False, allow_blank=True)
     address = serializers.CharField(source='profile.address', required=False, allow_blank=True)
     profile_pic = serializers.ImageField(source='profile.profile_pic', required=False, allow_null=True)
+    has_completed_transaction = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = User
-        fields = ["id", "username", "email", "first_name", "last_name", "middle_name", "phone", "address", "profile_pic", "password", "is_superuser", "is_staff", "is_active"]
+        fields = ["id", "username", "email", "first_name", "last_name", "middle_name", "phone", "address", "profile_pic", "password", "is_superuser", "is_staff", "is_active", "has_completed_transaction"]
         extra_kwargs = {"password": {"write_only": True},
                         "is_superuser": {"read_only": True}}
+
+    def get_has_completed_transaction(self, obj):
+        # Check if the user has any receipt where they are the customer and status is completed
+        # Excluding voided ones, assuming status=COMPLETED is what we count
+        return obj.customer_receipts.filter(status=Receipt.Status.COMPLETED).exists()
 
     def validate_email(self, value):
         if value:

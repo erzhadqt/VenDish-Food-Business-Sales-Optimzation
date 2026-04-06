@@ -39,7 +39,7 @@ const PromoManagement = () => {
         const [couponRes, prodRes, settingsRes] = await Promise.all([
           api.get("/firstapp/coupons/"),
           api.get("/firstapp/products/"),
-          api.get("/settings/") // Fetch current limit
+          api.get(`/settings/?t=${new Date().getTime()}`) // Fetch current limit
         ]);
         
         setCoupons(couponRes.data);

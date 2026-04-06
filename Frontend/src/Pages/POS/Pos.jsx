@@ -132,7 +132,7 @@ const Pos = () => {
         const [prodRes, userRes, settingsRes, catRes] = await Promise.all([
             api.get("/firstapp/products/"),
             api.get("/firstapp/users/"),
-            api.get("/settings/"),
+            api.get(`/settings/?t=${new Date().getTime()}`),
             api.get("/firstapp/categories/")
         ]);
         setProducts(prodRes.data);
@@ -791,7 +791,7 @@ const Pos = () => {
         setPosBalance(prev => Number(prev) + Number(total));
 
         // Background sync to ensure it matches the database exactly
-        api.get("/settings/").then(res => {
+        api.get(`/settings/?t=${new Date().getTime()}`).then(res => {
            if(res.data && res.data.pos_cash_balance !== undefined) {
                setPosBalance(res.data.pos_cash_balance);
            }
