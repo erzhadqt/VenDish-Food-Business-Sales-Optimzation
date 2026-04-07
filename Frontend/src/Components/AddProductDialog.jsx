@@ -31,12 +31,17 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
     if (!val) setError("");
   };
 
-  // 🔴 NEW: Strict sanitization for Price
+  // Strict sanitization for Product Name
+  const handleProductNameChange = (e) => {
+    // Only allows Letters, Numbers, Spaces, Hyphens, Apostrophes, and Ampersands.
+    let val = e.target.value.replace(/[^a-zA-Z0-9\s\-'&]/g, '');
+    setProductName(val);
+  };
+
+  // Strict sanitization for Price
   const handlePriceChange = (e) => {
-    // 1. Strip out all alphabets and symbols except numbers and decimals
     let val = e.target.value.replace(/[^0-9.]/g, '');
     
-    // 2. Prevent the user from typing multiple decimal points (e.g., "12.50.5")
     const parts = val.split('.');
     if (parts.length > 2) {
       val = parts[0] + '.' + parts.slice(1).join('');
@@ -45,9 +50,8 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
     setPrice(val);
   };
 
-  // 🔴 NEW: Strict sanitization for Servings
+  // Strict sanitization for Servings
   const handleServingsChange = (e) => {
-    // 1. Strip out everything except pure numbers (removes letters and decimals)
     let val = e.target.value.replace(/[^0-9]/g, '');
     setServings(val);
   };
@@ -56,6 +60,30 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
     e.preventDefault();
     setError("");
     setLoading(true);
+
+    // Validate that the product name isn't just empty spaces
+    if (!productName.trim()) {
+      setError("Product name cannot be empty.");
+      setLoading(false);
+      return;
+    }
+
+    // 🔴 NEW: Validate that the product name is not entirely numbers/symbols
+    // This checks if the input is made up ONLY of numbers, spaces, hyphens, or ampersands.
+    // If it is, it means they didn't include a single letter.
+    if (!/[a-zA-Z]/.test(productName)) {
+      setError("Product name must contain of letters.");
+      setLoading(false);
+      return;
+    }
+
+    // Prevent saving if price is 0, empty, or exactly 0.00
+    const numericPrice = parseFloat(price || "0");
+    if (numericPrice <= 0) {
+      setError("Price must be greater than 0.");
+      setLoading(false);
+      return;
+    }
 
     const isDuplicate = existingProducts.some(
       (p) => p.product_name.toLowerCase() === productName.trim().toLowerCase()
@@ -69,10 +97,10 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
 
     try {
       const formData = new FormData();
-      formData.append("product_name", productName);
+      formData.append("product_name", productName.trim());
       
       formData.append("category", category); 
-      formData.append("price", parseFloat(price || "0"));
+      formData.append("price", numericPrice);
 
       const parsedServings = parseInt(servings || "0", 10);
       const servingCount = Number.isFinite(parsedServings) ? Math.max(0, parsedServings) : 0;
@@ -129,7 +157,7 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
             <Input
               id="product-name"
               value={productName}
-              onChange={(e) => setProductName(e.target.value)}
+              onChange={handleProductNameChange}
               required
               className={error.includes("name") ? "border-red-500 focus-visible:ring-red-500" : ""}
               maxLength={20}
@@ -162,8 +190,8 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
               <Label htmlFor="price">Price (₱)</Label>
               <Input
                 id="price"
-                type="text"           // 🔴 Changed to text for regex control
-                inputMode="decimal"   // 🔴 Shows numeric keyboard with decimals on mobile
+                type="text"           
+                inputMode="decimal"   
                 value={price}
                 onChange={handlePriceChange}
                 placeholder="0.00"
@@ -176,8 +204,8 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
             <Label htmlFor="servings">Servings Available</Label>
             <Input
               id="servings"
-              type="text"           // 🔴 Changed to text for regex control
-              inputMode="numeric"   // 🔴 Shows integer numeric keyboard on mobile
+              type="text"           
+              inputMode="numeric"   
               value={servings}
               onChange={handleServingsChange}
               required

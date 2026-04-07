@@ -9,7 +9,8 @@ import {
   ChevronRight,
   Filter,
   EllipsisVertical,
-  UserRoundX
+  UserRoundX,
+  Search
 } from "lucide-react";
 
 import UpdateUserDialog from "../../Components/UpdateUserDialog";
@@ -23,22 +24,35 @@ import { Skeleton } from "../../Components/ui/skeleton";
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
-  
-  // State to manage the user whose details are being viewed in the modal
   const [viewDetailsUser, setViewDetailsUser] = useState(null); 
-  
   const [loading, setLoading] = useState(false);
-  
-  // Alert State
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
 
-  // Filter State
-  const [filterRole, setFilterRole] = useState("All");
-  const [filterStatus, setFilterStatus] = useState("All");
+  // 🔴 NEW: Lazy load state from localStorage (or default if null)
+  const [filterRole, setFilterRole] = useState(() => {
+    return localStorage.getItem("userMgmt_role") || "All";
+  });
+  const [filterStatus, setFilterStatus] = useState(() => {
+    return localStorage.getItem("userMgmt_status") || "All";
+  });
+  const [searchQuery, setSearchQuery] = useState(() => {
+    return localStorage.getItem("userMgmt_search") || "";
+  });
+  const [currentPage, setCurrentPage] = useState(() => {
+    const savedPage = localStorage.getItem("userMgmt_page");
+    return savedPage ? parseInt(savedPage, 10) : 1;
+  });
 
-  const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 5;
+
+  // 🔴 NEW: Save state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem("userMgmt_role", filterRole);
+    localStorage.setItem("userMgmt_status", filterStatus);
+    localStorage.setItem("userMgmt_search", searchQuery);
+    localStorage.setItem("userMgmt_page", currentPage.toString());
+  }, [filterRole, filterStatus, searchQuery, currentPage]);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -56,21 +70,25 @@ export default function UserManagement() {
     fetchUsers();
   }, []);
 
-  // --- NEW: Helper to determine exact status ---
   const getUserStatus = (user) => {
     if (user.is_active) return "Active";
-    // If it's a staff account and inactive, we consider it pending email verification
     if (user.is_staff && !user.is_active) return "Pending";
     return "Deactivated";
   };
 
-  // Filter Logic
+  // Filter & Search Logic
   const filteredUsers = users.filter((user) => {
-    // Role filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const matchesUsername = user.username?.toLowerCase().includes(query);
+      const matchesEmail = user.email?.toLowerCase().includes(query);
+      
+      if (!matchesUsername && !matchesEmail) return false;
+    }
+
     if (filterRole === "Staff" && user.is_staff !== true) return false;
     if (filterRole === "User" && (user.is_staff !== false && user.is_staff !== undefined)) return false;
 
-    // Status filter
     const status = getUserStatus(user);
     if (filterStatus !== "All" && status !== filterStatus) return false;
 
@@ -79,9 +97,12 @@ export default function UserManagement() {
 
   const totalPages = Math.ceil(filteredUsers.length / rowsPerPage);
   
+  // Failsafe: If filtering reduces items so much that the current page is now empty, push back to page 1
+  const validCurrentPage = currentPage > totalPages && totalPages > 0 ? totalPages : currentPage;
+  
   const paginatedUsers = filteredUsers.slice(
-    (currentPage - 1) * rowsPerPage,
-    currentPage * rowsPerPage
+    (validCurrentPage - 1) * rowsPerPage,
+    validCurrentPage * rowsPerPage
   );
 
   const handleFilterChange = (e) => {
@@ -94,7 +115,11 @@ export default function UserManagement() {
     setCurrentPage(1);
   };
 
-  // Helper to show dynamic success messages
+  const handleSearchChange = (e) => {
+    setSearchQuery(e.target.value);
+    setCurrentPage(1); 
+  };
+
   const triggerSuccessAlert = (message) => {
     setSuccessMessage(message);
     setShowSuccess(true);
@@ -117,12 +142,27 @@ export default function UserManagement() {
   return (
     <div className="w-full py-6">
       <div className="max-w-7xl mx-auto px-2">
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <h1 className="flex items-center gap-3 text-3xl font-bold text-gray-900">
             <UserCogIcon size={32} className="text-gray-700" /> User Management
           </h1>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            
+            <div className="relative group flex-grow md:flex-grow-0">
+              <Search
+                size={20}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+              />
+              <input
+                type="text"
+                placeholder="Search users..."
+                value={searchQuery}
+                onChange={handleSearchChange}
+                className="pl-10 pr-4 py-2.5 w-full md:w-64 bg-white border border-gray-300 text-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent shadow-sm transition-colors"
+              />
+            </div>
+
             <div className="relative group">
               <Filter
                 size={20}
@@ -216,7 +256,7 @@ export default function UserManagement() {
                   {paginatedUsers.length === 0 ? (
                       <tr>
                         <td colSpan="5" className="py-8 text-center text-gray-500">
-                           No users found for this filter.
+                           No users found matching your search.
                         </td>
                       </tr>
                   ) : (
@@ -242,7 +282,6 @@ export default function UserManagement() {
                           )}
                         </td>
                         
-                        {/* New Dynamic Status Column */}
                         <td className="py-3 px-3 text-sm">
                           {currentStatus === "Active" && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 border border-green-200">
@@ -263,7 +302,6 @@ export default function UserManagement() {
 
                         <td className="py-3 px-3">
                           <div className="flex justify-center items-center gap-1">
-                            {/* Personal Details Ellipsis Button */}
                             <button
                               onClick={() => setViewDetailsUser(u)}
                               className="p-2 hover:bg-gray-200 rounded-md transition-colors duration-150"
@@ -272,7 +310,6 @@ export default function UserManagement() {
                               <EllipsisVertical size={20} className="text-gray-500" />
                             </button>
 
-                            {/* Edit Button */}
                             <button
                               onClick={() => setSelectedUser(u)}
                               className="p-2 hover:bg-gray-100 rounded-md transition-colors duration-150"
@@ -294,17 +331,17 @@ export default function UserManagement() {
               <div className="flex justify-end items-center gap-2 p-4">
                 <button
                   onClick={handlePrevPage}
-                  disabled={currentPage === 1}
+                  disabled={validCurrentPage === 1}
                   className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-50"
                 >
                   <ChevronLeft size={20} />
                 </button>
                 <span className="text-sm text-gray-600">
-                  Page {currentPage} of {totalPages || 1}
+                  Page {validCurrentPage} of {totalPages || 1}
                 </span>
                 <button
                   onClick={handleNextPage}
-                  disabled={currentPage === totalPages || totalPages === 0}
+                  disabled={validCurrentPage === totalPages || totalPages === 0}
                   className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-50"
                 >
                   <ChevronRight size={20} />
@@ -315,7 +352,6 @@ export default function UserManagement() {
         )}
       </div>
 
-      {/* Render the extracted details modal */}
       <UserDetailsModal 
         isOpen={!!viewDetailsUser} 
         onClose={() => setViewDetailsUser(null)} 

@@ -8,23 +8,43 @@ import { Skeleton } from '../../Components/ui/skeleton';
 import ReviewDetailsModal from '../../Components/ReviewDetailsModal';
 
 const CustomerFeedback = () => {
-  const [activeTab, setActiveTab] = useState('customer'); // 'customer' or 'food'
+  // 🔴 NEW: Lazy load states from localStorage
+  const [activeTab, setActiveTab] = useState(() => {
+    return localStorage.getItem('feedback_activeTab') || 'customer';
+  }); 
+
+  const [searchTerm, setSearchTerm] = useState(() => {
+    return localStorage.getItem('feedback_searchTerm') || '';
+  });
+  const [ratingFilter, setRatingFilter] = useState(() => {
+    return localStorage.getItem('feedback_ratingFilter') || 'all';
+  });
+  
+  const [searchFoodTerm, setSearchFoodTerm] = useState(() => {
+    return localStorage.getItem('feedback_searchFoodTerm') || '';
+  });
+  const [foodRatingFilter, setFoodRatingFilter] = useState(() => {
+    return localStorage.getItem('feedback_foodRatingFilter') || 'all';
+  });
 
   const [feedbacks, setFeedbacks] = useState([]);
   const [filteredFeedbacks, setFilteredFeedbacks] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [ratingFilter, setRatingFilter] = useState('all');
-  
   const [foodFeedbacks, setFoodFeedbacks] = useState([]);
   const [filteredFoodFeedbacks, setFilteredFoodFeedbacks] = useState([]);
-  const [searchFoodTerm, setSearchFoodTerm] = useState('');
-  const [foodRatingFilter, setFoodRatingFilter] = useState('all');
-  
   const [loading, setLoading] = useState(true);
 
   // --- UNIFIED MODAL STATE ---
   const [selectedReview, setSelectedReview] = useState(null);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+
+  // 🔴 NEW: Save state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('feedback_activeTab', activeTab);
+    localStorage.setItem('feedback_searchTerm', searchTerm);
+    localStorage.setItem('feedback_ratingFilter', ratingFilter);
+    localStorage.setItem('feedback_searchFoodTerm', searchFoodTerm);
+    localStorage.setItem('feedback_foodRatingFilter', foodRatingFilter);
+  }, [activeTab, searchTerm, ratingFilter, searchFoodTerm, foodRatingFilter]);
 
   useEffect(() => {
     const loadFeedbacks = async () => {
@@ -66,11 +86,9 @@ const CustomerFeedback = () => {
         }));
 
         setFeedbacks(shopReviews);
-        setFilteredFeedbacks(shopReviews); 
-
         setFoodFeedbacks(productReviews);
-        setFilteredFoodFeedbacks(productReviews);
 
+        // We no longer call setFiltered directly here, the other useEffects will handle it
         localStorage.removeItem('customer_feedbacks'); 
       } catch (err) {
         console.error('Error loading feedbacks:', err);
@@ -138,7 +156,6 @@ const CustomerFeedback = () => {
       await api.delete(`/firstapp/reviews/${id}/`);
       const updated = foodFeedbacks.filter(f => f.id !== id); 
       setFoodFeedbacks(updated); 
-      setFilteredFoodFeedbacks(updated); 
     } catch (error) {
       console.error("Failed to delete food feedback:", error);
     }

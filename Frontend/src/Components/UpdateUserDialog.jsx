@@ -19,12 +19,28 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     
+    // User info state
+    const [username, setUsername] = useState(user?.username || "");
+    const [email, setEmail] = useState(user?.email || "");
+    const [firstName, setFirstName] = useState(user?.first_name || "");
+    const [lastName, setLastName] = useState(user?.last_name || "");
+    const [middleName, setMiddleName] = useState(user?.middle_name || "");
+    const [phone, setPhone] = useState(user?.phone || "");
+    const [address, setAddress] = useState(user?.address || "");
+
     // System-level toggles state
     const [isStaff, setIsStaff] = useState(Boolean(user?.is_staff));
     const [isActive, setIsActive] = useState(user?.is_active !== false);
 
     useEffect(() => {
         if (user) {
+            setUsername(user.username || "");
+            setEmail(user.email || "");
+            setFirstName(user.first_name || "");
+            setLastName(user.last_name || "");
+            setMiddleName(user.middle_name || "");
+            setPhone(user.phone || "");
+            setAddress(user.address || "");
             setIsStaff(Boolean(user.is_staff));
             setIsActive(user.is_active !== false); // Defaults to true if undefined
         }
@@ -40,6 +56,18 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
             is_staff: isStaff,
             is_active: isActive
         };
+
+        if (user.is_staff) {
+            Object.assign(payload, {
+                username,
+                email,
+                first_name: firstName,
+                last_name: lastName,
+                middle_name: middleName,
+                phone,
+                address,
+            });
+        }
 
         try {
             console.log("Payload:", payload); 
@@ -131,12 +159,92 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
 
                         <form onSubmit={handleSave} className="grid gap-4">
                             
-                            {/* Read-Only Identity Card */}
-                            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Editing Account</p>
-                                <p className="font-medium text-gray-900">{user.username}</p>
-                                <p className="text-sm text-gray-600">{user.email}</p>
-                            </div>
+                            {user.is_staff ? (
+                                <div className="grid gap-3 py-2">
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="username">Username</Label>
+                                        <input
+                                            type="text"
+                                            id="username"
+                                            value={username}
+                                            onChange={(e) => setUsername(e.target.value)}
+                                            className="h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm"
+                                            required
+                                        />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="email">Email</Label>
+                                        <input
+                                            type="email"
+                                            id="email"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            className="h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm"
+                                            required
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="firstName">First Name</Label>
+                                            <input
+                                                type="text"
+                                                id="firstName"
+                                                value={firstName}
+                                                onChange={(e) => setFirstName(e.target.value)}
+                                                className="h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm"
+                                            />
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="middleName">Middle Name</Label>
+                                            <input
+                                                type="text"
+                                                id="middleName"
+                                                value={middleName}
+                                                onChange={(e) => setMiddleName(e.target.value)}
+                                                className="h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm"
+                                            />
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="lastName">Last Name</Label>
+                                            <input
+                                                type="text"
+                                                id="lastName"
+                                                value={lastName}
+                                                onChange={(e) => setLastName(e.target.value)}
+                                                className="h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="phone">Phone</Label>
+                                            <input
+                                                type="text"
+                                                id="phone"
+                                                value={phone}
+                                                onChange={(e) => setPhone(e.target.value)}
+                                                className="h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm"
+                                            />
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="address">Address</Label>
+                                            <input
+                                                type="text"
+                                                id="address"
+                                                value={address}
+                                                onChange={(e) => setAddress(e.target.value)}
+                                                className="h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm"
+                                            />
+                                    </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Editing Account</p>
+                                    <p className="font-medium text-gray-900">{user.username}</p>
+                                    <p className="text-sm text-gray-600">{user.email}</p>
+                                </div>
+                            )}
 
                             <div className="grid gap-3 py-2">
                                 {/* 1. Staff Checkbox */}

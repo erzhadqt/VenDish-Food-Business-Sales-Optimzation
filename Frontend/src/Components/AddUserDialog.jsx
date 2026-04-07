@@ -94,6 +94,13 @@ export default function AddUserDialog({ onSaved, children }) {
     const formData = new FormData(e.target);
     const values = Object.fromEntries(formData);
     
+    // 🔴 NEW: Validate minimum username length before sending request
+    if (values.username && values.username.length < 8) {
+      setError("Username must be at least 8 characters long.");
+      setLoading(false);
+      return;
+    }
+
     const finalProvince = values.province === "Other" ? values.other_province : values.province;
     const finalCity = values.city === "Other" ? values.other_city : values.city;
     const finalBarangay = values.barangay === "Other" ? values.other_barangay : values.barangay;
@@ -174,7 +181,17 @@ export default function AddUserDialog({ onSaved, children }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="username">Username</Label>
-              <Input name="username" id="username" required placeholder="johndoe" maxLength={30} onInput={(e) => sanitizeInput(e, 'username')} />
+              {/* 🔴 NEW: Added minLength={8} and title attributes */}
+              <Input 
+                name="username" 
+                id="username" 
+                required 
+                placeholder="johndoe" 
+                maxLength={30} 
+                minLength={8}
+                title="Username must be at least 8 characters long"
+                onInput={(e) => sanitizeInput(e, 'username')} 
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="password">Password</Label>
@@ -204,7 +221,6 @@ export default function AddUserDialog({ onSaved, children }) {
             </div>
             <div className="grid gap-2">
                 <Label htmlFor="phone">Phone Number</Label>
-                {/* UPDATED: Added minLength, pattern, and strict placeholder */}
                 <Input 
                   name="phone" 
                   id="phone" 

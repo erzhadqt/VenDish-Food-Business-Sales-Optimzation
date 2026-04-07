@@ -11,7 +11,6 @@ import AddProductDialog from "../../Components/AddProductDialog";
 import ManageCategoryDialog from "../../Components/ManageCategoryDialog";
 import ChangeVoidPinDialog from "../../Components/ChangeVoidPinDialog";
 import ManageGcashInfoDialog from "../../Components/ManageGcashInfoDialog";
-// 1. IMPORT THE NEW POS BALANCE DIALOG
 import ManagePosBalanceDialog from "../../Components/ManagePosBalanceDialog"; 
 import { Skeleton } from "../../Components/ui/skeleton";
 
@@ -26,13 +25,28 @@ function ProductList() {
   
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [gcashInfoModalOpen, setGcashInfoModalOpen] = useState(false);
-  
-  // 2. ADD STATE FOR POS BALANCE MODAL
   const [posBalanceModalOpen, setPosBalanceModalOpen] = useState(false);
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const queryParam = searchParams.get("search") || "";
-  const categoryParam = searchParams.get("category") || "";
+
+  // 🔴 NEW: Initialize state from URL first (for shared links), then localStorage (for persistence)
+  const [searchQuery, setSearchQuery] = useState(() => {
+    return searchParams.get("search") !== null 
+      ? searchParams.get("search") 
+      : localStorage.getItem("productList_search") || "";
+  });
+
+  const [filterCategory, setFilterCategory] = useState(() => {
+    return searchParams.get("category") !== null 
+      ? searchParams.get("category") 
+      : localStorage.getItem("productList_category") || "";
+  });
+
+  // 🔴 NEW: Save to localStorage whenever search or category changes
+  useEffect(() => {
+    localStorage.setItem("productList_search", searchQuery);
+    localStorage.setItem("productList_category", filterCategory);
+  }, [searchQuery, filterCategory]);
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -62,26 +76,36 @@ function ProductList() {
       .catch(() => setLoading(false));
   }, []);
 
+  // 🔴 NEW: Update local state, URL, and trigger a re-fetch
   const handleSearch = useCallback((query, category) => {
+    const newQuery = query || "";
+    const newCat = category || "";
+
+    setSearchQuery(newQuery);
+    setFilterCategory(newCat);
+
+    // Update URL Params
     const params = {};
-    if (query) params.search = query;
-    if (category) params.category = category;
+    if (newQuery) params.search = newQuery;
+    if (newCat) params.category = newCat;
     setSearchParams(params);
   }, [setSearchParams]);
 
+  // 🔴 NEW: Listens to the local states instead of URL parameters directly
   useEffect(() => {
-    fetchProducts(queryParam, categoryParam);
-  }, [queryParam, categoryParam, fetchProducts]);
+    fetchProducts(searchQuery, filterCategory);
+  }, [searchQuery, filterCategory, fetchProducts]);
 
   useEffect(() => {
     fetchCategories();
   }, [fetchCategories]);
 
+  // 🔴 NEW: Uses the persistent states when refreshing after an update
   const handleUpdatedProduct = useCallback(() => {
-    fetchProducts(queryParam, categoryParam);
+    fetchProducts(searchQuery, filterCategory);
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 2500);
-  }, [queryParam, categoryParam, fetchProducts]);
+  }, [searchQuery, filterCategory, fetchProducts]);
 
   const handleDeleteProduct = async (productId) => {
     try {
@@ -101,7 +125,6 @@ function ProductList() {
 
           <div className="flex gap-2">
             <div>
-              {/* 3. ATTACH THE onClick EVENT TO OPEN THE POS BALANCE MODAL */}
               <button 
                 onClick={() => setPosBalanceModalOpen(true)}
                 className="flex gap-2 items-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
@@ -155,8 +178,8 @@ function ProductList() {
           <Searchbar
             categories={categories}
             onSearch={handleSearch}
-            initialQuery={queryParam}
-            initialCategory={categoryParam}
+            initialQuery={searchQuery}       
+            initialCategory={filterCategory}
           />
         </div>
 
@@ -281,7 +304,6 @@ function ProductList() {
         </div>
       </div>
       
-      {/* 4. MOUNT ALL MODALS AT THE BOTTOM */}
       <ManageGcashInfoDialog
         open={gcashInfoModalOpen}
         onOpenChange={setGcashInfoModalOpen}
@@ -297,11 +319,10 @@ function ProductList() {
         onOpenChange={setCategoryModalOpen}
         onSaved={() => {
           fetchCategories(); 
-          fetchProducts(searchParams.get("search") || "", searchParams.get("category") || "");
+          fetchProducts(searchQuery, filterCategory); // 🔴 NEW: pass states explicitly
         }}
       />
 
-      {/* POS BALANCE MODAL */}
       <ManagePosBalanceDialog 
         open={posBalanceModalOpen}
         onOpenChange={setPosBalanceModalOpen}
