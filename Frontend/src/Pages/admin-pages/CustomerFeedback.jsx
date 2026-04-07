@@ -7,6 +7,18 @@ import { Skeleton } from '../../Components/ui/skeleton';
 // Import the single unified modal
 import ReviewDetailsModal from '../../Components/ReviewDetailsModal';
 
+const resolveMediaUrl = (path) => {
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path)) return path;
+
+  try {
+    const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
+    return new URL(path, baseUrl).toString();
+  } catch {
+    return path;
+  }
+};
+
 const CustomerFeedback = () => {
   // 🔴 NEW: Lazy load states from localStorage
   const [activeTab, setActiveTab] = useState(() => {
@@ -62,11 +74,11 @@ const CustomerFeedback = () => {
           last_name: r.last_name,
           phone: r.phone,
           address: r.address,
-          profile_pic: r.profile_pic,
+           profile_pic: resolveMediaUrl(r.profile_pic),
            rating: r.rating,
            comment: r.comment,
            created_at: r.created_at,
-           image: r.image 
+            image: resolveMediaUrl(r.image)
         }));
 
         const productReviews = allReviews.filter(r => r.review_type === 'food').map(r => ({
@@ -78,11 +90,11 @@ const CustomerFeedback = () => {
           last_name: r.last_name,
           phone: r.phone,
           address: r.address,
-          profile_pic: r.profile_pic,
+           profile_pic: resolveMediaUrl(r.profile_pic),
            rating: r.rating,
            comment: r.comment,
            created_at: r.created_at,
-           image: r.image
+            image: resolveMediaUrl(r.image)
         }));
 
         setFeedbacks(shopReviews);
@@ -306,6 +318,17 @@ const CustomerFeedback = () => {
                       </div>
                     </div>
                     <p className="text-gray-700 leading-relaxed">{f.comment}</p>
+                    {f.image && (
+                      <div className="mt-4">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Attached Image</p>
+                        <img
+                          src={f.image}
+                          alt={`Review attachment from ${f.customer_name}`}
+                          className="w-full max-w-md max-h-64 object-cover rounded-md border border-gray-200 bg-gray-50"
+                          loading="lazy"
+                        />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -368,6 +391,17 @@ const CustomerFeedback = () => {
                       </div>
                     </div>
                     <p className="text-gray-700 leading-relaxed">{f.comment}</p>
+                    {f.image && (
+                      <div className="mt-4">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Attached Image</p>
+                        <img
+                          src={f.image}
+                          alt={`Review attachment for ${f.food_name}`}
+                          className="w-full max-w-md max-h-64 object-cover rounded-md border border-gray-200 bg-gray-50"
+                          loading="lazy"
+                        />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

@@ -83,7 +83,7 @@ export default function ForgotPasswordModal({ open, onOpenChange }) {
 
     try {
       const res = await api.post("/request-otp/", { email: email.trim().toLowerCase() });
-      setSuccess(res.data.details || "OTP sent! Check your email inbox.");
+      setSuccess(res.data.details || "OTP sent! Check your email inbox. The code expires in 15 minutes.");
       setResendCooldown(60);
       
       // Move to OTP step after brief delay
@@ -180,7 +180,7 @@ export default function ForgotPasswordModal({ open, onOpenChange }) {
 
     try {
       await api.post("/request-otp/", { email: email.trim().toLowerCase() });
-      setSuccess("A new OTP has been sent to your email.");
+      setSuccess("A new OTP has been sent to your email. The code expires in 15 minutes.");
       setResendCooldown(60);
       setOtpDigits(["", "", "", "", "", ""]);
       setTimeout(() => {
@@ -245,7 +245,7 @@ export default function ForgotPasswordModal({ open, onOpenChange }) {
 
   const descriptions = {
     [STEP_EMAIL]: "Enter the email address associated with your account and we'll send you a verification code.",
-    [STEP_OTP]: `We sent a 6-digit code to ${email}. Enter it below.`,
+    [STEP_OTP]: `We sent a 6-digit code to ${email}. Enter it below within 15 minutes.`,
     [STEP_RESET]: "Create a new password for your account. Make sure it's at least 8 characters.",
   };
 

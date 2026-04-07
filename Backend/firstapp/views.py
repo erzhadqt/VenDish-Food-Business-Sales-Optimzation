@@ -1436,6 +1436,9 @@ class ContactPageViewSet(viewsets.ModelViewSet):
 import random
 import secrets
 from django.core.mail import send_mail
+
+OTP_EXPIRY_MINUTES = 15
+PASSWORD_RESET_TOKEN_EXPIRY_MINUTES = 5
     
 class OTPViewSet(viewsets.ModelViewSet):
     queryset = OTP.objects.all()
@@ -1455,13 +1458,15 @@ class OTPViewSet(viewsets.ModelViewSet):
         user = User.objects.filter(email__iexact=email).first()
         
         if user:
+            otp_expires_at = timezone.now() + timedelta(minutes=OTP_EXPIRY_MINUTES)
+
             # Update or create the OTP record
             otp_record, created = OTP.objects.update_or_create(
                 user=user,
                 defaults={
                     'otp': random_otp,
                     'is_valid': True,
-                    'expires_at': timezone.localtime() + timedelta(minutes=15),
+                    'expires_at': otp_expires_at,
                 }
             )
 
@@ -1472,7 +1477,7 @@ class OTPViewSet(viewsets.ModelViewSet):
                     message=(
                         f'Hi {user.first_name or user.username},\n\n'
                         f'Your one-time password (OTP) is: {random_otp}\n\n'
-                        f'This code will expire in 15 minutes.\n'
+                        f'This code will expire in {OTP_EXPIRY_MINUTES} minutes.\n'
                         f'If you did not request this, please ignore this email.\n\n'
                         f'– Kuya Vince Karinderya'
                     ),
@@ -1495,7 +1500,7 @@ class OTPViewSet(viewsets.ModelViewSet):
         return Response({
             'type': 'success',
             'label': 'OTP Sent!',
-            'details': 'If an account with that email exists, an OTP has been sent. Please check your inbox.'
+            'details': f'If an account with that email exists, an OTP has been sent. It expires in {OTP_EXPIRY_MINUTES} minutes.'
         }, status=status.HTTP_200_OK)
 
 
@@ -1506,21 +1511,33 @@ class VerifyOTPViewSet(viewsets.ModelViewSet):
     authentication_classes = []  # Prevent stale JWTs from causing 401 on this public endpoint
 
     def create(self, request):
-        received_otp = request.data.get('otp')
+        received_otp = str(request.data.get('otp', '')).strip()
         email = request.data.get('email', '').strip().lower()
 
         if not received_otp or not email:
             return Response({'type': 'error', 'label': 'Missing Data', 'details': 'Both OTP and email are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        if not received_otp.isdigit() or len(received_otp) != 6:
+            return Response(
+                {
+                    'type': 'error',
+                    'label': 'Invalid OTP Format',
+                    'details': 'OTP must be a 6-digit number.'
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         try:
-            otp = OTP.objects.get(otp=received_otp, user__email__iexact=email)
+            otp = OTP.objects.get(otp=int(received_otp), user__email__iexact=email)
             user = User.objects.filter(email__iexact=email).first()
 
             if not otp.is_valid:
                 return Response({'type': 'error', 'label': 'Invalid OTP', 'details': 'The OTP you have sent is no longer valid. Please request another OTP'}, status=status.HTTP_400_BAD_REQUEST)
 
-
-            if otp.expires_at < timezone.localtime():
+            if otp.expires_at <= timezone.now():
+                # Expired OTPs are immediately invalidated to prevent repeated attempts.
+                otp.is_valid = False
+                otp.save(update_fields=['is_valid'])
                 return Response({'type': 'error', 'label': 'Expired OTP', 'details': 'The OTP you have sent has expired. Please request another OTP'}, status=status.HTTP_400_BAD_REQUEST)
             
             otp.is_valid = False
@@ -1531,10 +1548,18 @@ class VerifyOTPViewSet(viewsets.ModelViewSet):
             PasswordResetToken.objects.create(
                 user=user,
                 token=token,
-                expires_at=timezone.localtime() + timedelta(minutes=5)
+                expires_at=timezone.now() + timedelta(minutes=PASSWORD_RESET_TOKEN_EXPIRY_MINUTES)
             )
 
-            return Response({'type': 'success', 'label': 'OTP has been verified', 'details': 'Your OTP has now been verified. Please change your password within 5 minutes.', 'token': token}, status=status.HTTP_200_OK)
+            return Response(
+                {
+                    'type': 'success',
+                    'label': 'OTP has been verified',
+                    'details': f'Your OTP has now been verified. Please change your password within {PASSWORD_RESET_TOKEN_EXPIRY_MINUTES} minutes.',
+                    'token': token,
+                },
+                status=status.HTTP_200_OK,
+            )
 
         except OTP.DoesNotExist:
             return Response({'type': 'error', 'label': 'Invalid OTP', 'details': 'The OTP you have sent is incorrect.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -1557,7 +1582,17 @@ class ChangePasswordViaToken(viewsets.ModelViewSet):
         try:
             token = PasswordResetToken.objects.get(token=received_token)
 
-            if token.expires_at < timezone.localtime():
+            if token.used:
+                return Response(
+                    {
+                        'type': 'error',
+                        'label': 'Used Token',
+                        'details': 'This password reset token has already been used. Please restart the forgot password flow.',
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if token.expires_at <= timezone.now():
                 return Response({'type': 'error', 'label': 'Expired Token', 'details': 'Your token has expired. Please redo the process carefully.'}, status=status.HTTP_400_BAD_REQUEST)
 
             user = User.objects.filter(email__iexact=email).first()

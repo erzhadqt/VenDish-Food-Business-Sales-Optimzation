@@ -14,7 +14,7 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
   const [ruleName, setRuleName] = useState(""); 
   const [discountType, setDiscountType] = useState("percentage"); 
   const [discountValue, setDiscountValue] = useState("");
-  const [minSpend, setMinSpend] = useState("0");
+  const [minSpend, setMinSpend] = useState(""); 
   const [selectedFreeProduct, setSelectedFreeProduct] = useState("");
   const [targetProductId, setTargetProductId] = useState("all"); 
   const [validTo, setValidTo] = useState(""); 
@@ -24,9 +24,7 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
 
   const getMinDateTime = () => {
     const now = new Date();
-    // Adjust for local timezone offset so it matches the user's clock
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-    // Slice at 16 to get "YYYY-MM-DDTHH:mm" format required by datetime-local
     return now.toISOString().slice(0, 16);
   };
 
@@ -39,29 +37,61 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
     setCode(result);
   };
 
-  // 🔴 Strict sanitization for Claim Limit (Whole numbers only)
   const handleClaimLimitChange = (e) => {
     let val = e.target.value.replace(/[^0-9]/g, '');
+    val = val.replace(/^0+/, ''); 
     setClaimLimit(val);
   };
 
-  // 🔴 Strict sanitization for Discount Value (Allows decimals)
+  // 🔴 Strict sanitization for Discount Value with 100% cap
   const handleDiscountValueChange = (e) => {
     let val = e.target.value.replace(/[^0-9.]/g, '');
     const parts = val.split('.');
     if (parts.length > 2) {
       val = parts[0] + '.' + parts.slice(1).join('');
     }
+    
+    if (/^0+$/.test(val)) {
+      val = '';
+    } else if (val.length > 1 && val.startsWith('0') && !val.startsWith('0.')) {
+      val = val.replace(/^0+/, '');
+    }
+    
+    // 🔴 Logic: If percentage mode, cap the maximum input strictly to 100
+    if (discountType === 'percentage' && val !== '') {
+      if (parseFloat(val) > 100) {
+        val = '100';
+      }
+    }
+    
     setDiscountValue(val);
   };
 
-  // 🔴 Strict sanitization for Minimum Spend (Allows decimals)
+  // 🔴 Pro-move: Handle Type changes so large fixed amounts get capped when switching to percentage
+  const handleDiscountTypeChange = (newType) => {
+    setDiscountType(newType);
+    if (newType === 'percentage' && discountValue !== "") {
+      if (parseFloat(discountValue) > 100) {
+        setDiscountValue("100");
+      }
+    } else if (newType === 'free_item') {
+      setDiscountValue(""); // clear value when switching to free item
+    }
+  };
+
   const handleMinSpendChange = (e) => {
     let val = e.target.value.replace(/[^0-9.]/g, '');
     const parts = val.split('.');
     if (parts.length > 2) {
       val = parts[0] + '.' + parts.slice(1).join('');
     }
+    
+    if (/^0+$/.test(val)) {
+      val = '';
+    } else if (val.length > 1 && val.startsWith('0') && !val.startsWith('0.')) {
+      val = val.replace(/^0+/, '');
+    }
+    
     setMinSpend(val);
   };
 
@@ -84,15 +114,13 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
           formattedValidTo = new Date(validTo).toISOString(); 
       }
 
-      // STEP 1: Create Criteria
       const criteriaPayload = {
         name: ruleName,
         discount_type: discountType,
-        min_spend: parseFloat(minSpend) || 0,
+        min_spend: parseFloat(minSpend) || 0, 
         discount_value: discountType === 'free_item' ? 0 : parseFloat(discountValue),
         free_product: discountType === 'free_item' ? selectedFreeProduct : null,
         target_product: targetProductId === "all" ? null : targetProductId,
-        
         valid_from: new Date().toISOString(), 
         valid_to: formattedValidTo 
       };
@@ -100,7 +128,6 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
       const criteriaRes = await api.post("/firstapp/coupons-criteria/", criteriaPayload);
       const newCriteriaId = criteriaRes.data.id;
 
-      // STEP 2: Create Coupon
       await api.post("/firstapp/coupons/", {
         code: code.toUpperCase(),
         criteria_id: newCriteriaId,
@@ -112,9 +139,8 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
       onSaved(); 
       onOpenChange(false);
       
-      // Reset Form
       setCode(""); setClaimLimit(""); setRuleName("");
-      setMinSpend("0"); setSelectedFreeProduct(""); setTargetProductId("all");
+      setMinSpend(""); setSelectedFreeProduct(""); setTargetProductId("all");
       setValidTo(""); setError(null);
 
     } catch (err) {
@@ -162,7 +188,6 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                       <div className="grid gap-2">
                         <div className="space-y-1">
                             <Label className="flex items-center gap-1">Total Claim & Usage Limit <Hash size={12}/></Label>
-                            {/* 🔴 Updated Claim Limit Input */}
                             <Input 
                               type="text" 
                               inputMode="numeric"
@@ -218,7 +243,8 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                 <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                         <Label>Discount Type</Label>
-                        <Select value={discountType} onValueChange={setDiscountType}>
+                        {/* 🔴 Attached the new smart Type Change Handler */}
+                        <Select value={discountType} onValueChange={handleDiscountTypeChange}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="percentage">Percentage</SelectItem>
@@ -228,7 +254,7 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                         </Select>
                     </div>
                     <div className="grid gap-2">
-                        <Label>{discountType === 'free_item' ? 'Select Item' : 'Value'}</Label>
+                        <Label>{discountType === 'percentage' ? 'Percentage %' : discountType === 'free_item' ? 'Select Item' : 'Value'}</Label>
                         {discountType === 'free_item' ? (
                             <Select value={selectedFreeProduct} onValueChange={setSelectedFreeProduct}>
                                 <SelectTrigger><SelectValue placeholder="Pick Item" /></SelectTrigger>
@@ -238,10 +264,10 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                             <Input
                               type="text" 
                               inputMode="decimal"
-                              placeholder="10" 
+                              placeholder={discountType === 'percentage' ? "e.g. 15" : "e.g. 100.00"}
                               value={discountValue} 
                               onChange={handleDiscountValueChange}
-                              maxLength={10}
+                              maxLength={discountType === 'percentage' ? 5 : 10} // 100.0 is max 5 chars
                             />
                         )}
                     </div>
@@ -254,6 +280,7 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                           type="text" 
                           inputMode="decimal"
                           className="pl-7" 
+                          placeholder="0.00"
                           value={minSpend} 
                           onChange={handleMinSpendChange}
                           maxLength={10}

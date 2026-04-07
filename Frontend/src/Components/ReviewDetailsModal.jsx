@@ -2,6 +2,18 @@ import React from 'react';
 import { Star, User, Mail, MapPin, Phone } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 
+const resolveMediaUrl = (path) => {
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path)) return path;
+
+  try {
+    const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
+    return new URL(path, baseUrl).toString();
+  } catch {
+    return path;
+  }
+};
+
 const ReviewDetailsModal = ({ open, onOpenChange, feedback }) => {
   const renderStars = (rating) => (
     <div className="flex gap-1">
@@ -13,6 +25,8 @@ const ReviewDetailsModal = ({ open, onOpenChange, feedback }) => {
 
   const isFoodReview = feedback?.food_name !== undefined;
   const modalTitle = isFoodReview ? "Food Review Details" : "Customer Review Details";
+  const profilePicUrl = resolveMediaUrl(feedback?.profile_pic);
+  const reviewImageUrl = resolveMediaUrl(feedback?.image);
 
   if (!feedback) return null;
 
@@ -28,8 +42,8 @@ const ReviewDetailsModal = ({ open, onOpenChange, feedback }) => {
           {/* USER PROFILE HEADER */}
           <div className="flex items-start gap-4 pb-4 border-b border-gray-100">
             <div className="h-14 w-14 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden shrink-0 border border-gray-200 shadow-sm">
-              {feedback.profile_pic ? (
-                <img src={feedback.profile_pic} alt="User" className="h-full w-full object-cover" />
+              {profilePicUrl ? (
+                <img src={profilePicUrl} alt="User" className="h-full w-full object-cover" />
               ) : (
                 <User size={28} className="text-gray-400" />
               )}
@@ -77,11 +91,11 @@ const ReviewDetailsModal = ({ open, onOpenChange, feedback }) => {
               <p className="text-gray-800 whitespace-pre-wrap text-sm leading-relaxed">{feedback.comment}</p>
             </div>
 
-            {feedback.image && (
+            {reviewImageUrl && (
               <div className="mt-4">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Attached Image</p>
                 <img 
-                  src={feedback.image} 
+                  src={reviewImageUrl} 
                   alt="Review attachment" 
                   className="w-full max-h-64 object-contain rounded-md border border-gray-200 bg-gray-50" 
                 />

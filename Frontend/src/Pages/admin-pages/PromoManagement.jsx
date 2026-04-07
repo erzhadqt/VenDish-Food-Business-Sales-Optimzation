@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "../../Components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../Components/ui/table";
-import { Plus, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, TimerReset, Edit } from "lucide-react"; 
+import { Plus, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, TimerReset, Edit, Package } from "lucide-react"; 
 import api from "../../api";
 import AddDiscountDialog from "../../Components/AddDiscountDialog"; 
 import DeleteConfirmDialog from "../../Components/DeleteConfirmDialog";
@@ -9,7 +9,7 @@ import { Skeleton } from "../../Components/ui/skeleton";
 
 import ManagePosLimitDialog from "../../Components/ManagePosLimitDialog";
 import SuccessAlert from "../../Components/SuccessAlert";
-import EditCouponDialog from "../../Components/EditCouponDialog"; // +++ IMPORT EDIT DIALOG +++
+import EditCouponDialog from "../../Components/EditCouponDialog"; 
 
 const PromoManagement = () => {
   const [coupons, setCoupons] = useState([]);
@@ -39,7 +39,7 @@ const PromoManagement = () => {
         const [couponRes, prodRes, settingsRes] = await Promise.all([
           api.get("/firstapp/coupons/"),
           api.get("/firstapp/products/"),
-          api.get(`/settings/?t=${new Date().getTime()}`) // Fetch current limit
+          api.get(`/settings/?t=${new Date().getTime()}`) 
         ]);
         
         setCoupons(couponRes.data);
@@ -102,6 +102,13 @@ const PromoManagement = () => {
     }
   };
 
+  // 🔴 HELPER LOGIC: Map the Target Product ID to Product Name
+  const getTargetProductName = (targetProductId) => {
+    if (!targetProductId) return "Entire Order";
+    const product = products.find(p => String(p.id) === String(targetProductId));
+    return product ? product.product_name : "Unknown Product";
+  };
+
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentCoupons = coupons.slice(indexOfFirstItem, indexOfLastItem);
@@ -138,8 +145,10 @@ const PromoManagement = () => {
         {loading ? (
           <div className="space-y-3">
             <Skeleton className="h-10 w-full" />
+            {/* Added 8 skeleton columns instead of 7 to account for new table head */}
             {Array.from({ length: itemsPerPage }).map((_, index) => (
-              <div key={index} className="grid grid-cols-7 gap-3">
+              <div key={index} className="grid grid-cols-8 gap-3">
+                <Skeleton className="h-5 w-full" />
                 <Skeleton className="h-5 w-full" />
                 <Skeleton className="h-5 w-full" />
                 <Skeleton className="h-5 w-full" />
@@ -157,6 +166,8 @@ const PromoManagement = () => {
               <TableHead>Code</TableHead>
               <TableHead>Promo Name</TableHead>
               <TableHead>Discount Details</TableHead>
+              {/* 🔴 NEW TABLE HEAD */}
+              <TableHead>Applicable Product</TableHead>
               <TableHead>Expiration</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Stats (Claims / Uses)</TableHead>
@@ -193,6 +204,16 @@ const PromoManagement = () => {
                         </div>
                     </TableCell>
 
+                    {/* 🔴 NEW TABLE CELL RENDERING THE PRODUCT TARGET */}
+                    <TableCell>
+                        <div className="flex items-center gap-1.5 text-sm text-gray-600 bg-gray-50 border border-gray-100 rounded-md px-2 py-1 w-max">
+                            <Package size={14} className="text-gray-400" />
+                            <span className={!coupon.criteria_details?.target_product ? "font-bold text-gray-800" : "font-medium"}>
+                                {getTargetProductName(coupon.criteria_details?.target_product)}
+                            </span>
+                        </div>
+                    </TableCell>
+
                     <TableCell className="text-sm text-gray-600">
                         {formatDate(coupon.criteria_details?.valid_to)}
                     </TableCell>
@@ -219,7 +240,6 @@ const PromoManagement = () => {
                         </div>
                     </TableCell>
 
-                    {/* +++ UPDATED TABLE CELL WITH EDIT BUTTON +++ */}
                     <TableCell className="text-right">
                         <div className="flex justify-end items-center gap-1">
                              <Button variant="ghost" size="icon" className="h-9 w-9 text-blue-600 hover:text-blue-800 hover:bg-blue-50" onClick={() => handleEditClick(coupon)}>
@@ -238,7 +258,8 @@ const PromoManagement = () => {
             })}
             {coupons.length === 0 && (
                 <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-gray-400">
+                    {/* Adjusted colSpan to 8 for the new column */}
+                    <TableCell colSpan={8} className="text-center py-8 text-gray-400">
                         No active coupons found. Create one to get started.
                     </TableCell>
                 </TableRow>
@@ -286,7 +307,6 @@ const PromoManagement = () => {
         onSaved={fetchData} 
       />
 
-      {/* +++ ADDED THE EDIT DIALOG HERE +++ */}
       <EditCouponDialog 
         open={isEditOpen} 
         onOpenChange={setIsEditOpen} 

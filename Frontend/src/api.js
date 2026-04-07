@@ -18,6 +18,11 @@ const isOnPublicAuthPage = () => {
 
 api.interceptors.request.use(
     async (config) => {
+        // 🔴 FIX: Prevent Double-Slash URL Redirects that drop POST bodies in Production
+        if (config.url) {
+            config.url = config.url.replace(/([^:]\/)\/+/g, "$1");
+        }
+
         if (config.url?.includes('/users/token/') || config.url?.includes('/users/token/refresh/')) {
             return config;
         }
