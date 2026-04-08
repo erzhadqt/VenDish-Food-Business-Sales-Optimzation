@@ -9,14 +9,16 @@ import {
   ChevronRight,
   Filter,
   EllipsisVertical,
-  UserRoundX,
-  Search
+  Search,
+  UserStarIcon
 } from "lucide-react";
 
 import UpdateUserDialog from "../../Components/UpdateUserDialog";
 import ConfirmDeleteUserDialog from "../../Components/ConfirmDeleteUserDialog";
 import AddUserDialog from "../../Components/AddUserDialog";
 import BlockUserDialog from "../../Components/BlockUserDialog";
+import AdminAccountDialog from "../../Components/AdminAccountDialog";
+import DeleteConfirmDialog from "../../Components/DeleteConfirmDialog";
 import SuccessAlert from "../../Components/SuccessAlert";
 import UserDetailsModal from "../../Components/UserDetailsModal";
 import { Skeleton } from "../../Components/ui/skeleton";
@@ -26,6 +28,7 @@ export default function UserManagement() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [viewDetailsUser, setViewDetailsUser] = useState(null); 
   const [loading, setLoading] = useState(false);
+  const [cleanupLoading, setCleanupLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -71,13 +74,24 @@ export default function UserManagement() {
   }, []);
 
   const getUserStatus = (user) => {
+    if (user?.account_status) return user.account_status;
     if (user.is_active) return "Active";
     if (user.is_staff && !user.is_active) return "Pending";
     return "Deactivated";
   };
 
+  const getUserRole = (user) => {
+    if (user?.role) return user.role;
+    if (user?.is_staff && user?.is_superuser) return "admin";
+    if (user?.is_staff) return "staff";
+    return "user";
+  };
+
+  // Hide admin/superadmin accounts from the management table
+  const visibleUsers = users.filter((user) => getUserRole(user) !== "admin");
+
   // Filter & Search Logic
-  const filteredUsers = users.filter((user) => {
+  const filteredUsers = visibleUsers.filter((user) => {
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       const matchesUsername = user.username?.toLowerCase().includes(query);
@@ -86,8 +100,9 @@ export default function UserManagement() {
       if (!matchesUsername && !matchesEmail) return false;
     }
 
-    if (filterRole === "Staff" && user.is_staff !== true) return false;
-    if (filterRole === "User" && (user.is_staff !== false && user.is_staff !== undefined)) return false;
+    const role = getUserRole(user);
+    if (filterRole === "Staff" && role !== "staff") return false;
+    if (filterRole === "User" && role !== "user") return false;
 
     const status = getUserStatus(user);
     if (filterStatus !== "All" && status !== filterStatus) return false;
@@ -136,20 +151,50 @@ export default function UserManagement() {
     triggerSuccessAlert("User account updated successfully!");
   };
 
+  const handleAdminSaved = (message = "Admin account updated successfully.") => {
+    fetchUsers();
+    triggerSuccessAlert(message);
+  };
+
+  const handleCleanupDeactivated = async () => {
+    setCleanupLoading(true);
+    try {
+      const res = await api.post("/firstapp/users/cleanup-deactivated/");
+      const deletedCount = Number(res?.data?.deleted_count || 0);
+
+      await fetchUsers();
+
+      if (deletedCount > 0) {
+        triggerSuccessAlert(`Cleanup complete: ${deletedCount} deactivated user account(s) deleted.`);
+      } else {
+        triggerSuccessAlert("Cleanup complete: no eligible deactivated user accounts found.");
+      }
+    } catch (err) {
+      console.error("Failed to clean up deactivated users", err);
+      const backendMessage = err?.response?.data?.error || err?.response?.data?.message;
+      window.alert(backendMessage || "Failed to run cleanup.");
+    } finally {
+      setCleanupLoading(false);
+    }
+  };
+
   const handlePrevPage = () => setCurrentPage((prev) => Math.max(prev - 1, 1));
   const handleNextPage = () => setCurrentPage((prev) => Math.min(prev + 1, totalPages));
 
   return (
-    <div className="w-full py-6">
-      <div className="max-w-7xl mx-auto px-2">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-          <h1 className="flex items-center gap-3 text-3xl font-bold text-gray-900">
+    <div className="w-full pt-8">
+      <div className="max-w-8xl  px-2">
+        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-8 gap-6">
+          {/* Page Title */}
+          <h1 className="flex items-center gap-3 text-3xl font-bold text-gray-900 whitespace-nowrap">
             <UserCogIcon size={32} className="text-gray-700" /> User Management
           </h1>
 
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Controls & Actions Container - Strictly Inline */}
+          <div className="flex flex-row items-center gap-3 w-full xl:w-auto overflow-x-auto pb-2 xl:pb-0">
             
-            <div className="relative group flex-grow md:flex-grow-0">
+            {/* Search */}
+            <div className="relative group shrink-0">
               <Search
                 size={20}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
@@ -159,11 +204,12 @@ export default function UserManagement() {
                 placeholder="Search users..."
                 value={searchQuery}
                 onChange={handleSearchChange}
-                className="pl-10 pr-4 py-2.5 w-full md:w-64 bg-white border border-gray-300 text-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent shadow-sm transition-colors"
+                className="pl-10 pr-4 py-2.5 w-56 lg:w-64 bg-white border border-gray-300 text-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent shadow-sm transition-colors"
               />
             </div>
 
-            <div className="relative group">
+            {/* Role Filter */}
+            <div className="relative group shrink-0">
               <Filter
                 size={20}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none"
@@ -179,7 +225,8 @@ export default function UserManagement() {
               </select>
             </div>
 
-            <div className="relative group">
+            {/* Status Filter */}
+            <div className="relative group shrink-0">
               <Filter
                 size={20}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none"
@@ -196,11 +243,20 @@ export default function UserManagement() {
               </select>
             </div>
 
+            {/* Admin Account Button */}
+            <AdminAccountDialog onSaved={handleAdminSaved}>
+              <button className="shrink-0 flex justify-center items-center gap-2 bg-gray-900 hover:bg-gray-800 text-white px-4 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm whitespace-nowrap">
+                <UserStarIcon size={20}/> Admin Account
+              </button>
+            </AdminAccountDialog>
+
+            {/* Add User Button */}
             <AddUserDialog onSaved={handleAdded}>
-              <button className="flex gap-2 items-center bg-gray-900 hover:bg-gray-800 text-white px-4 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm">
-                <UserPlus size={20} /> User
+              <button className="shrink-0 flex justify-center items-center gap-2 bg-gray-900 hover:bg-gray-800 text-white px-4 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm whitespace-nowrap">
+                <UserPlus size={20} /> Add User
               </button>
             </AddUserDialog>
+
           </div>
         </div>
 
@@ -233,14 +289,30 @@ export default function UserManagement() {
           </div>
         )}
 
-        {!loading && users.length === 0 && (
+        {!loading && visibleUsers.length === 0 && (
           <div className="text-center py-16">
             <p className="text-gray-400 text-lg">No users found.</p>
           </div>
         )}
 
-        {!loading && users.length > 0 && (
+        {!loading && visibleUsers.length > 0 && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="flex justify-end items-center px-3 py-2 border-b border-gray-200 bg-gray-50">
+              <DeleteConfirmDialog
+                onConfirm={handleCleanupDeactivated}
+                title="Clean Deactivated User Accounts"
+                description="This will permanently delete regular user accounts that were deactivated for more than 30 days. Staff and admin accounts are excluded."
+              >
+                <button
+                  disabled={cleanupLoading}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-red-300 bg-white text-red-700 text-xs font-semibold hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Delete deactivated user-role accounts older than 30 days"
+                >
+                  <Trash2Icon size={14} />
+                  {cleanupLoading ? "Cleaning..." : "Clean Deactivated Users"}
+                </button>
+              </DeleteConfirmDialog>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
@@ -262,6 +334,7 @@ export default function UserManagement() {
                   ) : (
                     paginatedUsers.map((u) => {
                       const currentStatus = getUserStatus(u);
+                      const role = getUserRole(u);
                       
                       return (
                       <tr
@@ -271,7 +344,7 @@ export default function UserManagement() {
                         <td className="py-3 px-3 text-sm font-medium text-gray-900">{u.username}</td>
                         <td className="py-3 px-3 text-sm text-gray-600">{u.email}</td>
                         <td className="py-3 px-3 text-sm">
-                          {u.is_staff ? (
+                          {role === "staff" ? (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
                               Staff
                             </span>

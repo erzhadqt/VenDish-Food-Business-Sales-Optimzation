@@ -118,7 +118,7 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
 
     return (
         <Dialog open={true} onOpenChange={handleClose}>
-            <DialogContent className="sm:max-w-[450px] z-50">
+            <DialogContent className="sm:max-w-112.5 z-50">
                 <DialogHeader>
                     <DialogTitle>Manage User Permissions</DialogTitle>
                     <DialogDescription>
@@ -150,8 +150,7 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
                         {error && (
                             <Alert variant="destructive">
                                 <AlertCircle className="h-4 w-4" />
-                                <AlertTitle>Error</AlertTitle>
-                                <AlertDescription className="break-words">
+                                <AlertDescription className="wrap-break-word">
                                     {error}
                                 </AlertDescription>
                             </Alert>

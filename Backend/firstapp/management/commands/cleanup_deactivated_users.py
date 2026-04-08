@@ -4,15 +4,17 @@ from django.utils import timezone
 from datetime import timedelta
 
 class Command(BaseCommand):
-    help = 'Deletes user accounts that have been deactivated for more than 30 days.'
+    help = 'Deletes only non-staff user accounts that have been deactivated for more than 30 days.'
 
     def handle(self, *args, **kwargs):
         # Calculate the cutoff date (exactly 30 days ago)
         thirty_days_ago = timezone.now() - timedelta(days=30)
         
-        # Query: Find users who are NOT active AND whose deactivation date is older than 30 days
+        # Query: Find ONLY regular users who are deactivated for at least 30 days.
+        # Staff/admin accounts are always excluded from this cleanup.
         users_to_delete = User.objects.filter(
             is_active=False,
+            is_staff=False,
             profile__deactivated_at__lte=thirty_days_ago
         )
 

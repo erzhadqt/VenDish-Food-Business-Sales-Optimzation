@@ -45,6 +45,8 @@ export default function GCashPaymentModal({
   const [manualReference, setManualReference] = useState("");
   // NEW: State to toggle between the QR code and the manual fallback instructions
   const [showFallback, setShowFallback] = useState(false);
+  const normalizedReference = manualReference.trim().replace(/\s+/g, "");
+  const referencePreview = normalizedReference.replace(/(.{4})/g, "$1 ").trim();
 
   // Clear inputs and reset views when the modal opens/closes
   useEffect(() => {
@@ -56,7 +58,7 @@ export default function GCashPaymentModal({
 
   const handleFinalize = () => {
     if (isPaid) {
-      onFinalize(manualReference.trim() || initialReference);
+      onFinalize(normalizedReference || initialReference);
     } else {
       onCancel();
     }
@@ -188,6 +190,17 @@ export default function GCashPaymentModal({
               <p className="text-xs text-gray-500 italic">
                 Input the reference number from the customer's successful payment screen to print on the receipt.
               </p>
+
+              {normalizedReference && (
+                <div className="mt-2 w-full rounded-xl border-2 border-emerald-300 bg-emerald-50 p-4 text-center animate-in fade-in zoom-in-95 duration-200">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-emerald-700">
+                    Double-check Reference Number
+                  </p>
+                  <p className="mt-2 font-mono text-2xl sm:text-3xl font-black tracking-[0.15em] text-emerald-900 break-all">
+                    {referencePreview}
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -216,7 +229,7 @@ export default function GCashPaymentModal({
             variant={isPaid ? "default" : "destructive"} 
             onClick={handleFinalize} 
             className={`w-full sm:w-auto ${isPaid ? "bg-green-600 hover:bg-green-700 text-white font-bold shadow-md" : ""}`}
-            disabled={isPaid && manualReference.trim().length < 5} 
+            disabled={isPaid && normalizedReference.length < 5} 
           >
             {isPaid ? "Finalize & Print Receipt" : "Cancel Payment"}
           </Button>

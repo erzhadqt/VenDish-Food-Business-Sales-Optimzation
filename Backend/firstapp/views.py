@@ -397,6 +397,34 @@ class UserViewSet(viewsets.ModelViewSet):
 
         return Response({"message": "Account deactivated successfully. It will be permanently deleted in 30 days."}, status=status.HTTP_200_OK)
 
+    @action(detail=False, methods=['post'], permission_classes=[IsAdminUser], url_path='cleanup-deactivated')
+    def cleanup_deactivated(self, request):
+        """
+        Manual cleanup endpoint for admins.
+        Deletes only regular-user accounts (non-staff, non-superuser)
+        that have been deactivated for at least 30 days.
+        """
+        thirty_days_ago = timezone.now() - timedelta(days=30)
+
+        users_to_delete = User.objects.filter(
+            is_active=False,
+            is_staff=False,
+            is_superuser=False,
+            profile__deactivated_at__lte=thirty_days_ago,
+        )
+
+        deleted_count = users_to_delete.count()
+        if deleted_count:
+            users_to_delete.delete()
+
+        return Response(
+            {
+                "message": f"Cleanup complete. Deleted {deleted_count} deactivated user account(s).",
+                "deleted_count": deleted_count,
+            },
+            status=status.HTTP_200_OK,
+        )
+
     @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated], url_path='claimed-coupons')
     def claimed_coupons(self, request, pk=None):
         if not (request.user.is_staff or request.user.is_superuser):
@@ -1320,6 +1348,11 @@ class DailySalesReportViewSet(viewsets.ViewSet):
 class ReviewViewSet(viewsets.ModelViewSet):
     queryset = Review.objects.all().order_by('-created_at')
     serializer_class = ReviewSerializer
+
+    def _can_modify_review(self, user, review_obj):
+        return bool(user and user.is_authenticated and (
+            user.is_superuser or user.is_staff or review_obj.user_id == user.id
+        ))
     
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
@@ -1369,9 +1402,36 @@ class ReviewViewSet(viewsets.ModelViewSet):
 
         return super().create(request, *args, **kwargs)
 
+    def update(self, request, *args, **kwargs):
+        review_obj = self.get_object()
+        if not self._can_modify_review(request.user, review_obj):
+            return Response({'error': 'You can only edit your own review.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        review_obj = self.get_object()
+        if not self._can_modify_review(request.user, review_obj):
+            return Response({'error': 'You can only edit your own review.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        review_obj = self.get_object()
+        if not self._can_modify_review(request.user, review_obj):
+            return Response({'error': 'You can only delete your own review.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
+
     def perform_create(self, serializer):
         # Automatically attach the authenticated user to the review
         serializer.save(user=self.request.user)
+
+    def perform_update(self, serializer):
+        # Keep ownership/type linkage immutable when editing a review.
+        instance = serializer.instance
+        serializer.save(
+            user=instance.user,
+            review_type=instance.review_type,
+            product=instance.product,
+        )
 
 class FeedbackViewSet(viewsets.ModelViewSet):
     queryset = Feedback.objects.all()
@@ -1698,58 +1758,3 @@ class StoreSettingsView(APIView):
             "max_coupons_per_order": settings.max_coupons_per_order,
             "pos_cash_balance": settings.pos_cash_balance # [NEW] Return updated balance
         }, status=status.HTTP_200_OK)
-
-
-# -------------------------------
-# GOOGLE LOGIN
-# -------------------------------
-
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
-from django.contrib.auth.models import User
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
-from rest_framework.response import Response
-
-# Using your web client ID strictly as required by Google
-WEB_CLIENT_ID = "237740845578-63er3d1u7p1ebte89tm00o7asfpjhtp5.apps.googleusercontent.com"
-
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def google_login(request):
-    token = request.data.get('token')
-    if not token:
-        return Response({'error': 'Token is missing'}, status=400)
-
-    try:
-        # Verify Token
-        idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), WEB_CLIENT_ID)
-        email = idinfo['email']
-
-        # Get or create the user
-        user, created = User.objects.get_or_create(username=email, defaults={
-            'email': email,
-            'first_name': idinfo.get('given_name', ''),
-            'last_name': idinfo.get('family_name', '')
-        })
-
-        # Generate standard JWT Tokens matching your format (SimpleJWT)
-        from rest_framework_simplejwt.tokens import RefreshToken
-        refresh = RefreshToken.for_user(user)
-
-        return Response({
-            'message': 'Login successful',
-            'access': str(refresh.access_token),
-            'refresh': str(refresh),
-            'user': {
-                'id': user.id,
-                'username': user.username,
-                'email': user.email,
-                'first_name': user.first_name,
-                'last_name': user.last_name,
-                'name': f"{user.first_name} {user.last_name}".strip()
-            }
-        })
-        
-    except ValueError:
-        return Response({'error': 'Invalid token'}, status=403)

@@ -218,8 +218,7 @@ const HomePage = () => {
               Get our app now <ArrowDownIcon size={24} className="sm:w-[26px] sm:h-[26px]" />
             </p>
             <button
-              // onClick={() => navigate('https://expo.dev/artifacts/eas/GgaqqRCoibyFdMSPFF6zN.apk')}/
-              onClick={() => window.location.replace('https://expo.dev/artifacts/eas/GgaqqRCoibyFdMSPFF6zN.apk')}
+              onClick={() => window.location.replace('https://expo.dev/artifacts/eas/pX1PYjw5N7sRdNQiGFCjj8.apk')}
               className="bg-red-600 px-6 py-3 rounded-xl text-lg sm:text-xl font-bold text-white flex items-center gap-2 hover:bg-red-700 transition-all w-full sm:w-auto justify-center"
             >
               Get app

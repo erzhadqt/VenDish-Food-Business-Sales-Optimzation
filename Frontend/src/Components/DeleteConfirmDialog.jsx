@@ -10,6 +10,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogCancel,
+  AlertDialogAction,
 } from "../Components/ui/alert-dialog";
 
 export default function DeleteConfirmDialog({ onConfirm, title, description, children }) {
@@ -28,7 +29,6 @@ export default function DeleteConfirmDialog({ onConfirm, title, description, chi
             )}
         </AlertDialogTrigger>
 
-      {/* ... the rest of your component stays the same */}
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title || "Confirm Deletion"}</AlertDialogTitle>
@@ -41,9 +41,11 @@ export default function DeleteConfirmDialog({ onConfirm, title, description, chi
           <AlertDialogCancel asChild>
             <Button variant="outline">Cancel</Button>
           </AlertDialogCancel>
-          <Button variant="destructive" onClick={onConfirm}>
-            Delete
-          </Button>
+          <AlertDialogAction asChild>
+            <Button variant="destructive" onClick={onConfirm}>
+              Delete
+            </Button>
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

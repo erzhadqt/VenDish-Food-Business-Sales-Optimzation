@@ -5,7 +5,7 @@ from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 
-from .models import Product, Category, Receipt, ReceiptItem, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, Review, UserProfile, OTP, Notification
+from .models import Product, Category, Receipt, ReceiptItem, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, Review, UserProfile, OTP, Notification, StaffInvitationToken
 
 class UserSerializer(serializers.ModelSerializer):
     # [NEW] Map fields from the Profile relationship
@@ -14,17 +14,42 @@ class UserSerializer(serializers.ModelSerializer):
     address = serializers.CharField(source='profile.address', required=False, allow_blank=True)
     profile_pic = serializers.ImageField(source='profile.profile_pic', required=False, allow_null=True)
     has_completed_transaction = serializers.SerializerMethodField(read_only=True)
+    role = serializers.SerializerMethodField(read_only=True)
+    account_status = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = User
-        fields = ["id", "username", "email", "first_name", "last_name", "middle_name", "phone", "address", "profile_pic", "password", "is_superuser", "is_staff", "is_active", "has_completed_transaction"]
+        fields = ["id", "username", "email", "first_name", "last_name", "middle_name", "phone", "address", "profile_pic", "password", "is_superuser", "is_staff", "is_active", "has_completed_transaction", "role", "account_status"]
         extra_kwargs = {"password": {"write_only": True},
                         "is_superuser": {"read_only": True}}
+
+    def _pending_invitation_user_ids(self):
+        if not hasattr(self, '_pending_invitation_user_ids_cache'):
+            self._pending_invitation_user_ids_cache = set(
+                StaffInvitationToken.objects.filter(is_valid=True).values_list('user_id', flat=True)
+            )
+        return self._pending_invitation_user_ids_cache
 
     def get_has_completed_transaction(self, obj):
         # Check if the user has any receipt where they are the customer and status is completed
         # Excluding voided ones, assuming status=COMPLETED is what we count
         return obj.customer_receipts.filter(status=Receipt.Status.COMPLETED).exists()
+
+    def get_role(self, obj):
+        if obj.is_staff and obj.is_superuser:
+            return "admin"
+        if obj.is_staff:
+            return "staff"
+        return "user"
+
+    def get_account_status(self, obj):
+        if obj.is_active:
+            return "Active"
+
+        if obj.is_staff and obj.id in self._pending_invitation_user_ids():
+            return "Pending"
+
+        return "Deactivated"
 
     def validate_email(self, value):
         if value:
@@ -75,6 +100,7 @@ class UserSerializer(serializers.ModelSerializer):
         # Handle profile update
         profile_data = validated_data.pop('profile', {})
         raw_password = validated_data.pop('password', None)
+        previous_is_active = instance.is_active
         
         # Update standard User fields
         for attr, value in validated_data.items():
@@ -85,11 +111,31 @@ class UserSerializer(serializers.ModelSerializer):
 
         instance.save()
 
+        profile = getattr(instance, 'profile', None)
+        if profile is None:
+            profile, _ = UserProfile.objects.get_or_create(user=instance)
+
+        profile_dirty = False
+
         # Update Profile fields
         if profile_data:
             for attr, value in profile_data.items():
-                setattr(instance.profile, attr, value)
-            instance.profile.save()
+                setattr(profile, attr, value)
+            profile_dirty = True
+
+        # Keep account lifecycle metadata in sync with is_active changes.
+        if 'is_active' in validated_data and previous_is_active != instance.is_active:
+            if instance.is_active:
+                if profile.deactivated_at is not None:
+                    profile.deactivated_at = None
+                    profile_dirty = True
+            else:
+                profile.deactivated_at = timezone.now()
+                profile_dirty = True
+                StaffInvitationToken.objects.filter(user=instance, is_valid=True).update(is_valid=False)
+
+        if profile_dirty:
+            profile.save()
             
         return instance
     
@@ -300,7 +346,7 @@ class ReceiptSerializer(serializers.ModelSerializer):
             'void_reason',
             'cashier_name'
         ]
-        read_only_fields = ['payment_status', 'paid_at', 'provider_payment_id', 'provider_reference']
+        read_only_fields = ['payment_status', 'paid_at', 'provider_payment_id']
 
     def get_cashier_name(self, obj):
         return obj.cashier.username if obj.cashier else "Unknown"
