@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { ACCESS_TOKEN, REFRESH_TOKEN } from './constants'
-import { isTokenExpired, isSessionValid } from './utils/tokenUtils'
+import { isTokenExpired } from './utils/tokenUtils'
 
 const url = import.meta.env.VITE_API_URL
 
@@ -8,7 +8,29 @@ const api = axios.create({
     baseURL: url
 })
 
-const PUBLIC_AUTH_PATHS = ['/login', '/forgotPassword', '/setAccount'];
+const AUTH_TOKEN_PATHS = [
+    '/firstapp/token/',
+    '/firstapp/token/refresh/',
+    '/users/token/',
+    '/users/token/refresh/',
+];
+
+const PUBLIC_AUTH_PATHS = [
+    '/kuyavincekarinderya',
+    '/kuyavincekarinderya-signup',
+    '/verify-staff',
+    '/login',
+    '/forgotPassword',
+    '/setAccount',
+];
+
+const isAuthTokenRequest = (requestUrl = '') => {
+    return AUTH_TOKEN_PATHS.some(path => requestUrl.includes(path));
+}
+
+const shouldSkipAuthHandling = (config) => {
+    return Boolean(config?.skipAuthRefresh) || isAuthTokenRequest(config?.url || '');
+}
 
 const isOnPublicAuthPage = () => {
     if (typeof window === 'undefined') return false;
@@ -23,7 +45,7 @@ api.interceptors.request.use(
             config.url = config.url.replace(/([^:]\/)\/+/g, "$1");
         }
 
-        if (config.url?.includes('/users/token/') || config.url?.includes('/users/token/refresh/')) {
+        if (shouldSkipAuthHandling(config)) {
             return config;
         }
 
@@ -79,7 +101,7 @@ const refreshAccessToken = async () => {
     isRefreshing = true;
 
     try {
-        const res = await axios.post(`${url}/users/token/refresh/`, { refresh });
+        const res = await axios.post(`${url}/firstapp/token/refresh/`, { refresh });
         const access = res.data.access;
 
         localStorage.setItem(ACCESS_TOKEN, access)
@@ -108,7 +130,12 @@ api.interceptors.response.use(
     async error => {
         const request = error.config;
 
-        if (error.response?.status === 401 && !request._retry) {
+        if (
+            error.response?.status === 401 &&
+            request &&
+            !request._retry &&
+            !shouldSkipAuthHandling(request)
+        ) {
             request._retry = true;
 
             try {

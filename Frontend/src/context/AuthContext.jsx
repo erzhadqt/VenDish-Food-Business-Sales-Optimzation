@@ -34,11 +34,18 @@ export const AuthProvider = ({ children }) => {
   // Login function
   const login = async (username, password) => {
     try {
-      const response = await api.post("/firstapp/token/", {
-        username,
-        password,
-        platform: "web",
-      });
+      const response = await api.post(
+        "/firstapp/token/",
+        {
+          username,
+          password,
+          platform: "web",
+        },
+        {
+          // Do not trigger token-refresh fallback for credential failures.
+          skipAuthRefresh: true,
+        }
+      );
       const { access, refresh } = response.data;
 
       localStorage.setItem("access", access);
@@ -50,9 +57,18 @@ export const AuthProvider = ({ children }) => {
       return { success: true };
     } catch (error) {
       console.error("Login failed:", error);
+      localStorage.removeItem("access");
+      localStorage.removeItem("refresh");
+      setUser(null);
+
+      const errorMessage =
+        error.response?.data?.detail ||
+        error.response?.data?.error ||
+        "Invalid credentials";
+
       return {
         success: false,
-        message: error.response?.data?.detail || "Invalid credentials"
+        message: errorMessage,
       };
     }
   };
