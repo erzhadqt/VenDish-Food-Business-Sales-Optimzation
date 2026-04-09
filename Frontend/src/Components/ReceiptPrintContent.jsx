@@ -21,71 +21,66 @@ const ReceiptPrintContent = forwardRef(({ transactionData }, ref) => {
     <div ref={ref} id="receipt" style={{ background: '#fff', color: '#000' }}>
       <style>{`
         @media print {
-          @page {
-            size: 58mm auto;
-            margin: 2mm 1mm;
-          }
-          html, body {
-            margin: 0 !important;
-            padding: 20 !important;
-          }
-
-          #receipt {
-            width: 58mm !important;
-            max-width: 58mm !important;
-            margin: 0 !important;
-            padding: 1mm !important;
-            box-sizing: border-box !important;
-            overflow: hidden !important;
-            display: block !important;
-            visibility: visible !important;
-          }
-
-          #receipt, #receipt * {
-            font-family: 'Courier New', 'Lucida Console', monospace !important;
-            font-size: 10px !important;
-            font-weight: 600 !important;
-            line-height: 1.3 !important;
-            color: #000 !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-            visibility: visible !important;
-          }
-
-          #receipt h5 {
-            font-size: 12px !important;
-            font-weight: 800 !important;
-          }
-
-          #receipt table {
-            width: 100% !important;
-            table-layout: fixed !important;
-            border-collapse: collapse !important;
-            word-wrap: break-word !important;
-            overflow-wrap: break-word !important;
-          }
-
-          #receipt td, #receipt th {
-            padding: 1px 0 !important;
-            vertical-align: top !important;
-            word-wrap: break-word !important;
-            overflow-wrap: break-word !important;
-          }
-
-          .receipt-row {
-            display: flex !important;
-            justify-content: space-between !important;
-            width: 100% !important;
-          }
-
-          .overflow-y-auto { 
-            overflow: visible !important;
-            max-height: none !important;
-          }
+        @page {
+          size: 58mm auto;
+          margin: 0mm !important; /* FIX 1: Force zero browser margins */
         }
+        
+        /* Target the iframe injected by react-to-print */
+        html, body {
+          width: 58mm !important;
+          margin: 0 !important;
+          padding: 0 !important; /* FIX 2: Removed the 20px padding */
+          background: #fff !important;
+        }
+
+        #receipt {
+          width: 58mm !important;
+          max-width: 58mm !important;
+          margin: 0 auto !important; /* Center if there's any micro-gap */
+          padding: 0 !important;
+          box-sizing: border-box !important;
+          overflow: hidden !important;
+          display: block !important;
+        }
+
+        #receipt, #receipt * {
+          font-family: 'Courier New', 'Lucida Console', monospace !important;
+          font-size: 10px !important;
+          font-weight: 600 !important;
+          line-height: 1.3 !important;
+          color: #000 !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+
+        #receipt h5 {
+          font-size: 12px !important;
+          font-weight: 800 !important;
+        }
+
+        #receipt table {
+          width: 100% !important;
+          table-layout: fixed !important;
+          border-collapse: collapse !important;
+        }
+
+        #receipt td, #receipt th {
+          padding: 1px 0 !important;
+          vertical-align: top !important;
+          word-wrap: break-word !important;
+          overflow-wrap: break-word !important;
+        }
+
+        .receipt-row {
+          display: flex !important;
+          justify-content: space-between !important;
+          width: 100% !important;
+        }
+      }
       `}</style>
 
-      <div style={{ width: '58mm', maxWidth: '58mm', padding: '1mm', boxSizing: 'border-box', fontFamily: "'Courier New', monospace", fontSize: '10px' }}>
+      <div style={{ width: '58mm', maxWidth: '58mm', padding: '2mm', boxSizing: 'border-box', fontFamily: "'Courier New', monospace", fontSize: '10px', margin: '0' }}>
 
         {/* HEADER */}
         <h5 style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '11px', marginBottom: '2px', textTransform: 'uppercase', lineHeight: '1.2' }}>
