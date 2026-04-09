@@ -21,11 +21,12 @@ from django.urls import path, include
 
 from rest_framework.permissions import AllowAny
 
-from firstapp.views import CreateUserView, UserViewSet, UserDetailView, HomePageViewSet, AboutPageViewSet, ContactPageViewSet, CurrentUserView, OTPViewSet, VerifyOTPViewSet, ChangePasswordViaToken, VerifyVoidPinView, UpdateVoidPinView, StoreSettingsView, SafeTokenRefreshView, PlatformTokenObtainPairView
+from firstapp.views import CreateUserView, UserViewSet, UserDetailView, HomePageViewSet, AboutPageViewSet, ContactPageViewSet, CurrentUserView, OTPViewSet, VerifyOTPViewSet, ChangePasswordViaToken, VerifyVoidPinView, UpdateVoidPinView, StoreSettingsView, SafeTokenRefreshView, PlatformTokenObtainPairView, trigger_deactivated_cleanup
 
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('trigger-cleanup-deactivated/', trigger_deactivated_cleanup, name='trigger_cleanup_deactivated_root'),
     path('firstapp/user/register/', CreateUserView.as_view(), name='register'),
     path('firstapp/token/', PlatformTokenObtainPairView.as_view(permission_classes=[AllowAny]), name='get_token'),
     path('firstapp/token/refresh/', SafeTokenRefreshView.as_view(permission_classes=[AllowAny]), name='refresh'),

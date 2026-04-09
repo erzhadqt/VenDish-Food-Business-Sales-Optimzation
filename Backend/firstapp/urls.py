@@ -1,5 +1,5 @@
 from django.urls import path, include
-from .views import ProductViewSet, CategoryViewSet, FeedbackViewSet, ReceiptViewSet, CouponViewSet, HomePageViewSet, ServicesPageViewSet, AboutPageViewSet, ContactPageViewSet, UserViewSet, DailySalesReportViewSet, CouponCriteriaViewSet, ReviewViewSet, GCashPaymentCreateView, GCashPaymentStatusView, GCashPaymentWebhookView, GCashAttachReceiptView, GCashPaymentFinalizeByReferenceView, GCashReconciliationView, NotificationViewSet
+from .views import ProductViewSet, CategoryViewSet, FeedbackViewSet, ReceiptViewSet, CouponViewSet, HomePageViewSet, ServicesPageViewSet, AboutPageViewSet, ContactPageViewSet, UserViewSet, DailySalesReportViewSet, CouponCriteriaViewSet, ReviewViewSet, GCashPaymentCreateView, GCashPaymentStatusView, GCashPaymentWebhookView, GCashAttachReceiptView, GCashPaymentFinalizeByReferenceView, GCashReconciliationView, NotificationViewSet, trigger_deactivated_cleanup
 
 from rest_framework.routers import DefaultRouter
 
@@ -26,6 +26,7 @@ router.register(r'notifications', NotificationViewSet, basename='notification')
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('trigger-cleanup-deactivated/', trigger_deactivated_cleanup, name='trigger-cleanup-deactivated'),
     path('payments/gcash/create/', GCashPaymentCreateView.as_view(), name='gcash-payment-create'),
     path('payments/gcash/<int:transaction_id>/status/', GCashPaymentStatusView.as_view(), name='gcash-payment-status'),
     path('payments/gcash/webhook/', GCashPaymentWebhookView.as_view(), name='gcash-payment-webhook'),

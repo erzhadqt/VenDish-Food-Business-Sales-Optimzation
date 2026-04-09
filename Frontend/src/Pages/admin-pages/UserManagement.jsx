@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import api from "../../api";
 import { 
-  Trash2Icon, 
   UserCogIcon, 
   UserPlus, 
   UserRoundPen, 
@@ -18,7 +17,6 @@ import ConfirmDeleteUserDialog from "../../Components/ConfirmDeleteUserDialog";
 import AddUserDialog from "../../Components/AddUserDialog";
 import BlockUserDialog from "../../Components/BlockUserDialog";
 import AdminAccountDialog from "../../Components/AdminAccountDialog";
-import DeleteConfirmDialog from "../../Components/DeleteConfirmDialog";
 import SuccessAlert from "../../Components/SuccessAlert";
 import UserDetailsModal from "../../Components/UserDetailsModal";
 import { Skeleton } from "../../Components/ui/skeleton";
@@ -28,7 +26,6 @@ export default function UserManagement() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [viewDetailsUser, setViewDetailsUser] = useState(null); 
   const [loading, setLoading] = useState(false);
-  const [cleanupLoading, setCleanupLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -156,28 +153,6 @@ export default function UserManagement() {
     triggerSuccessAlert(message);
   };
 
-  const handleCleanupDeactivated = async () => {
-    setCleanupLoading(true);
-    try {
-      const res = await api.post("/firstapp/users/cleanup-deactivated/");
-      const deletedCount = Number(res?.data?.deleted_count || 0);
-
-      await fetchUsers();
-
-      if (deletedCount > 0) {
-        triggerSuccessAlert(`Cleanup complete: ${deletedCount} deactivated user account(s) deleted.`);
-      } else {
-        triggerSuccessAlert("Cleanup complete: no eligible deactivated user accounts found.");
-      }
-    } catch (err) {
-      console.error("Failed to clean up deactivated users", err);
-      const backendMessage = err?.response?.data?.error || err?.response?.data?.message;
-      window.alert(backendMessage || "Failed to run cleanup.");
-    } finally {
-      setCleanupLoading(false);
-    }
-  };
-
   const handlePrevPage = () => setCurrentPage((prev) => Math.max(prev - 1, 1));
   const handleNextPage = () => setCurrentPage((prev) => Math.min(prev + 1, totalPages));
 
@@ -297,22 +272,6 @@ export default function UserManagement() {
 
         {!loading && visibleUsers.length > 0 && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div className="flex justify-end items-center px-3 py-2 border-b border-gray-200 bg-gray-50">
-              <DeleteConfirmDialog
-                onConfirm={handleCleanupDeactivated}
-                title="Clean Deactivated User Accounts"
-                description="This will permanently delete regular user accounts that were deactivated for more than 30 days. Staff and admin accounts are excluded."
-              >
-                <button
-                  disabled={cleanupLoading}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-red-300 bg-white text-red-700 text-xs font-semibold hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  title="Delete deactivated user-role accounts older than 30 days"
-                >
-                  <Trash2Icon size={14} />
-                  {cleanupLoading ? "Cleaning..." : "Clean Deactivated Users"}
-                </button>
-              </DeleteConfirmDialog>
-            </div>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">

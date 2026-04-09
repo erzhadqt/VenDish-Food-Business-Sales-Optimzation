@@ -4,6 +4,8 @@ from rest_framework import serializers
 from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
+from django.conf import settings
+from datetime import timedelta
 
 from .models import Product, Category, Receipt, ReceiptItem, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, Review, UserProfile, OTP, Notification, StaffInvitationToken
 
@@ -25,8 +27,13 @@ class UserSerializer(serializers.ModelSerializer):
 
     def _pending_invitation_user_ids(self):
         if not hasattr(self, '_pending_invitation_user_ids_cache'):
+            invitation_expiry_minutes = max(1, int(getattr(settings, 'STAFF_INVITATION_EXPIRY_MINUTES', 15)))
+            invitation_cutoff = timezone.now() - timedelta(minutes=invitation_expiry_minutes)
             self._pending_invitation_user_ids_cache = set(
-                StaffInvitationToken.objects.filter(is_valid=True).values_list('user_id', flat=True)
+                StaffInvitationToken.objects.filter(
+                    is_valid=True,
+                    created_at__gte=invitation_cutoff,
+                ).values_list('user_id', flat=True)
             )
         return self._pending_invitation_user_ids_cache
 

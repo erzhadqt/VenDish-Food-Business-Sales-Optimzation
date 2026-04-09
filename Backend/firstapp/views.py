@@ -1,10 +1,11 @@
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404
+from django.core.management import call_command
 from django.db import transaction, IntegrityError
 from django.utils import timezone
 from django.conf import settings
 from django.db.models import F
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets, generics, permissions, status
 from rest_framework.views import APIView
@@ -26,6 +27,7 @@ from django.contrib.auth.hashers import make_password, check_password
 import base64
 import hashlib
 import hmac
+from io import StringIO
 import json
 import requests
 import uuid
@@ -104,6 +106,63 @@ PAYMONGO_ALLOWED_EVENTS = {
 }
 
 PAYMONGO_REPLAY_WINDOW_MINUTES = 15
+STAFF_INVITATION_EXPIRY_MINUTES = max(1, int(getattr(settings, 'STAFF_INVITATION_EXPIRY_MINUTES', 15)))
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([permissions.AllowAny])
+def trigger_deactivated_cleanup(request):
+    # Supports key via query (?key=...) or Authorization header (Bearer <key>).
+    provided_key = request.query_params.get('key') or request.data.get('key')
+    authorization = request.headers.get('Authorization', '')
+    if not provided_key and authorization:
+        if authorization.lower().startswith('bearer '):
+            provided_key = authorization.split(' ', 1)[1].strip()
+        else:
+            provided_key = authorization.strip()
+
+    expected_key = getattr(settings, 'CRON_SECRET_KEY', '')
+    if not expected_key:
+        return Response(
+            {'error': 'Cron secret key is not configured on the server.'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    if provided_key != expected_key:
+        return Response({'error': 'Unauthorized. Invalid cron key.'}, status=status.HTTP_403_FORBIDDEN)
+
+    days_raw = request.query_params.get('days') or request.data.get('days')
+    dry_run_raw = request.query_params.get('dry_run') or request.data.get('dry_run')
+
+    command_kwargs = {}
+    if days_raw not in (None, ''):
+        try:
+            days_value = int(days_raw)
+            if days_value < 1:
+                raise ValueError('days must be >= 1')
+            command_kwargs['days'] = days_value
+        except (TypeError, ValueError):
+            return Response({'error': "Invalid 'days' value. Use a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
+
+    if str(dry_run_raw).lower() in {'1', 'true', 'yes', 'y', 'on'}:
+        command_kwargs['dry_run'] = True
+
+    try:
+        stdout_buffer = StringIO()
+        call_command('cleanup_deactivated_users', stdout=stdout_buffer, **command_kwargs)
+        return Response(
+            {
+                'status': 'success',
+                'message': 'cleanup_deactivated_users executed successfully.',
+                'details': stdout_buffer.getvalue().strip(),
+            },
+            status=status.HTTP_200_OK,
+        )
+    except Exception as exc:
+        return Response(
+            {'status': 'error', 'message': str(exc)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 def _process_coupon_usage(receipt, target_customer):
@@ -307,10 +366,11 @@ class UserViewSet(viewsets.ModelViewSet):
         # GENERATE TOKEN AND SEND EMAIL IF STAFF
         if is_staff and user.email:
             token_str = secrets.token_urlsafe(32)
+            StaffInvitationToken.objects.filter(user=user, is_valid=True).update(is_valid=False)
             StaffInvitationToken.objects.create(user=user, token=token_str)
 
             # Define your frontend URL (Update this in production)
-            frontend_url = getattr(settings, 'FRONTEND_URL', 'https://ven-dish-food-business-sales-optimz.vercel.app')
+            frontend_url = getattr(settings, 'FRONTEND_URL', None) or 'https://www.kuyavince-karinderya.store'
             
             accept_link = f"{frontend_url}/verify-staff?token={token_str}&action=accept"
             reject_link = f"{frontend_url}/verify-staff?token={token_str}&action=reject"
@@ -323,6 +383,7 @@ class UserViewSet(viewsets.ModelViewSet):
                         f"You have been invited to join Kuya Vince Karinderya as a staff member.\n\n"
                         f"To ACCEPT: {accept_link}\n"
                         f"To REJECT: {reject_link}\n\n"
+                        f"This invitation expires in {STAFF_INVITATION_EXPIRY_MINUTES} minutes.\n\n"
                         f"If you did not expect this, please ignore this email."
                     ),
                     html_message=(
@@ -331,6 +392,7 @@ class UserViewSet(viewsets.ModelViewSet):
                         f"<p>You have been invited to join Kuya Vince Karinderya as a staff member.</p>"
                         f"<p><a href='{accept_link}' style='padding: 10px 20px; background-color: #28a745; color: white; text-decoration: none; border-radius: 5px; display: inline-block;'>Accept Invitation</a></p>"
                         f"<p><a href='{reject_link}' style='padding: 10px 20px; background-color: #dc3545; color: white; text-decoration: none; border-radius: 5px; display: inline-block;'>Reject Invitation</a></p>"
+                        f"<p><strong>This invitation expires in {STAFF_INVITATION_EXPIRY_MINUTES} minutes.</strong></p>"
                         f"<p><small>If you did not expect this, please ignore this email.</small></p>"
                         f"</div>"
                     ),
@@ -460,24 +522,37 @@ class UserViewSet(viewsets.ModelViewSet):
         if not token or action_type not in ['accept', 'reject']:
             return Response({"error": "Valid token and action ('accept' or 'reject') are required."}, status=status.HTTP_400_BAD_REQUEST)
 
+        expiry_cutoff = timezone.now() - timedelta(minutes=STAFF_INVITATION_EXPIRY_MINUTES)
+        # Keep token state in sync by invalidating stale links before processing.
+        StaffInvitationToken.objects.filter(is_valid=True, created_at__lt=expiry_cutoff).update(is_valid=False)
+
         try:
-            invite_token = StaffInvitationToken.objects.get(token=token, is_valid=True)
+            invite_token = StaffInvitationToken.objects.select_related('user').get(
+                token=token,
+                is_valid=True,
+                created_at__gte=expiry_cutoff,
+            )
             user = invite_token.user
 
             if action_type == 'accept':
                 user.is_active = True
-                user.save()
+                user.save(update_fields=['is_active'])
                 invite_token.is_valid = False
-                invite_token.save()
+                invite_token.save(update_fields=['is_valid'])
                 return Response({"message": "Account activated successfully. You can now log in."}, status=status.HTTP_200_OK)
             
             elif action_type == 'reject':
                 # If they reject, we delete the pending account entirely to keep the DB clean
+                invite_token.is_valid = False
+                invite_token.save(update_fields=['is_valid'])
                 user.delete() 
                 return Response({"message": "Invitation rejected. The pending account has been removed."}, status=status.HTTP_200_OK)
 
         except StaffInvitationToken.DoesNotExist:
-            return Response({"error": "Invalid or expired invitation token."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": f"Invalid or expired invitation token. Invitation links expire after {STAFF_INVITATION_EXPIRY_MINUTES} minutes."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = User.objects.all()
