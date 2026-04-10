@@ -2,16 +2,17 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import Searchbar from "../../Components/Searchbar";
 import api from "../../api";
-import { EditIcon, Trash2Icon, PlusSquareIcon, ListIcon, Settings, LockKeyhole, RadarIcon, PhilippinePeso } from "lucide-react";
+import { EditIcon, PlusSquareIcon, ListIcon, Settings, LockKeyhole, RadarIcon, PhilippinePeso, LayoutGrid, X, ArchiveIcon, LucideForkKnifeCrossed } from "lucide-react";
 
 import EditProductDialog from "../../Components/EditProductDialog";
 import SuccessAlert from "../../Components/SuccessAlert";
-import DeleteConfirmDialog from "../../Components/DeleteConfirmDialog";
 import AddProductDialog from "../../Components/AddProductDialog";
 import ManageCategoryDialog from "../../Components/ManageCategoryDialog";
 import ChangeVoidPinDialog from "../../Components/ChangeVoidPinDialog";
 import ManageGcashInfoDialog from "../../Components/ManageGcashInfoDialog";
 import ManagePosBalanceDialog from "../../Components/ManagePosBalanceDialog"; 
+import ManageServingsDialog from "../../Components/ManageServingsDialog";
+import ManageArchivedProductsDialog from "../../Components/ManageArchivedProductsDialog";
 import { Skeleton } from "../../Components/ui/skeleton";
 
 function ProductList() {
@@ -26,6 +27,9 @@ function ProductList() {
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [gcashInfoModalOpen, setGcashInfoModalOpen] = useState(false);
   const [posBalanceModalOpen, setPosBalanceModalOpen] = useState(false);
+  const [manageServingsOpen, setManageServingsOpen] = useState(false);
+  const [archiveModalOpen, setArchiveModalOpen] = useState(false);
+  const [showControlCenter, setShowControlCenter] = useState(false);
 
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -70,7 +74,12 @@ function ProductList() {
     api
       .get(url)
       .then((res) => {
-        setProducts(res.data);
+        // 🔴 NEW: Sort products alphabetically by product_name
+        const sortedProducts = res.data.sort((a, b) => 
+          a.product_name.localeCompare(b.product_name, undefined, { sensitivity: 'base' })
+        );
+        
+        setProducts(sortedProducts);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -107,70 +116,33 @@ function ProductList() {
     setTimeout(() => setShowSuccess(false), 2500);
   }, [searchQuery, filterCategory, fetchProducts]);
 
-  const handleDeleteProduct = async (productId) => {
-    try {
-      await api.delete(`/firstapp/products/${productId}/`);
-      handleUpdatedProduct();
-    } catch (err) {
-      console.error("Delete failed:", err);
-      alert("Failed to delete the product. Please try again.");
-    }
-  };
+  useEffect(() => {
+    if (!showControlCenter) return;
+
+    const handleEscClose = (event) => {
+      if (event.key === "Escape") {
+        setShowControlCenter(false);
+      }
+    };
+
+    document.addEventListener("keydown", handleEscClose);
+    return () => document.removeEventListener("keydown", handleEscClose);
+  }, [showControlCenter]);
 
   return (
     <div className="w-full min-h-screen p-4">
       <div className="max-w-8xl mx-auto p-2">
-        <nav className="flex items-center justify-between mb-8">
-          <h1 className="flex items-center gap-2 text-3xl font-bold text-gray-900"><ListIcon size={26}/> Product List</h1>
+        <nav className="mb-8 space-y-4">
+          <div className="flex items-center justify-between">
+            <h1 className="flex items-center gap-2 text-3xl font-bold text-gray-900"><ListIcon size={26}/> Product List</h1>
 
-          <div className="flex gap-2">
-            <div>
-              <button 
-                onClick={() => setPosBalanceModalOpen(true)}
-                className="flex gap-2 items-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
-              >
-                <PhilippinePeso size={26}/> POS Initial Balance
-              </button>
-            </div>
-
-            <div>
-              <button 
-                onClick={() => setGcashInfoModalOpen(true)}
-                className="flex gap-2 items-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
-              >
-                <RadarIcon size={26}/> GCash Infos
-              </button>
-            </div>
-
-            <div>
-              <button 
-                onClick={() => setPinModalOpen(true)}
-                className="flex gap-2 items-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
-              >
-                <LockKeyhole size={26}/> Change Void Pin
-              </button>
-            </div>
-
-            <div>
-              <button 
-                onClick={() => setCategoryModalOpen(true)}
-                className="flex gap-2 items-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
-              >
-                <Settings size={26}/> Manage Categories
-              </button>
-            </div>
-
-            <div>
-              <AddProductDialog 
-                  onSaved={handleUpdatedProduct} 
-                  existingProducts={products}
-                  categories={categories}
-              >
-                <button className="flex gap-2 items-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm">
-                  <PlusSquareIcon size={22} /> Product
-                </button>
-              </AddProductDialog>
-            </div>
+            <button
+              onClick={() => setShowControlCenter(true)}
+              className="inline-flex items-center gap-2 bg-gray-900 hover:bg-gray-950 text-white px-4 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
+            >
+              <LayoutGrid size={18} />
+              Open Control Center
+            </button>
           </div>
         </nav>
 
@@ -233,15 +205,6 @@ function ProductList() {
                   <EditIcon size={22} className="text-green-600" />
                 </button>
 
-                <DeleteConfirmDialog
-                  onConfirm={() => handleDeleteProduct(p.id)}
-                  title="Delete Product"
-                  description="Are you sure you want to delete this product? This cannot be undone."
-                >
-                  <button className="p-1 hover:bg-red-100 rounded-md transition-colors duration-150">
-                    <Trash2Icon size={18} className="text-gray-500 hover:text-red-600" />
-                  </button>
-                </DeleteConfirmDialog>
               </div>
 
               {p.image ? (
@@ -319,7 +282,7 @@ function ProductList() {
         onOpenChange={setCategoryModalOpen}
         onSaved={() => {
           fetchCategories(); 
-          fetchProducts(searchQuery, filterCategory); // 🔴 NEW: pass states explicitly
+          fetchProducts(searchQuery, filterCategory);
         }}
       />
 
@@ -327,6 +290,145 @@ function ProductList() {
         open={posBalanceModalOpen}
         onOpenChange={setPosBalanceModalOpen}
       />
+
+      <ManageServingsDialog
+        open={manageServingsOpen}
+        onOpenChange={setManageServingsOpen}
+        onSaved={handleUpdatedProduct}
+      />
+
+      <ManageArchivedProductsDialog
+        open={archiveModalOpen}
+        onOpenChange={setArchiveModalOpen}
+        onSaved={handleUpdatedProduct}
+      />
+
+      <div
+        className={`fixed inset-0 z-40 transition-opacity duration-300 ${
+          showControlCenter ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        }`}
+      >
+        <button
+          aria-label="Close control center"
+          onClick={() => setShowControlCenter(false)}
+          className="absolute inset-0 bg-gray-900/45"
+        />
+
+        <aside
+          className={`absolute right-0 top-0 h-full w-full max-w-md bg-linear-to-b from-white to-gray-50 border-l border-gray-200 shadow-2xl transform transition-transform duration-300 ${
+            showControlCenter ? "translate-x-0" : "translate-x-full"
+          }`}
+        >
+          <div className="h-full flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-white/90 backdrop-blur-sm">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-gray-500 font-semibold">Admin Hub</p>
+                <h2 className="text-xl font-bold text-gray-900">Control Center</h2>
+              </div>
+
+              <button
+                onClick={() => setShowControlCenter(false)}
+                className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 space-y-6">
+              <section>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">
+                  POS Settings
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    onClick={() => {
+                      setGcashInfoModalOpen(true);
+                      setShowControlCenter(false);
+                    }}
+                    className="flex gap-2 items-center justify-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
+                  >
+                    <RadarIcon size={18}/> GCash Infos
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setPosBalanceModalOpen(true);
+                      setShowControlCenter(false);
+                    }}
+                    className="flex gap-2 items-center justify-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
+                  >
+                    <PhilippinePeso size={18}/> POS Initial Balance
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setPinModalOpen(true);
+                      setShowControlCenter(false);
+                    }}
+                    className="sm:col-span-2 flex gap-2 items-center justify-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
+                  >
+                    <LockKeyhole size={18}/> Change Void Pin
+                  </button>
+                </div>
+              </section>
+
+              <section>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">
+                  Product Controls
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    onClick={() => {
+                      setArchiveModalOpen(true);
+                      setShowControlCenter(false);
+                    }}
+                    className="flex gap-2 items-center justify-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
+                  >
+                    <ArchiveIcon size={18}/> Archived Products
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setCategoryModalOpen(true);
+                      setShowControlCenter(false);
+                    }}
+                    className="flex gap-2 items-center justify-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
+                  >
+                    <Settings size={18}/> Manage Categories
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setManageServingsOpen(true);
+                      setShowControlCenter(false);
+                    }}
+                    className="sm:col-span-2 flex gap-2 items-center justify-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
+                  >
+                    <LucideForkKnifeCrossed size={18} /> Manage Servings
+                  </button>
+                </div>
+              </section>
+            </div>
+
+            <div className="p-5 border-t border-gray-200 bg-white">
+              <AddProductDialog
+                onSaved={handleUpdatedProduct}
+                existingProducts={products}
+                categories={categories}
+              >
+                <button
+                  onClick={() => setShowControlCenter(false)}
+                  className="w-full flex gap-2 items-center justify-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-semibold transition-colors duration-200 shadow-sm"
+                >
+                  <PlusSquareIcon size={18} /> Add New Product
+                </button>
+              </AddProductDialog>
+            </div>
+          </div>
+        </aside>
+      </div>
 
       {selectedProduct && (
         <EditProductDialog

@@ -10,13 +10,22 @@ export default function EditCouponDialog({ open, onOpenChange, coupon, onSaved }
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({ valid_to: "", claim_limit: "", usage_limit: "" });
 
+  // Helper to get current local time in YYYY-MM-DDThh:mm format
+  const getCurrentLocalISOString = () => {
+    const dateObj = new Date();
+    const tzOffset = dateObj.getTimezoneOffset() * 60000;
+    return new Date(dateObj.getTime() - tzOffset).toISOString().slice(0, 16);
+  };
+
+  const minDateTime = getCurrentLocalISOString();
+
   useEffect(() => {
     if (coupon) {
       let formattedDate = "";
       if (coupon.criteria_details?.valid_to) {
         const dateObj = new Date(coupon.criteria_details.valid_to);
         const tzOffset = dateObj.getTimezoneOffset() * 60000;
-        formattedDate = new Date(dateObj - tzOffset).toISOString().slice(0, 16);
+        formattedDate = new Date(dateObj.getTime() - tzOffset).toISOString().slice(0, 16);
       }
 
       setFormData({
@@ -63,24 +72,26 @@ export default function EditCouponDialog({ open, onOpenChange, coupon, onSaved }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-lg z-50">
         <DialogHeader>
-          <DialogTitle>Edit Coupon Limits & Expiration</DialogTitle>
+          <DialogTitle className="text-xl">Edit Coupon Limits & Expiration</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <Label htmlFor="valid_to">Expiration Date (Leave blank for no expiry)</Label>
+        <form onSubmit={handleSubmit} className="grid gap-6 py-5">
+          <div className="grid gap-3">
+            <Label htmlFor="valid_to" className="text-base">Expiration Date (Leave blank for no expiry)</Label>
             <Input 
               id="valid_to" 
               type="datetime-local" 
               value={formData.valid_to}
+              min={minDateTime} // 🔴 Restricts input to current date/time or future
               onChange={(e) => setFormData({...formData, valid_to: e.target.value})}
+              className="text-base h-12"
             />
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="claim_limit">Max App Claims (Leave blank for unlimited)</Label>
+          <div className="grid gap-3">
+            <Label htmlFor="claim_limit" className="text-base">Max App Claims (Leave blank for unlimited)</Label>
             {/* 🔴 Updated Claim Limit Input */}
             <Input 
               id="claim_limit" 
@@ -90,11 +101,12 @@ export default function EditCouponDialog({ open, onOpenChange, coupon, onSaved }
               onChange={handleClaimLimitChange}
               placeholder="e.g. 100"
               maxLength={10}
+              className="text-base h-12"
             />
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="usage_limit">Max POS Uses (Leave blank for unlimited)</Label>
+          <div className="grid gap-3">
+            <Label htmlFor="usage_limit" className="text-base">Max POS Uses (Leave blank for unlimited)</Label>
             {/* 🔴 Updated Usage Limit Input */}
             <Input 
               id="usage_limit" 
@@ -104,14 +116,17 @@ export default function EditCouponDialog({ open, onOpenChange, coupon, onSaved }
               onChange={handleUsageLimitChange}
               placeholder="e.g. 50"
               maxLength={10}
+              className="text-base h-12"
             />
           </div>
 
-          <DialogFooter className="mt-4">
+          <DialogFooter className="mt-4 gap-3 sm:gap-0">
             <DialogClose asChild>
-              <Button variant="outline" type="button" disabled={loading}>Cancel</Button>
+              <Button variant="outline" type="button" disabled={loading} className="text-base h-11 px-5">
+                Cancel
+              </Button>
             </DialogClose>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading} className="text-base h-11 px-5">
               {loading ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>

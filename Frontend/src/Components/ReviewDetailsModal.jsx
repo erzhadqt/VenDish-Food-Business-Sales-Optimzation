@@ -32,7 +32,7 @@ const ReviewDetailsModal = ({ open, onOpenChange, feedback }) => {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] z-50">
+      <DialogContent className="sm:max-w-125 z-50">
         <DialogHeader>
           <DialogTitle>{modalTitle}</DialogTitle>
         </DialogHeader>
@@ -90,6 +90,20 @@ const ReviewDetailsModal = ({ open, onOpenChange, feedback }) => {
             <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
               <p className="text-gray-800 whitespace-pre-wrap text-sm leading-relaxed">{feedback.comment}</p>
             </div>
+
+            {feedback.admin_reply && (
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">
+                  Admin Reply
+                </p>
+                {feedback.admin_reply_updated_at && (
+                  <p className="text-xs text-blue-600 mt-1">
+                    {new Date(feedback.admin_reply_updated_at).toLocaleString()}
+                  </p>
+                )}
+                <p className="mt-2 text-blue-900 whitespace-pre-wrap text-sm leading-relaxed">{feedback.admin_reply}</p>
+              </div>
+            )}
 
             {reviewImageUrl && (
               <div className="mt-4">

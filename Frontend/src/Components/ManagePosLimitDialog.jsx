@@ -61,9 +61,9 @@ const ManagePosLimitDialog = ({ open, onOpenChange, currentLimit, onSaved }) => 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg z-50">
         <DialogHeader>
-          <DialogTitle>Manage POS Coupon Limit</DialogTitle>
+          <DialogTitle className="text-xl">Manage POS Coupon Limit</DialogTitle>
         </DialogHeader>
 
         {/* --- CUSTOM SUCCESS ALERT INJECTED HERE --- */}
@@ -73,9 +73,9 @@ const ManagePosLimitDialog = ({ open, onOpenChange, currentLimit, onSaved }) => 
             </div>
         )}
 
-        <div className="py-2 space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="coupon-limit">Maximum Coupons Allowed Per Order</Label>
+        <div className="py-4 space-y-6">
+          <div className="space-y-3">
+            <Label htmlFor="coupon-limit" className="text-base">Maximum Coupons Allowed Per Order</Label>
             {/* 🔴 Updated POS Limit Input */}
             <Input
               id="coupon-limit"
@@ -85,20 +85,26 @@ const ManagePosLimitDialog = ({ open, onOpenChange, currentLimit, onSaved }) => 
               onChange={handleLimitChange}
               placeholder="e.g. 2"
               maxLength={3} // Limit input to 3 digits (up to 999)
+              className="text-base h-12"
             />
-            <p className="text-xs text-gray-500">
+            <p className="text-sm text-gray-500">
               Set the strict maximum number of promo codes a cashier can apply to a single transaction during checkout.
             </p>
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
+        <DialogFooter className="mt-4 gap-3 sm:gap-0">
+          <Button 
+            variant="outline" 
+            onClick={() => onOpenChange(false)} 
+            disabled={isSaving}
+            className="text-base h-11 px-5"
+          >
             Cancel
           </Button>
           <Button
             onClick={handleSave}
             disabled={isSaving || showSuccessAlert}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
+            className="bg-blue-600 hover:bg-blue-700 text-white text-base h-11 px-5"
           >
             {isSaving ? "Saving..." : showSuccessAlert ? "Saved!" : "Save Changes"}
           </Button>

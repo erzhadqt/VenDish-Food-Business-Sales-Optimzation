@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "../../Components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../Components/ui/table";
-import { Plus, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, TimerReset, Edit, Package } from "lucide-react"; 
+import { Plus, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, TimerReset, Edit, EllipsisVertical, Search, Filter } from "lucide-react"; 
 import api from "../../api";
 import AddDiscountDialog from "../../Components/AddDiscountDialog"; 
 import DeleteConfirmDialog from "../../Components/DeleteConfirmDialog";
 import { Skeleton } from "../../Components/ui/skeleton";
+import { Input } from "../../Components/ui/input";
 
 import ManagePosLimitDialog from "../../Components/ManagePosLimitDialog";
 import SuccessAlert from "../../Components/SuccessAlert";
 import EditCouponDialog from "../../Components/EditCouponDialog"; 
+import PromoDetailsModal from "../../Components/PromoDetailsModal";
 
 const PromoManagement = () => {
   const [coupons, setCoupons] = useState([]);
@@ -24,6 +26,8 @@ const PromoManagement = () => {
   // --- EDIT MODAL STATES ---
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedCoupon, setSelectedCoupon] = useState(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [selectedCouponForDetails, setSelectedCouponForDetails] = useState(null);
 
   // --- LIMIT MODAL STATES ---
   const [isManageLimitOpen, setIsManageLimitOpen] = useState(false);
@@ -32,6 +36,9 @@ const PromoManagement = () => {
 
   // +++ SUCCESS MESSAGE STATE +++
   const [successMessage, setSuccessMessage] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showExpiringSoonOnly, setShowExpiringSoonOnly] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -80,6 +87,11 @@ const PromoManagement = () => {
     setIsEditOpen(true);
   };
 
+  const handleDetailsClick = (coupon) => {
+    setSelectedCouponForDetails(coupon);
+    setIsDetailsOpen(true);
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return "No Expiration";
     const date = new Date(dateString);
@@ -102,21 +114,60 @@ const PromoManagement = () => {
     }
   };
 
-  // 🔴 HELPER LOGIC: Map the Target Product ID to Product Name
-  const getTargetProductName = (targetProductId) => {
-    if (!targetProductId) return "Entire Order";
-    const product = products.find(p => String(p.id) === String(targetProductId));
-    return product ? product.product_name : "Unknown Product";
+  const getEffectiveStatus = (status, limit, used) => {
+    const isSoldOut = limit !== null && used >= limit;
+    return (isSoldOut && status === "Active") ? "Redeemed" : status;
   };
+
+  const isExpiringSoon = (dateString) => {
+    if (!dateString) return false;
+
+    const expiration = new Date(dateString);
+    if (Number.isNaN(expiration.getTime())) return false;
+
+    const now = new Date();
+    const msDiff = expiration.getTime() - now.getTime();
+    if (msDiff < 0) return false;
+
+    const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
+    return msDiff <= threeDaysMs;
+  };
+
+  const filteredCoupons = coupons.filter((coupon) => {
+    const effectiveStatus = getEffectiveStatus(coupon.status, coupon.usage_limit, coupon.times_used);
+
+    if (statusFilter !== "ALL" && effectiveStatus !== statusFilter) {
+      return false;
+    }
+
+    if (showExpiringSoonOnly && !isExpiringSoon(coupon.criteria_details?.valid_to)) {
+      return false;
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      const codeMatch = (coupon.code || "").toLowerCase().includes(q);
+      const nameMatch = (coupon.criteria_details?.name || "").toLowerCase().includes(q);
+      if (!codeMatch && !nameMatch) {
+        return false;
+      }
+    }
+
+    return true;
+  });
 
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentCoupons = coupons.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(coupons.length / itemsPerPage);
+  const currentCoupons = filteredCoupons.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(filteredCoupons.length / itemsPerPage);
 
   const handlePageChange = (page) => {
     setCurrentPage(page);
   };
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, showExpiringSoonOnly]);
 
   return (
     <div className="p-6 space-y-6 min-h-screen">
@@ -141,15 +192,61 @@ const PromoManagement = () => {
       {successMessage && <SuccessAlert message={successMessage} />}
 
       <div className="bg-white rounded-lg shadow p-4 border border-gray-200 flex flex-col h-full">
-        <h2 className="text-lg font-semibold mb-4 text-gray-800">Active Coupons</h2>
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
+          <h2 className="text-lg font-semibold text-gray-800">Active Coupons</h2>
+
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by promo name or code"
+                className="pl-9 sm:w-72"
+              />
+            </div>
+
+            <div className="relative">
+              <Filter size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="h-9 rounded-md border border-gray-200 bg-white pl-9 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="ALL">All Status</option>
+                <option value="Active">Active</option>
+                <option value="Redeemed">Redeemed</option>
+                <option value="Expired">Expired</option>
+              </select>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowExpiringSoonOnly((prev) => !prev)}
+              className={`h-9 rounded-md border px-3 text-sm font-medium transition-colors ${
+                showExpiringSoonOnly
+                  ? "border-red-200 bg-red-50 text-red-700"
+                  : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+              }`}
+              title="Toggle expiring soon promos only"
+            >
+              <span className="inline-flex items-center gap-2">
+                <span
+                  className={`h-2.5 w-2.5 rounded-full ${
+                    showExpiringSoonOnly ? "bg-red-500" : "bg-gray-300"
+                  }`}
+                />
+                Expiring soon
+              </span>
+            </button>
+          </div>
+        </div>
+
         {loading ? (
           <div className="space-y-3">
             <Skeleton className="h-10 w-full" />
-            {/* Added 8 skeleton columns instead of 7 to account for new table head */}
             {Array.from({ length: itemsPerPage }).map((_, index) => (
-              <div key={index} className="grid grid-cols-8 gap-3">
-                <Skeleton className="h-5 w-full" />
-                <Skeleton className="h-5 w-full" />
+              <div key={index} className="grid grid-cols-6 gap-3">
                 <Skeleton className="h-5 w-full" />
                 <Skeleton className="h-5 w-full" />
                 <Skeleton className="h-5 w-full" />
@@ -165,13 +262,10 @@ const PromoManagement = () => {
             <TableRow>
               <TableHead>Code</TableHead>
               <TableHead>Promo Name</TableHead>
-              <TableHead>Discount Details</TableHead>
-              {/* 🔴 NEW TABLE HEAD */}
-              <TableHead>Applicable Product</TableHead>
               <TableHead>Expiration</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Stats (Claims / Uses)</TableHead>
-              <TableHead className="text-right"></TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -188,34 +282,13 @@ const PromoManagement = () => {
                         {coupon.criteria_details?.name || "No Rule Attached"}
                     </TableCell>
 
-                    <TableCell>
-                        <div className="flex flex-col text-sm">
-                            <span className="font-semibold text-gray-600">
-                                {coupon.criteria_details?.discount_type === 'percentage' 
-                                    ? `${coupon.criteria_details?.discount_value}% OFF`
-                                    : coupon.criteria_details?.discount_type === 'fixed'
-                                    ? `₱${coupon.criteria_details?.discount_value} OFF`
-                                    : `FREE ITEM`
-                                }
-                            </span>
-                            {coupon.criteria_details?.min_spend > 0 && (
-                                <span className="text-xs text-gray-400">Min: ₱{coupon.criteria_details?.min_spend}</span>
-                            )}
-                        </div>
-                    </TableCell>
-
-                    {/* 🔴 NEW TABLE CELL RENDERING THE PRODUCT TARGET */}
-                    <TableCell>
-                        <div className="flex items-center gap-1.5 text-sm text-gray-600 bg-gray-50 border border-gray-100 rounded-md px-2 py-1 w-max">
-                            <Package size={14} className="text-gray-400" />
-                            <span className={!coupon.criteria_details?.target_product ? "font-bold text-gray-800" : "font-medium"}>
-                                {getTargetProductName(coupon.criteria_details?.target_product)}
-                            </span>
-                        </div>
-                    </TableCell>
-
                     <TableCell className="text-sm text-gray-600">
-                        {formatDate(coupon.criteria_details?.valid_to)}
+                      <div className="flex items-center gap-2">
+                        <span>{formatDate(coupon.criteria_details?.valid_to)}</span>
+                        {isExpiringSoon(coupon.criteria_details?.valid_to) && (
+                        <span className="text-[10px] font-semibold text-red-600">Expiring soon</span>
+                        )}
+                      </div>
                     </TableCell>
 
                     <TableCell>
@@ -242,6 +315,16 @@ const PromoManagement = () => {
 
                     <TableCell className="text-right">
                         <div className="flex justify-end items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-9 w-9 text-gray-600 hover:text-gray-800 hover:bg-gray-100"
+                              onClick={() => handleDetailsClick(coupon)}
+                              title="View Promo Details"
+                            >
+                              <EllipsisVertical className="w-5 h-5"/>
+                            </Button>
+
                              <Button variant="ghost" size="icon" className="h-9 w-9 text-blue-600 hover:text-blue-800 hover:bg-blue-50" onClick={() => handleEditClick(coupon)}>
                                 <Edit className="w-5 h-5"/>
                              </Button>
@@ -256,11 +339,10 @@ const PromoManagement = () => {
                   </TableRow>
                 );
             })}
-            {coupons.length === 0 && (
+            {filteredCoupons.length === 0 && (
                 <TableRow>
-                    {/* Adjusted colSpan to 8 for the new column */}
-                    <TableCell colSpan={8} className="text-center py-8 text-gray-400">
-                        No active coupons found. Create one to get started.
+                <TableCell colSpan={6} className="text-center py-8 text-gray-400">
+                  No coupons found for the current filter/search.
                     </TableCell>
                 </TableRow>
             )}
@@ -269,7 +351,7 @@ const PromoManagement = () => {
         )}
 
         {/* PAGINATION CONTROLS */}
-        {!loading && coupons.length > 0 && (
+        {!loading && filteredCoupons.length > 0 && (
             <div className="flex items-center justify-end space-x-2 py-4 mt-2 border-t border-gray-100">
                 <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => handlePageChange(1)} disabled={currentPage === 1}>
                     <ChevronsLeft className="h-4 w-4" />
@@ -315,6 +397,13 @@ const PromoManagement = () => {
             fetchData();
             showSuccess("Coupon updated successfully!");
         }}
+      />
+
+      <PromoDetailsModal
+        open={isDetailsOpen}
+        onOpenChange={setIsDetailsOpen}
+        coupon={selectedCouponForDetails}
+        products={products}
       />
 
     </div>

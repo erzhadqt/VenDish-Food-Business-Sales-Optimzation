@@ -363,60 +363,186 @@ export default function SalesAndReports() {
 
   // --- EXPORT FUNCTION ---
   const exportToCSV = () => {
-    let dataToExport = [];
-    let headers = [];
-    let title = "";
-    let summaryRows = [];
-    let filename = "";
-    const bom = "\uFEFF"; 
+    const bom = "\uFEFF";
 
-    if (viewMode === 'staff') {
-        title = "Staff Performance Report";
-        headers = ['Staff Name', 'Total Orders', 'Total Revenue'];
-        dataToExport = staffReports.map(s => [
-            `"${s.name}"`, 
-            s.orders, 
-        Number.parseFloat(s.revenue || 0).toFixed(2)
-        ]);
-        filename = `staff-report-${format(new Date(), 'yyyy-MM-dd')}`;
-    } else {
-        title = `Sales Report - ${filterCashier === 'ALL' ? 'All Cashiers' : filterCashier}`;
-        headers = ['Date', 'Revenue', 'Orders', 'Voided Orders', 'Top Seller']; 
-        
-        dataToExport = filteredReports.map(r => {
-            const dateStr = r.report_date ? format(parseISO(r.report_date), 'yyyy-MM-dd HH:mm') : 'N/A';
-            const productName = r.top_selling_product ? `"${r.top_selling_product.replace(/"/g, '""')}"` : 'N/A';
-            
-            return [
-                dateStr,
-                parseFloat(r.total_revenue || 0).toFixed(2),
-                r.total_orders || 0,
-                r.voided_orders || 0,
-                productName
-            ];
-        });
+    const escapeCSV = (value) => {
+      if (value === null || value === undefined) return '';
+      const text = String(value);
+      if (/[",\n]/.test(text)) {
+        return `"${text.replace(/"/g, '""')}"`;
+      }
+      return text;
+    };
 
-        summaryRows = [
-            ['Total Revenue:', stats.totalRev.toFixed(2)],
-            ['Total Orders:', stats.totalOrders],
-            ['Top Item:', `"${stats.topSellerName}"`],
-            [''] 
-        ];
-        
-        const fileDate = dateRange[0] || new Date();
-        filename = `sales-report-${filterCashier}-${format(fileDate, 'yyyy-MM-dd')}`;
-    }
+    const formatMoney = (value) => Number.parseFloat(value || 0).toFixed(2);
+    const periodStart = dateRange[0];
+    const periodEnd = dateRange[1];
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local';
 
-    const fileDateStr = dateRange[0] ? format(dateRange[0], 'MMM yyyy') : format(new Date(), 'MMM yyyy');
-    const metadata = [
-        [title],
-        [`Generated: ${format(new Date(), 'yyyy-MM-dd HH:mm:ss')}`],
-        [`Period: ${period} (${fileDateStr})`],
-        [''] 
+    const baseMetadata = [
+      ['Generated At', format(new Date(), 'yyyy-MM-dd HH:mm:ss')],
+      ['Report View', viewMode === 'staff' ? 'Staff Performance' : 'Sales Timeline'],
+      ['Selected Period', period],
+      ['Range Start', periodStart ? format(periodStart, 'yyyy-MM-dd HH:mm:ss') : 'N/A'],
+      ['Range End', periodEnd ? format(periodEnd, 'yyyy-MM-dd HH:mm:ss') : 'N/A'],
+      ['Timezone', timezone],
     ];
 
-    const allRows = [...metadata, ...summaryRows, headers, ...dataToExport];
-    const csvContent = bom + allRows.map(e => e.join(",")).join("\n");
+    let summaryRows = [];
+    let detailHeaders = [];
+    let detailRows = [];
+    let filename = '';
+
+    if (viewMode === 'staff') {
+      const rankedStaff = [...staffReports].sort(
+        (a, b) => Number.parseFloat(b.revenue || 0) - Number.parseFloat(a.revenue || 0)
+      );
+      const totalStaffRevenue = rankedStaff.reduce((sum, row) => sum + Number.parseFloat(row.revenue || 0), 0);
+      const totalStaffOrders = rankedStaff.reduce((sum, row) => sum + Number(row.orders || 0), 0);
+      const overallAov = totalStaffOrders > 0 ? totalStaffRevenue / totalStaffOrders : 0;
+      const topStaff = rankedStaff[0]?.name || 'N/A';
+
+      summaryRows = [
+        ['Total Staff', rankedStaff.length],
+        ['Total Orders', totalStaffOrders],
+        ['Total Revenue (PHP)', formatMoney(totalStaffRevenue)],
+        ['Average Order Value (PHP)', formatMoney(overallAov)],
+        ['Top Performer', topStaff],
+      ];
+
+      detailHeaders = [
+        'Rank',
+        'Staff Name',
+        'Total Orders',
+        'Total Revenue (PHP)',
+        'Average Order Value (PHP)',
+        'Revenue Share (%)',
+        'Order Share (%)',
+      ];
+
+      detailRows = rankedStaff.map((staff, index) => {
+        const revenue = Number.parseFloat(staff.revenue || 0);
+        const orders = Number(staff.orders || 0);
+        const aov = orders > 0 ? revenue / orders : 0;
+        const revenueShare = totalStaffRevenue > 0 ? (revenue / totalStaffRevenue) * 100 : 0;
+        const orderShare = totalStaffOrders > 0 ? (orders / totalStaffOrders) * 100 : 0;
+
+        return [
+          index + 1,
+          staff.name || 'N/A',
+          orders,
+          formatMoney(revenue),
+          formatMoney(aov),
+          revenueShare.toFixed(2),
+          orderShare.toFixed(2),
+        ];
+      });
+
+      filename = `staff-performance-report-${format(new Date(), 'yyyy-MM-dd')}`;
+    } else {
+      const totalVoidedOrders = filteredReports.reduce((sum, row) => sum + Number(row.voided_orders || 0), 0);
+      const averageOrderValue = stats.totalOrders > 0 ? stats.totalRev / stats.totalOrders : 0;
+
+      const highestRevenueDay = filteredReports.reduce((maxRow, row) => {
+        const rowRev = Number.parseFloat(row.total_revenue || 0);
+        const maxRev = maxRow ? Number.parseFloat(maxRow.total_revenue || 0) : -1;
+        return rowRev > maxRev ? row : maxRow;
+      }, null);
+
+      const highestRevenueDayLabel = highestRevenueDay?.report_date
+        ? (() => {
+            const parsed = parseISO(highestRevenueDay.report_date);
+            return Number.isNaN(parsed.getTime())
+              ? highestRevenueDay.report_date
+              : format(parsed, 'yyyy-MM-dd HH:mm:ss');
+          })()
+        : 'N/A';
+
+      summaryRows = [
+        ['Cashier Filter', filterCashier],
+        ['Total Records', filteredReports.length],
+        ['Total Orders', stats.totalOrders],
+        ['Total Revenue (PHP)', formatMoney(stats.totalRev)],
+        ['Total Voided Orders', totalVoidedOrders],
+        ['Average Order Value (PHP)', formatMoney(averageOrderValue)],
+        ['Top Seller', stats.topSellerName || 'N/A'],
+        ['Highest Revenue Entry', highestRevenueDayLabel],
+      ];
+
+      detailHeaders = [
+        'No.',
+        'Date Time',
+        'Total Orders',
+        'Total Revenue (PHP)',
+        'Voided Orders',
+        'Top Seller',
+        'Average Order Value (PHP)',
+      ];
+
+      detailRows = sortedTableData.map((report, index) => {
+        const revenue = Number.parseFloat(report.total_revenue || 0);
+        const orders = Number(report.total_orders || 0);
+        const aov = orders > 0 ? revenue / orders : 0;
+
+        let displayDate = 'N/A';
+        if (report.report_date) {
+          const parsed = parseISO(report.report_date);
+          displayDate = Number.isNaN(parsed.getTime())
+            ? report.report_date
+            : format(parsed, 'yyyy-MM-dd HH:mm:ss');
+        }
+
+        return [
+          index + 1,
+          displayDate,
+          orders,
+          formatMoney(revenue),
+          Number(report.voided_orders || 0),
+          report.top_selling_product || 'N/A',
+          formatMoney(aov),
+        ];
+      });
+
+      const safeCashierFilter = String(filterCashier || 'ALL')
+        .replace(/\s+/g, '-')
+        .replace(/[^a-zA-Z0-9\-_]/g, '')
+        .toLowerCase();
+
+      filename = `sales-report-${safeCashierFilter}-${format(new Date(), 'yyyy-MM-dd')}`;
+    }
+
+    const allRows = [
+      ['VenDish Business Report'],
+      [],
+      ['Report Metadata'],
+      ['Field', 'Value'],
+      ...baseMetadata,
+      [],
+      ['Summary'],
+      ['Metric', 'Value'],
+      ...summaryRows,
+      [],
+      ['Detailed Records'],
+      detailHeaders,
+      ...detailRows,
+    ];
+
+    if (viewMode === 'timeline' && chartData.length > 0) {
+      allRows.push([]);
+      allRows.push(['Period Buckets']);
+      allRows.push(['Bucket', 'Revenue (PHP)', 'Orders']);
+      chartData.forEach((bucket) => {
+        allRows.push([
+          bucket.label,
+          formatMoney(bucket.revenue),
+          Number(bucket.orders || 0),
+        ]);
+      });
+    }
+
+    const csvContent = bom + allRows
+      .map((row) => row.map(escapeCSV).join(','))
+      .join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);

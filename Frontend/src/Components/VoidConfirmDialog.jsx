@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { LockKeyhole, AlertTriangle, Trash2, Minus, Plus } from "lucide-react";
+import { LockKeyhole, AlertTriangle, Trash2, Minus } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -36,7 +36,12 @@ const VoidConfirmDialog = ({ onConfirm, trigger, cartItems }) => {
         setSelections({});
       }, 300);
     } else {
-        setSelections({});
+      // Initialize with full cart quantities, then subtract to void.
+      const initialSelections = {};
+      cartItems.forEach((item) => {
+        initialSelections[item.id] = item.qty;
+      });
+      setSelections(initialSelections);
     }
   };
 
@@ -65,55 +70,48 @@ const VoidConfirmDialog = ({ onConfirm, trigger, cartItems }) => {
     }
   };
 
-  const handleIncrement = (item) => {
-    setSelections(prev => {
-        const currentVoidQty = prev[item.id] || 0;
-        if (currentVoidQty < item.qty) {
-            return { ...prev, [item.id]: currentVoidQty + 1 };
-        }
-        return prev;
-    });
-  };
-
   const handleDecrement = (item) => {
-    setSelections(prev => {
-        const currentVoidQty = prev[item.id] || 0;
-        if (currentVoidQty > 0) {
-            const next = currentVoidQty - 1;
-            // If 0, remove key to keep object clean
-            if (next === 0) {
-                const copy = { ...prev };
-                delete copy[item.id];
-                return copy;
-            }
-            return { ...prev, [item.id]: next };
-        }
-        return prev;
+    // Subtract from remaining quantity; each press marks one unit as void.
+    setSelections((prev) => {
+      const currentRemainingQty = prev[item.id] ?? item.qty;
+      if (currentRemainingQty > 0) {
+        return { ...prev, [item.id]: currentRemainingQty - 1 };
+      }
+      return prev;
     });
   };
 
   const toggleSelectAll = () => {
-    // If all items are fully selected for voiding, clear selections.
-    // Otherwise, select max quantity for all.
-    const allFullySelected = cartItems.every(item => (selections[item.id] || 0) === item.qty);
+    // If all items are fully voided, reset to original cart quantities.
+    // Otherwise, set remaining quantities to 0 (void all).
+    const allFullySelected = cartItems.every((item) => (selections[item.id] ?? item.qty) === 0);
     
     if (allFullySelected) {
-      setSelections({});
+      const resetSelections = {};
+      cartItems.forEach((item) => {
+        resetSelections[item.id] = item.qty;
+      });
+      setSelections(resetSelections);
     } else {
       const newSelections = {};
-      cartItems.forEach(item => {
-        newSelections[item.id] = item.qty;
+      cartItems.forEach((item) => {
+        newSelections[item.id] = 0;
       });
       setSelections(newSelections);
     }
   };
 
   const handleVoidConfirm = async () => {
-    // Convert selections object to array of { id, qty }
-    const itemsToVoid = Object.entries(selections).map(([idStr, qty]) => ({
-        id: parseInt(idStr),
-        qty: qty
-    })).filter(i => i.qty > 0);
+    const itemsToVoid = cartItems
+      .map((item) => {
+        const remainingQty = selections[item.id] ?? item.qty;
+        const voidQty = item.qty - remainingQty;
+        return {
+          id: item.id,
+          qty: voidQty,
+        };
+      })
+      .filter((i) => i.qty > 0);
 
     if (itemsToVoid.length === 0) {
         setError("Please select quantities to void.");
@@ -132,8 +130,11 @@ const VoidConfirmDialog = ({ onConfirm, trigger, cartItems }) => {
     }
   };
 
-  // Calculate total items selected for voiding
-  const totalVoidCount = Object.values(selections).reduce((a, b) => a + b, 0);
+  // Calculate total quantities marked for void based on remaining quantities.
+  const totalVoidCount = cartItems.reduce((sum, item) => {
+    const remainingQty = selections[item.id] ?? item.qty;
+    return sum + Math.max(item.qty - remainingQty, 0);
+  }, 0);
 
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
@@ -196,18 +197,18 @@ const VoidConfirmDialog = ({ onConfirm, trigger, cartItems }) => {
                 <AlertDialogTitle>Void Items</AlertDialogTitle>
               </div>
               <AlertDialogDescription>
-                Adjust the quantity to remove for each item.
+                Quantities start at full count. Press minus to subtract/void items.
               </AlertDialogDescription>
             </AlertDialogHeader>
 
             <div className="py-2">
                 <div className="flex justify-between items-center mb-2 px-1">
-                    <span className="text-xs text-gray-500">{totalVoidCount} items marked</span>
+                    <span className="text-xs text-gray-500">{totalVoidCount} quantities marked for void</span>
                     <button 
                         onClick={toggleSelectAll} 
                         className="text-xs font-bold text-blue-600 hover:underline"
                     >
-                        {totalVoidCount > 0 ? "Clear All" : "Void All"}
+                        {totalVoidCount > 0 ? "Reset All" : "Void All"}
                     </button>
                 </div>
 
@@ -216,8 +217,9 @@ const VoidConfirmDialog = ({ onConfirm, trigger, cartItems }) => {
                         <div className="p-4 text-center text-sm text-gray-400">Cart is empty</div>
                     ) : (
                         cartItems.map((item) => {
-                            const voidQty = selections[item.id] || 0;
-                            const isFullyVoided = voidQty === item.qty;
+                        const remainingQty = selections[item.id] ?? item.qty;
+                        const voidQty = item.qty - remainingQty;
+                        const isFullyVoided = remainingQty === 0;
                             
                             return (
                                 <div 
@@ -231,29 +233,27 @@ const VoidConfirmDialog = ({ onConfirm, trigger, cartItems }) => {
                                         <div className="text-xs text-gray-500">
                                             In Cart: <span className="font-bold">{item.qty}</span>
                                         </div>
+                              <div className="text-xs text-gray-500">
+                                Remaining: <span className="font-bold">{remainingQty}</span>
+                                {voidQty > 0 && (
+                                  <span className="ml-2 text-red-600 font-semibold">Voiding: {voidQty}</span>
+                                )}
+                              </div>
                                     </div>
 
                                     {/* Quantity Controls */}
                                     <div className="flex items-center gap-3 bg-white rounded-md border border-gray-200 px-2 py-1 shadow-sm">
                                         <button 
                                             onClick={() => handleDecrement(item)}
-                                            disabled={voidQty === 0}
-                                            className={`p-1 rounded hover:bg-gray-100 ${voidQty === 0 ? 'text-gray-300' : 'text-gray-600'}`}
+                                disabled={remainingQty === 0}
+                                className={`p-1 rounded hover:bg-gray-100 ${remainingQty === 0 ? 'text-gray-300' : 'text-gray-600'}`}
                                         >
                                             <Minus size={16} />
                                         </button>
                                         
-                                        <span className={`font-bold text-sm w-4 text-center ${voidQty > 0 ? 'text-red-600' : 'text-gray-300'}`}>
-                                            {voidQty}
-                                        </span>
-
-                                        <button 
-                                            onClick={() => handleIncrement(item)}
-                                            disabled={voidQty === item.qty}
-                                            className={`p-1 rounded hover:bg-gray-100 ${voidQty === item.qty ? 'text-gray-300' : 'text-gray-600'}`}
-                                        >
-                                            <Plus size={16} />
-                                        </button>
+                              <span className={`font-bold text-sm w-6 text-center ${isFullyVoided ? 'text-red-600' : 'text-gray-700'}`}>
+                                {remainingQty}
+                              </span>
                                     </div>
                                 </div>
                             )

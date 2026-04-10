@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Star, MessageSquare, TrendingUp, Eye, Trash2, Search } from 'lucide-react';
+import { Star, MessageSquare, TrendingUp, Eye, Search } from 'lucide-react';
 import api from '../../api';
-import DeleteConfirmDialog from '../../Components/DeleteConfirmDialog';
 import { Skeleton } from '../../Components/ui/skeleton';
 
 // Import the single unified modal
 import ReviewDetailsModal from '../../Components/ReviewDetailsModal';
+import ReviewReplyDialog from '../../Components/ReviewReplyDialog';
 
 const resolveMediaUrl = (path) => {
   if (!path) return null;
@@ -48,6 +48,11 @@ const CustomerFeedback = () => {
   // --- UNIFIED MODAL STATE ---
   const [selectedReview, setSelectedReview] = useState(null);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [isReplyDialogOpen, setIsReplyDialogOpen] = useState(false);
+  const [replyTarget, setReplyTarget] = useState(null);
+  const [replyText, setReplyText] = useState('');
+  const [replyError, setReplyError] = useState('');
+  const [isReplySubmitting, setIsReplySubmitting] = useState(false);
 
   // 🔴 NEW: Save state to localStorage whenever it changes
   useEffect(() => {
@@ -78,7 +83,9 @@ const CustomerFeedback = () => {
            rating: r.rating,
            comment: r.comment,
            created_at: r.created_at,
-            image: resolveMediaUrl(r.image)
+            image: resolveMediaUrl(r.image),
+            admin_reply: r.admin_reply || '',
+            admin_reply_updated_at: r.admin_reply_updated_at || null,
         }));
 
         const productReviews = allReviews.filter(r => r.review_type === 'food').map(r => ({
@@ -94,7 +101,9 @@ const CustomerFeedback = () => {
            rating: r.rating,
            comment: r.comment,
            created_at: r.created_at,
-            image: resolveMediaUrl(r.image)
+            image: resolveMediaUrl(r.image),
+            admin_reply: r.admin_reply || '',
+            admin_reply_updated_at: r.admin_reply_updated_at || null,
         }));
 
         setFeedbacks(shopReviews);
@@ -152,24 +161,72 @@ const CustomerFeedback = () => {
     setSelectedReview(review); 
     setIsReviewModalOpen(true); 
   };
-  
-  const handleDeleteFeedback = async (id) => { 
-    try {
-      await api.delete(`/firstapp/reviews/${id}/`);
-      const updated = feedbacks.filter(f => f.id !== id); 
-      setFeedbacks(updated); 
-    } catch (error) {
-      console.error("Failed to delete customer feedback:", error);
-    }
+
+  const applyReplyToLocalState = (reviewId, adminReply, adminReplyUpdatedAt) => {
+    const patchReply = (item) => {
+      if (item.id !== reviewId) return item;
+      return {
+        ...item,
+        admin_reply: adminReply,
+        admin_reply_updated_at: adminReplyUpdatedAt,
+      };
+    };
+
+    setFeedbacks(prev => prev.map(patchReply));
+    setFoodFeedbacks(prev => prev.map(patchReply));
+    setSelectedReview(prev => {
+      if (!prev || prev.id !== reviewId) return prev;
+      return {
+        ...prev,
+        admin_reply: adminReply,
+        admin_reply_updated_at: adminReplyUpdatedAt,
+      };
+    });
   };
-  
-  const handleDeleteFoodFeedback = async (id) => { 
+
+  const handleOpenReplyDialog = (review) => {
+    setReplyTarget(review);
+    setReplyText(review.admin_reply || '');
+    setReplyError('');
+    setIsReplyDialogOpen(true);
+  };
+
+  const handleCloseReplyDialog = () => {
+    setIsReplyDialogOpen(false);
+    setReplyTarget(null);
+    setReplyText('');
+    setReplyError('');
+  };
+
+  const handleSubmitReply = async () => {
+    if (!replyTarget) return;
+
+    const trimmedReply = replyText.trim();
+    if (!trimmedReply) {
+      setReplyError('Reply message is required.');
+      return;
+    }
+
     try {
-      await api.delete(`/firstapp/reviews/${id}/`);
-      const updated = foodFeedbacks.filter(f => f.id !== id); 
-      setFoodFeedbacks(updated); 
+      setIsReplySubmitting(true);
+      setReplyError('');
+
+      const response = await api.post(`/firstapp/reviews/${replyTarget.id}/reply/`, {
+        admin_reply: trimmedReply,
+      });
+
+      applyReplyToLocalState(
+        replyTarget.id,
+        response.data.admin_reply || '',
+        response.data.admin_reply_updated_at || null,
+      );
+
+      handleCloseReplyDialog();
     } catch (error) {
-      console.error("Failed to delete food feedback:", error);
+      console.error('Failed to save admin reply:', error);
+      setReplyError(error?.response?.data?.error || 'Failed to save reply. Please try again.');
+    } finally {
+      setIsReplySubmitting(false);
     }
   };
 
@@ -224,7 +281,7 @@ const CustomerFeedback = () => {
         
         {/* Tabs */}
         <div className="flex gap-4 mb-6">
-          <button className={`px-4 py-2 rounded-lg font-medium ${activeTab==='customer'?'bg-blue-500 text-white':'bg-white border border-gray-300'}`} onClick={()=>setActiveTab('customer')}>Customer Review</button>
+          <button className={`px-4 py-2 rounded-lg font-medium ${activeTab==='customer'?'bg-blue-500 text-white':'bg-white border border-gray-300'}`} onClick={()=>setActiveTab('customer')}>Customer Shop Review</button>
           <button className={`px-4 py-2 rounded-lg font-medium ${activeTab==='food'?'bg-blue-500 text-white':'bg-white border border-gray-300'}`} onClick={()=>setActiveTab('food')}>Food Review</button>
         </div>
 
@@ -305,8 +362,14 @@ const CustomerFeedback = () => {
                       <div className="flex gap-2">
                         {/* Use Unified view function */}
                         <button onClick={()=>handleViewReview(f)} className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Eye size={18} /></button>
+                        <button
+                          onClick={() => handleOpenReplyDialog(f)}
+                          className="px-3 py-2 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                        >
+                          {f.admin_reply ? 'Edit Reply' : 'Reply'}
+                        </button>
                         
-                        <DeleteConfirmDialog
+                        {/* <DeleteConfirmDialog
                           title={`Delete review by ${f.customer_name}?`}
                           description="Are you sure you want to delete this customer feedback? This action cannot be undone."
                           onConfirm={() => handleDeleteFeedback(f.id)}
@@ -314,10 +377,13 @@ const CustomerFeedback = () => {
                           <button className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
                             <Trash2 size={18} />
                           </button>
-                        </DeleteConfirmDialog>
+                        </DeleteConfirmDialog> */}
                       </div>
                     </div>
+                    
                     <p className="text-gray-700 leading-relaxed">{f.comment}</p>
+                    
+                    {/* IMAGE COMES BEFORE ADMIN REPLY */}
                     {f.image && (
                       <div className="mt-4">
                         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Attached Image</p>
@@ -329,6 +395,22 @@ const CustomerFeedback = () => {
                         />
                       </div>
                     )}
+
+                    {/* ADMIN REPLY COMES AFTER IMAGE */}
+                    {f.admin_reply && (
+                      <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
+                        <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">
+                          Admin Reply
+                        </p>
+                        {f.admin_reply_updated_at && (
+                          <p className="text-xs text-blue-600 mt-1">
+                            {new Date(f.admin_reply_updated_at).toLocaleString()}
+                          </p>
+                        )}
+                        <p className="mt-2 text-sm text-blue-900 whitespace-pre-wrap">{f.admin_reply}</p>
+                      </div>
+                    )}
+                    
                   </div>
                 ))}
               </div>
@@ -369,17 +451,26 @@ const CustomerFeedback = () => {
                   <div key={f.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
+                        <div className="flex flex-col  gap-3 mb-2">
+                          <div className='flex items-center gap-3'>
+                            <h4 className="text-lg font-bold text-gray-900">{f.customer_name}</h4>
+                            {renderStars(f.rating)}
+                          </div>
                           <h3 className="text-lg font-semibold text-gray-900">{f.food_name}</h3>
-                          {renderStars(f.rating)}
+                          <p className="text-sm text-gray-500">{new Date(f.created_at).toLocaleString()}</p>
                         </div>
-                        <p className="text-sm text-gray-500">{new Date(f.created_at).toLocaleString()}</p>
                       </div>
                       <div className="flex gap-2">
                          {/* Use Unified view function */}
                         <button onClick={()=>handleViewReview(f)} className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Eye size={18} /></button>
+                        <button
+                          onClick={() => handleOpenReplyDialog(f)}
+                          className="px-3 py-2 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                        >
+                          {f.admin_reply ? 'Edit Reply' : 'Reply'}
+                        </button>
                         
-                        <DeleteConfirmDialog
+                        {/* <DeleteConfirmDialog
                           title={`Delete review for ${f.food_name}?`}
                           description="Are you sure you want to delete this food review? This action cannot be undone."
                           onConfirm={() => handleDeleteFoodFeedback(f.id)}
@@ -387,10 +478,13 @@ const CustomerFeedback = () => {
                           <button className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
                             <Trash2 size={18} />
                           </button>
-                        </DeleteConfirmDialog>
+                        </DeleteConfirmDialog> */}
                       </div>
                     </div>
+                    
                     <p className="text-gray-700 leading-relaxed">{f.comment}</p>
+
+                    {/* IMAGE COMES BEFORE ADMIN REPLY */}
                     {f.image && (
                       <div className="mt-4">
                         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Attached Image</p>
@@ -402,6 +496,22 @@ const CustomerFeedback = () => {
                         />
                       </div>
                     )}
+
+                    {/* ADMIN REPLY COMES AFTER IMAGE */}
+                    {f.admin_reply && (
+                      <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
+                        <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">
+                          Admin Reply
+                        </p>
+                        {f.admin_reply_updated_at && (
+                          <p className="text-xs text-blue-600 mt-1">
+                            {new Date(f.admin_reply_updated_at).toLocaleString()}
+                          </p>
+                        )}
+                        <p className="mt-2 text-sm text-blue-900 whitespace-pre-wrap">{f.admin_reply}</p>
+                      </div>
+                    )}
+                    
                   </div>
                 ))}
               </div>
@@ -420,6 +530,18 @@ const CustomerFeedback = () => {
           open={isReviewModalOpen} 
           onOpenChange={setIsReviewModalOpen} 
           feedback={selectedReview} 
+        />
+
+        <ReviewReplyDialog
+          open={isReplyDialogOpen}
+          onOpenChange={setIsReplyDialogOpen}
+          replyTarget={replyTarget}
+          replyText={replyText}
+          onReplyTextChange={setReplyText}
+          replyError={replyError}
+          isSubmitting={isReplySubmitting}
+          onCancel={handleCloseReplyDialog}
+          onSubmit={handleSubmitReply}
         />
 
       </div>

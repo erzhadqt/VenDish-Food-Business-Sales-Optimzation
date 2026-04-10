@@ -217,9 +217,9 @@ const Transaction = () => {
                                             <th className="px-4 md:px-6 py-4">Cashier</th>
                                             <th className="px-4 md:px-6 py-4">Payment Mode</th>
                                             <th className="px-4 md:px-6 py-4">Status</th>  
-                                            <th className="px-4 md:px-6 py-4">Coupon</th>  
-                                            <th className="px-4 md:px-6 py-4 text-right">Total</th>  
-                                            <th className="px-4 md:px-6 py-4 text-center">Items</th>  
+                                            <th className="px-4 md:px-6 py-4">Coupon</th>    
+                                            <th className="px-4 md:px-6 py-4 text-center">Items</th>
+                                            <th className="px-4 md:px-6 py-4 text-right">Total</th>
                                             <th className="px-4 md:px-6 py-4">Actions</th>  
                                         </tr>  
                                     </thead>  
@@ -255,14 +255,14 @@ const Transaction = () => {
                                                             ))}
                                                         </div>
                                                     ) : (<span className="text-gray-400 text-xs italic">None</span>)}
-                                                </td>  
-                                                <td className={`px-4 md:px-6 py-4 text-right font-bold whitespace-nowrap ${receipt.status === 'VOIDED' ? 'text-gray-400 line-through' : 'text-green-600'}`}>  
-                                                    {formatCurrency(receipt.total)}  
-                                                </td>  
+                                                </td>
                                                 <td className="px-4 md:px-6 py-4 text-center">  
                                                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 whitespace-nowrap">  
                                                         {receipt.items.length} items  
                                                     </span>  
+                                                </td>
+                                                <td className={`px-4 md:px-6 py-4 text-right font-bold whitespace-nowrap ${receipt.status === 'VOIDED' ? 'text-gray-400 line-through' : 'text-green-600'}`}>  
+                                                    {formatCurrency(receipt.total)}  
                                                 </td>  
                                                 <td className="px-4 md:px-6 py-4 text-center">  
                                                     <button onClick={() => setSelectedReceipt(receipt)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500 transition-colors focus:outline-none">  

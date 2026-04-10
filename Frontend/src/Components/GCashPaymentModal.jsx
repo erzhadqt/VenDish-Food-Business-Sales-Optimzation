@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../Components/ui/dialog";
 import { Button } from "../Components/ui/button";
 import { Input } from "../Components/ui/input";
+import api from "../api";
 
 // Helper to mask name (e.g., JUAN DELA CRUZ -> J**N D**A C**Z)
 const formatGcashName = (name) => {
@@ -45,7 +46,9 @@ export default function GCashPaymentModal({
   const [manualReference, setManualReference] = useState("");
   // NEW: State to toggle between the QR code and the manual fallback instructions
   const [showFallback, setShowFallback] = useState(false);
-  const normalizedReference = manualReference.trim().replace(/\s+/g, "");
+  const [referenceError, setReferenceError] = useState("");
+  const [isCheckingReference, setIsCheckingReference] = useState(false);
+  const normalizedReference = manualReference.trim().replace(/[^A-Za-z0-9]/g, "").toUpperCase();
   const referencePreview = normalizedReference.replace(/(.{4})/g, "$1 ").trim();
 
   // Clear inputs and reset views when the modal opens/closes
@@ -53,11 +56,70 @@ export default function GCashPaymentModal({
     if (open) {
       setManualReference("");
       setShowFallback(false);
+      setReferenceError("");
+      setIsCheckingReference(false);
     }
   }, [open]);
 
+  useEffect(() => {
+    if (!isPaid) return;
+
+    const cleanedReference = normalizedReference;
+
+    if (!cleanedReference) {
+      setReferenceError("");
+      setIsCheckingReference(false);
+      return;
+    }
+
+    if (cleanedReference.length < 8) {
+      setReferenceError("Reference number must be at least 8 characters.");
+      setIsCheckingReference(false);
+      return;
+    }
+
+    let isCancelled = false;
+    setIsCheckingReference(true);
+    setReferenceError("");
+
+    const timer = setTimeout(async () => {
+      try {
+        const response = await api.get("/firstapp/payments/gcash/reference-availability/", {
+          params: {
+            value: cleanedReference,
+            transaction_reference: initialReference || "",
+          },
+        });
+
+        if (isCancelled) return;
+
+        if (response.data?.exists) {
+          setReferenceError("This GCash reference number already exists in previous transactions.");
+        } else {
+          setReferenceError("");
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setReferenceError("Unable to validate the reference right now. Please try again.");
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsCheckingReference(false);
+        }
+      }
+    }, 350);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
+  }, [isPaid, normalizedReference, initialReference]);
+
   const handleFinalize = () => {
     if (isPaid) {
+      if (isCheckingReference || referenceError || normalizedReference.length < 5) {
+        return;
+      }
       onFinalize(normalizedReference || initialReference);
     } else {
       onCancel();
@@ -186,10 +248,19 @@ export default function GCashPaymentModal({
                 onChange={(e) => setManualReference(e.target.value)}
                 className="font-mono text-lg border-green-500 focus-visible:ring-green-500"
                 autoFocus
+                maxLength={13}
               />
               <p className="text-xs text-gray-500 italic">
                 Input the reference number from the customer's successful payment screen to print on the receipt.
               </p>
+
+              {isCheckingReference && (
+                <p className="text-xs text-blue-600 font-semibold">Checking reference number...</p>
+              )}
+
+              {referenceError && (
+                <p className="text-xs text-red-600 font-semibold">{referenceError}</p>
+              )}
 
               {normalizedReference && (
                 <div className="mt-2 w-full rounded-xl border-2 border-emerald-300 bg-emerald-50 p-4 text-center animate-in fade-in zoom-in-95 duration-200">
@@ -229,7 +300,7 @@ export default function GCashPaymentModal({
             variant={isPaid ? "default" : "destructive"} 
             onClick={handleFinalize} 
             className={`w-full sm:w-auto ${isPaid ? "bg-green-600 hover:bg-green-700 text-white font-bold shadow-md" : ""}`}
-            disabled={isPaid && normalizedReference.length < 5} 
+            disabled={isPaid && (normalizedReference.length < 5 || isCheckingReference || !!referenceError)} 
           >
             {isPaid ? "Finalize & Print Receipt" : "Cancel Payment"}
           </Button>
