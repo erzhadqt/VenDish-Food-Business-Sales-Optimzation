@@ -160,6 +160,7 @@ export default function ManageArchivedProductsDialog({ open, onOpenChange, onSav
                 ...product,
                 is_archived: true,
                 archived_at: product.archived_at || archivedAt,
+                stock_quantity: 0,
                 is_available: false,
               }
             : product
@@ -211,7 +212,8 @@ export default function ManageArchivedProductsDialog({ open, onOpenChange, onSav
                 ...product,
                 is_archived: false,
                 archived_at: null,
-                is_available: (product.stock_quantity ?? 0) > 0,
+                stock_quantity: 0,
+                is_available: false,
               }
             : product
         )

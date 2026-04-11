@@ -15,6 +15,8 @@ import ManageServingsDialog from "../../Components/ManageServingsDialog";
 import ManageArchivedProductsDialog from "../../Components/ManageArchivedProductsDialog";
 import { Skeleton } from "../../Components/ui/skeleton";
 
+const UNCATEGORIZED_FILTER_VALUE = "__uncategorized__";
+
 function ProductList() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -59,7 +61,16 @@ function ProductList() {
         value: c.name, 
         label: c.name
       }));
-      setCategories(formattedCategories);
+
+      const categoryOptions = [...formattedCategories];
+      if (!categoryOptions.some((category) => category.value === UNCATEGORIZED_FILTER_VALUE)) {
+        categoryOptions.push({
+          value: UNCATEGORIZED_FILTER_VALUE,
+          label: "Uncategorized",
+        });
+      }
+
+      setCategories(categoryOptions);
     } catch (error) {
       console.error("Failed to fetch categories:", error);
     }
@@ -69,7 +80,13 @@ function ProductList() {
     setLoading(true);
 
     let url = `/firstapp/products/?search=${query}`;
-    if (category) url += `&category__name=${category}`;
+    if (category) {
+      if (category === UNCATEGORIZED_FILTER_VALUE) {
+        url += "&uncategorized=true";
+      } else {
+        url += `&category__name=${category}`;
+      }
+    }
 
     api
       .get(url)

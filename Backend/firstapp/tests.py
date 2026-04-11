@@ -262,6 +262,13 @@ class ProductArchiveTests(APITestCase):
 			stock_quantity=8,
 			is_available=True,
 		)
+		self.product_uncategorized = Product.objects.create(
+			product_name='Mystery Meal',
+			category=None,
+			price='129.00',
+			stock_quantity=12,
+			is_available=True,
+		)
 
 	def test_admin_can_archive_multiple_products(self):
 		self.client.force_authenticate(user=self.admin)
@@ -282,6 +289,8 @@ class ProductArchiveTests(APITestCase):
 		self.assertTrue(self.product_b.is_archived)
 		self.assertIsNotNone(self.product_a.archived_at)
 		self.assertIsNotNone(self.product_b.archived_at)
+		self.assertEqual(self.product_a.stock_quantity, 0)
+		self.assertEqual(self.product_b.stock_quantity, 0)
 		self.assertFalse(self.product_a.is_available)
 		self.assertFalse(self.product_b.is_available)
 
@@ -302,6 +311,8 @@ class ProductArchiveTests(APITestCase):
 
 		self.assertTrue(self.product_a.is_archived)
 		self.assertTrue(self.product_b.is_archived)
+		self.assertEqual(self.product_a.stock_quantity, 0)
+		self.assertEqual(self.product_b.stock_quantity, 0)
 
 	def test_non_admin_cannot_archive_products(self):
 		self.client.force_authenticate(user=self.customer)
@@ -363,8 +374,10 @@ class ProductArchiveTests(APITestCase):
 		self.assertFalse(self.product_b.is_archived)
 		self.assertIsNone(self.product_a.archived_at)
 		self.assertIsNone(self.product_b.archived_at)
-		self.assertTrue(self.product_a.is_available)
-		self.assertTrue(self.product_b.is_available)
+		self.assertEqual(self.product_a.stock_quantity, 0)
+		self.assertEqual(self.product_b.stock_quantity, 0)
+		self.assertFalse(self.product_a.is_available)
+		self.assertFalse(self.product_b.is_available)
 
 	def test_admin_can_unarchive_multiple_products_with_patch(self):
 		self.client.force_authenticate(user=self.admin)
@@ -388,6 +401,10 @@ class ProductArchiveTests(APITestCase):
 
 		self.assertFalse(self.product_a.is_archived)
 		self.assertFalse(self.product_b.is_archived)
+		self.assertEqual(self.product_a.stock_quantity, 0)
+		self.assertEqual(self.product_b.stock_quantity, 0)
+		self.assertFalse(self.product_a.is_available)
+		self.assertFalse(self.product_b.is_available)
 
 	def test_unarchived_products_return_to_default_list(self):
 		self.client.force_authenticate(user=self.admin)
@@ -408,3 +425,12 @@ class ProductArchiveTests(APITestCase):
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		returned_ids = {item['id'] for item in response.data}
 		self.assertIn(self.product_a.id, returned_ids)
+
+	def test_uncategorized_filter_returns_only_uncategorized_products(self):
+		response = self.client.get('/firstapp/products/?uncategorized=true')
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		returned_ids = {item['id'] for item in response.data}
+		self.assertIn(self.product_uncategorized.id, returned_ids)
+		self.assertNotIn(self.product_a.id, returned_ids)
+		self.assertNotIn(self.product_b.id, returned_ids)

@@ -645,18 +645,30 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         include_archived = self._is_truthy(self.request.query_params.get('include_archived'))
         archived_only = self._is_truthy(self.request.query_params.get('archived_only'))
+        uncategorized_only = self._is_truthy(self.request.query_params.get('uncategorized'))
         is_admin = bool(user and user.is_authenticated and user.is_staff)
 
         if not is_admin:
-            return queryset.filter(is_archived=False)
-
-        if archived_only:
-            return queryset.filter(is_archived=True)
-
-        if include_archived:
+            queryset = queryset.filter(is_archived=False)
+            if uncategorized_only:
+                queryset = queryset.filter(category__isnull=True)
             return queryset
 
-        return queryset.filter(is_archived=False)
+        if archived_only:
+            queryset = queryset.filter(is_archived=True)
+            if uncategorized_only:
+                queryset = queryset.filter(category__isnull=True)
+            return queryset
+
+        if include_archived:
+            if uncategorized_only:
+                queryset = queryset.filter(category__isnull=True)
+            return queryset
+
+        queryset = queryset.filter(is_archived=False)
+        if uncategorized_only:
+            queryset = queryset.filter(category__isnull=True)
+        return queryset
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
@@ -691,6 +703,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         updated_count = Product.objects.filter(id__in=normalized_ids, is_archived=False).update(
             is_archived=True,
             archived_at=timezone.now(),
+            stock_quantity=0,
             is_available=False,
         )
 
@@ -735,10 +748,9 @@ class ProductViewSet(viewsets.ModelViewSet):
         Product.objects.filter(id__in=target_ids).update(
             is_archived=False,
             archived_at=None,
+            stock_quantity=0,
+            is_available=False,
         )
-
-        Product.objects.filter(id__in=target_ids, stock_quantity__gt=0).update(is_available=True)
-        Product.objects.filter(id__in=target_ids, stock_quantity__lte=0).update(is_available=False)
 
         return Response(
             {'unarchived_count': len(target_ids)},

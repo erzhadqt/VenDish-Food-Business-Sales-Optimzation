@@ -361,6 +361,11 @@ export default function SalesAndReports() {
     return 0;
   });
 
+  const timelineSubtitle = useMemo(() => {
+    const baseText = `${period} revenue tracking`;
+    return filterCashier === 'ALL' ? baseText : `${baseText} for: ${filterCashier}`;
+  }, [period, filterCashier]);
+
   // --- EXPORT FUNCTION ---
   const exportToCSV = () => {
     const bom = "\uFEFF";
@@ -577,7 +582,7 @@ export default function SalesAndReports() {
           </h1>
           <p className="text-gray-600">
              {viewMode === 'timeline' 
-                ? (filterCashier === 'ALL' ? 'Daily revenue and gross income tracking' : `Sales history for: ${filterCashier}`)
+                ? timelineSubtitle
                 : 'Comparative sales analysis by staff member'}
           </p>
         </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Tag, Trash2, ShoppingBag, User, X, Search } from "lucide-react"; 
 import { FaExclamationCircle } from "react-icons/fa"; 
 import { useLocation } from "react-router-dom";
@@ -108,6 +108,24 @@ const Pos = () => {
     });
   };
 
+  const refreshMenuInventory = useCallback(async () => {
+    try {
+      const [prodRes, catRes] = await Promise.all([
+        api.get("/firstapp/products/"),
+        api.get("/firstapp/categories/"),
+      ]);
+
+      setProducts(Array.isArray(prodRes.data) ? prodRes.data : []);
+
+      if (catRes.data && Array.isArray(catRes.data)) {
+        const catNames = catRes.data.map((c) => c.name).filter(Boolean);
+        setCategories(["All", ...catNames]);
+      }
+    } catch (error) {
+      console.error("Failed to refresh POS inventory:", error);
+    }
+  }, []);
+
   const discountOptions = [
     { value: "senior", label: "Senior Citizen (20%)" },
     { value: "pwd", label: "PWD (20%)" },
@@ -156,6 +174,26 @@ const Pos = () => {
     };
     fetchData();
   }, []);
+
+  useEffect(() => {
+    const handleInventoryUpdate = () => {
+      refreshMenuInventory();
+    };
+
+    const handleStorageUpdate = (event) => {
+      if (event.key === "products:last-updated-at") {
+        refreshMenuInventory();
+      }
+    };
+
+    window.addEventListener("products:servings-updated", handleInventoryUpdate);
+    window.addEventListener("storage", handleStorageUpdate);
+
+    return () => {
+      window.removeEventListener("products:servings-updated", handleInventoryUpdate);
+      window.removeEventListener("storage", handleStorageUpdate);
+    };
+  }, [refreshMenuInventory]);
   
   const filteredFoods = useMemo(() => {
     const categoryFiltered = selectedCategory === "All"
@@ -847,16 +885,7 @@ const Pos = () => {
 
       setIsReceiptModalOpen(false);
       
-      Promise.all([
-        api.get("/firstapp/products/"),
-        api.get("/firstapp/categories/")
-      ]).then(([prodRes, catRes]) => {
-        setProducts(prodRes.data);
-        if (catRes.data && Array.isArray(catRes.data)) {
-          const catNames = catRes.data.map(c => c.name).filter(Boolean);
-          setCategories(["All", ...catNames]);
-        }
-      });
+      refreshMenuInventory();
   };
 
   return (
