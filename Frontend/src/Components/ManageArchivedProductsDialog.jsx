@@ -5,6 +5,7 @@ import { Input } from "./ui/input";
 import { Skeleton } from "./ui/skeleton";
 import { AlertCircle, Archive, Search } from "lucide-react";
 import api from "../api";
+import { requestWithMethodFallback } from "../utils/requestWithMethodFallback";
 
 export default function ManageArchivedProductsDialog({ open, onOpenChange, onSaved }) {
   const [products, setProducts] = useState([]);
@@ -142,8 +143,11 @@ export default function ManageArchivedProductsDialog({ open, onOpenChange, onSav
     const idsToArchive = Array.from(selectedIds);
 
     try {
-      const response = await api.post("/firstapp/products/archive/", {
-        product_ids: idsToArchive,
+      const response = await requestWithMethodFallback({
+        url: "/firstapp/products/archive/",
+        data: {
+          product_ids: idsToArchive,
+        },
       });
 
       const archivedCount = response?.data?.archived_count ?? idsToArchive.length;
@@ -191,8 +195,11 @@ export default function ManageArchivedProductsDialog({ open, onOpenChange, onSav
     const idsToUnarchive = Array.from(selectedArchivedIds);
 
     try {
-      const response = await api.post("/firstapp/products/unarchive/", {
-        product_ids: idsToUnarchive,
+      const response = await requestWithMethodFallback({
+        url: "/firstapp/products/unarchive/",
+        data: {
+          product_ids: idsToUnarchive,
+        },
       });
 
       const unarchivedCount = response?.data?.unarchived_count ?? idsToUnarchive.length;

@@ -76,6 +76,8 @@ class Product(models.Model):
     track_stock = models.BooleanField(default=False)
     stock_quantity = models.PositiveIntegerField(default=0)
     is_available = models.BooleanField(default=True)
+    is_archived = models.BooleanField(default=False)
+    archived_at = models.DateTimeField(null=True, blank=True)
     date_added = models.DateTimeField(default=timezone.now)
     image = models.ImageField(upload_to="product_images/", null=True, blank=True)
 
@@ -291,6 +293,8 @@ class Review(models.Model):
     rating = models.IntegerField()
     comment = models.TextField()
     image = models.ImageField(upload_to='review_images/', null=True, blank=True)
+    admin_reply = models.TextField(blank=True, default='')
+    admin_reply_updated_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

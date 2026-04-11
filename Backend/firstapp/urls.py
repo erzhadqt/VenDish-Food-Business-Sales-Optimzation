@@ -1,5 +1,5 @@
 from django.urls import path, include
-from .views import ProductViewSet, CategoryViewSet, FeedbackViewSet, ReceiptViewSet, CouponViewSet, HomePageViewSet, ServicesPageViewSet, AboutPageViewSet, ContactPageViewSet, UserViewSet, DailySalesReportViewSet, CouponCriteriaViewSet, ReviewViewSet, GCashPaymentCreateView, GCashPaymentStatusView, GCashPaymentWebhookView, GCashAttachReceiptView, GCashPaymentFinalizeByReferenceView, GCashReconciliationView, NotificationViewSet, trigger_deactivated_cleanup
+from .views import ProductViewSet, CategoryViewSet, FeedbackViewSet, ReceiptViewSet, CouponViewSet, HomePageViewSet, ServicesPageViewSet, AboutPageViewSet, ContactPageViewSet, UserViewSet, DailySalesReportViewSet, CouponCriteriaViewSet, ReviewViewSet, GCashPaymentCreateView, GCashPaymentStatusView, GCashPaymentWebhookView, GCashAttachReceiptView, GCashPaymentFinalizeByReferenceView, GCashReferenceAvailabilityView, GCashReconciliationView, NotificationViewSet, trigger_deactivated_cleanup, thermal_receipt_view
 
 from rest_framework.routers import DefaultRouter
 
@@ -26,11 +26,13 @@ router.register(r'notifications', NotificationViewSet, basename='notification')
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('receipts/<int:receipt_id>/print/', thermal_receipt_view, name='thermal-receipt-print'),
     path('trigger-cleanup-deactivated/', trigger_deactivated_cleanup, name='trigger-cleanup-deactivated'),
     path('payments/gcash/create/', GCashPaymentCreateView.as_view(), name='gcash-payment-create'),
     path('payments/gcash/<int:transaction_id>/status/', GCashPaymentStatusView.as_view(), name='gcash-payment-status'),
     path('payments/gcash/webhook/', GCashPaymentWebhookView.as_view(), name='gcash-payment-webhook'),
     path('payments/gcash/attach-receipt/', GCashAttachReceiptView.as_view(), name='gcash-payment-attach-receipt'),
     path('payments/gcash/finalize-by-reference/', GCashPaymentFinalizeByReferenceView.as_view(), name='gcash-payment-finalize-by-reference'),
+    path('payments/gcash/reference-availability/', GCashReferenceAvailabilityView.as_view(), name='gcash-reference-availability'),
     path('payments/gcash/reconcile/', GCashReconciliationView.as_view(), name='gcash-reconciliation'),
 ]

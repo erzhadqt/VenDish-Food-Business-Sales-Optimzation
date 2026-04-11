@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Star, MessageSquare, TrendingUp, Eye, Search } from 'lucide-react';
 import api from '../../api';
 import { Skeleton } from '../../Components/ui/skeleton';
+import { requestWithMethodFallback } from '../../utils/requestWithMethodFallback';
 
 // Import the single unified modal
 import ReviewDetailsModal from '../../Components/ReviewDetailsModal';
@@ -211,8 +212,11 @@ const CustomerFeedback = () => {
       setIsReplySubmitting(true);
       setReplyError('');
 
-      const response = await api.post(`/firstapp/reviews/${replyTarget.id}/reply/`, {
-        admin_reply: trimmedReply,
+      const response = await requestWithMethodFallback({
+        url: `/firstapp/reviews/${replyTarget.id}/reply/`,
+        data: {
+          admin_reply: trimmedReply,
+        },
       });
 
       applyReplyToLocalState(

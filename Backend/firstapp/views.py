@@ -1,5 +1,5 @@
 from django.contrib.auth.models import User
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.core.management import call_command
 from django.db import transaction, IntegrityError
 from django.utils import timezone
@@ -27,6 +27,7 @@ from django.contrib.auth.hashers import make_password, check_password
 import base64
 import hashlib
 import hmac
+import re
 from io import StringIO
 import json
 import requests
@@ -329,6 +330,26 @@ def _sync_transaction_from_paymongo(payment_txn):
     return payment_txn
 
 
+def _normalize_manual_reference(reference_value):
+    if reference_value is None:
+        return ''
+    return re.sub(r'[^A-Za-z0-9]', '', str(reference_value)).upper()
+
+
+def thermal_receipt_view(request, receipt_id):
+    receipt = get_object_or_404(
+        Receipt.objects.prefetch_related('items'),
+        id=receipt_id,
+    )
+
+    context = {
+        'store_name': 'Kuya Vince Karinderya',
+        'receipt': receipt,
+        'items': receipt.items.all().order_by('id'),
+    }
+    return render(request, 'thermal_receipt.html', context)
+
+
 # -------------------------------
 # USER CRUD
 # -------------------------------
@@ -614,12 +635,121 @@ class ProductViewSet(viewsets.ModelViewSet):
     search_fields = ['product_name']
     filterset_fields = ['category__name']
 
+    @staticmethod
+    def _is_truthy(value):
+        return str(value).strip().lower() in {'1', 'true', 'yes', 'on'}
+
+    def get_queryset(self):
+        queryset = Product.objects.all().order_by("-id")
+        user = self.request.user
+
+        include_archived = self._is_truthy(self.request.query_params.get('include_archived'))
+        archived_only = self._is_truthy(self.request.query_params.get('archived_only'))
+        is_admin = bool(user and user.is_authenticated and user.is_staff)
+
+        if not is_admin:
+            return queryset.filter(is_archived=False)
+
+        if archived_only:
+            return queryset.filter(is_archived=True)
+
+        if include_archived:
+            return queryset
+
+        return queryset.filter(is_archived=False)
+
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
             permission_classes = [AllowAny]
         else:
             permission_classes = [IsAdminUser]
         return [permission() for permission in permission_classes]
+
+    @action(detail=False, methods=['post', 'patch'], url_path='archive')
+    def archive(self, request):
+        product_ids = request.data.get('product_ids', [])
+
+        if not isinstance(product_ids, list) or not product_ids:
+            return Response(
+                {'detail': 'Provide a non-empty product_ids array.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        normalized_ids = []
+        for product_id in product_ids:
+            try:
+                normalized_ids.append(int(product_id))
+            except (TypeError, ValueError):
+                continue
+
+        if not normalized_ids:
+            return Response(
+                {'detail': 'No valid product IDs were provided.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        updated_count = Product.objects.filter(id__in=normalized_ids, is_archived=False).update(
+            is_archived=True,
+            archived_at=timezone.now(),
+            is_available=False,
+        )
+
+        return Response(
+            {'archived_count': updated_count},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=['post', 'patch'], url_path='unarchive')
+    def unarchive(self, request):
+        product_ids = request.data.get('product_ids', [])
+
+        if not isinstance(product_ids, list) or not product_ids:
+            return Response(
+                {'detail': 'Provide a non-empty product_ids array.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        normalized_ids = []
+        for product_id in product_ids:
+            try:
+                normalized_ids.append(int(product_id))
+            except (TypeError, ValueError):
+                continue
+
+        if not normalized_ids:
+            return Response(
+                {'detail': 'No valid product IDs were provided.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        target_ids = list(
+            Product.objects.filter(id__in=normalized_ids, is_archived=True).values_list('id', flat=True)
+        )
+
+        if not target_ids:
+            return Response(
+                {'unarchived_count': 0},
+                status=status.HTTP_200_OK,
+            )
+
+        Product.objects.filter(id__in=target_ids).update(
+            is_archived=False,
+            archived_at=None,
+        )
+
+        Product.objects.filter(id__in=target_ids, stock_quantity__gt=0).update(is_available=True)
+        Product.objects.filter(id__in=target_ids, stock_quantity__lte=0).update(is_available=False)
+
+        return Response(
+            {'unarchived_count': len(target_ids)},
+            status=status.HTTP_200_OK,
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        return Response(
+            {'detail': 'Deleting products is disabled. Archive products instead.'},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
     
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all().order_by('name')
@@ -1024,6 +1154,35 @@ class GCashPaymentFinalizeByReferenceView(APIView):
             'reference': payment_txn.reference,
             'receipt_id': receipt.id if receipt else None,
         })
+
+
+class GCashReferenceAvailabilityView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        raw_value = request.query_params.get('value', '')
+        transaction_reference = (request.query_params.get('transaction_reference') or '').strip()
+
+        normalized_value = _normalize_manual_reference(raw_value)
+        if not normalized_value:
+            return Response({'exists': False, 'normalized_value': normalized_value})
+
+        receipts_qs = Receipt.objects.exclude(provider_reference__isnull=True).exclude(provider_reference='')
+
+        if transaction_reference:
+            current_txn = PaymentTransaction.objects.filter(reference=transaction_reference).first()
+            if current_txn and current_txn.receipt_id:
+                receipts_qs = receipts_qs.exclude(id=current_txn.receipt_id)
+
+        for provider_reference in receipts_qs.values_list('provider_reference', flat=True).iterator():
+            if _normalize_manual_reference(provider_reference) == normalized_value:
+                return Response({
+                    'exists': True,
+                    'normalized_value': normalized_value,
+                    'message': 'This GCash reference number was already used in a previous transaction.',
+                })
+
+        return Response({'exists': False, 'normalized_value': normalized_value})
 
 
 class GCashReconciliationView(APIView):
@@ -1432,6 +1591,8 @@ class ReviewViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
             permission_classes = [AllowAny]
+        elif self.action in ['reply']:
+            permission_classes = [IsAdminUser]
         else:
             permission_classes = [IsAuthenticated]
         return [permission() for permission in permission_classes]
@@ -1462,8 +1623,8 @@ class ReviewViewSet(viewsets.ModelViewSet):
                 return Response({"error": "Product ID is required for food reviews."}, status=status.HTTP_400_BAD_REQUEST)
             
             # NOTE: If you want to restrict product-specific reviews so the user must have purchased this exact product:
-            # has_bought_product = Receipt.objects.filter(customer=user, status=Receipt.Status.COMPLETED, items__product_id=product_id).exists()
-            # if not has_bought_product: return Response({"error": "You haven't bought this product."}, status=403)
+            has_bought_product = Receipt.objects.filter(customer=user, status=Receipt.Status.COMPLETED, items__product_id=product_id).exists()
+            if not has_bought_product: return Response({"error": "You haven't bought this product."}, status=403)
             
             # RULE 1: User can only write a review once per food ever
             if Review.objects.filter(user=user, review_type='food', product_id=product_id).exists():
@@ -1488,6 +1649,24 @@ class ReviewViewSet(viewsets.ModelViewSet):
         if not self._can_modify_review(request.user, review_obj):
             return Response({'error': 'You can only edit your own review.'}, status=status.HTTP_403_FORBIDDEN)
         return super().partial_update(request, *args, **kwargs)
+
+    @action(detail=True, methods=['post', 'patch'], url_path='reply')
+    def reply(self, request, *args, **kwargs):
+        review_obj = self.get_object()
+        reply_text = str(request.data.get('admin_reply', '')).strip()
+
+        if not reply_text:
+            return Response(
+                {'error': 'Reply message is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        review_obj.admin_reply = reply_text
+        review_obj.admin_reply_updated_at = timezone.now()
+        review_obj.save(update_fields=['admin_reply', 'admin_reply_updated_at'])
+
+        serializer = self.get_serializer(review_obj)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def destroy(self, request, *args, **kwargs):
         review_obj = self.get_object()

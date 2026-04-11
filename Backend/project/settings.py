@@ -35,9 +35,9 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 
 SIMPLE_JWT = {
     # It's safer to keep access tokens short and refresh tokens long
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60), 
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
-    
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=config('ACCESS_TOKEN_LIFETIME', default=1, cast=int)),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=config('REFRESH_TOKEN_LIFETIME', default=7, cast=int)),
+
     # Enable rotation so they get a new refresh token when they request a new access token
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": False, # Set to True later if you add 'rest_framework_simplejwt.token_blacklist'

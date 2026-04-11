@@ -6,8 +6,15 @@ from django.db.models import F
 from django.utils import timezone
 from django.conf import settings
 from datetime import timedelta
+import re
 
 from .models import Product, Category, Receipt, ReceiptItem, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, Review, UserProfile, OTP, Notification, StaffInvitationToken
+
+
+def _normalize_gcash_reference(value):
+    if value is None:
+        return ''
+    return re.sub(r'[^A-Za-z0-9]', '', str(value)).upper()
 
 class UserSerializer(serializers.ModelSerializer):
     # [NEW] Map fields from the Profile relationship
@@ -174,8 +181,15 @@ class ProductSerializer(serializers.ModelSerializer):
         else:
             stock_quantity = 0
 
+        if 'is_archived' in attrs:
+            is_archived = attrs.get('is_archived')
+        elif instance is not None:
+            is_archived = instance.is_archived
+        else:
+            is_archived = False
+
         attrs['track_stock'] = True
-        attrs['is_available'] = stock_quantity > 0
+        attrs['is_available'] = (stock_quantity > 0) and (not is_archived)
         return attrs
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -358,6 +372,24 @@ class ReceiptSerializer(serializers.ModelSerializer):
     def get_cashier_name(self, obj):
         return obj.cashier.username if obj.cashier else "Unknown"
 
+    def validate_provider_reference(self, value):
+        if value in [None, '']:
+            return value
+
+        normalized_value = _normalize_gcash_reference(value)
+        if len(normalized_value) < 8:
+            raise serializers.ValidationError('GCash reference number must be at least 8 alphanumeric characters.')
+
+        existing_refs = Receipt.objects.exclude(provider_reference__isnull=True).exclude(provider_reference='')
+        if self.instance:
+            existing_refs = existing_refs.exclude(id=self.instance.id)
+
+        for existing_ref in existing_refs.values_list('provider_reference', flat=True).iterator():
+            if _normalize_gcash_reference(existing_ref) == normalized_value:
+                raise serializers.ValidationError('This GCash reference number has already been used in a previous transaction.')
+
+        return normalized_value
+
     def create(self, validated_data):
         items_data = validated_data.pop("items") 
         coupons_data = validated_data.pop("coupons", []) # Extract list
@@ -426,6 +458,8 @@ class ReviewSerializer(serializers.ModelSerializer):
     address = serializers.CharField(source='user.profile.address', read_only=True)
     product_name = serializers.CharField(source='product.product_name', read_only=True)
     profile_pic = serializers.SerializerMethodField(read_only=True)
+    admin_reply = serializers.CharField(read_only=True)
+    admin_reply_updated_at = serializers.DateTimeField(read_only=True)
 
     # ── Profanity word list ───────────────────────────────────────────────────
     # Words are matched case-insensitively as whole words.
@@ -477,9 +511,9 @@ class ReviewSerializer(serializers.ModelSerializer):
             'email', 'first_name', 'last_name', 'phone', 'address', # <--- Add them to fields
             'profile_pic', 'review_type', 
             'product', 'product_name', 
-            'rating', 'comment', 'image', 'created_at'
+            'rating', 'comment', 'image', 'admin_reply', 'admin_reply_updated_at', 'created_at'
         ]
-        read_only_fields = ['user', 'created_at']
+        read_only_fields = ['user', 'admin_reply', 'admin_reply_updated_at', 'created_at']
 
     # ── Profanity filter applied during validation ────────────────────────────
     @staticmethod
