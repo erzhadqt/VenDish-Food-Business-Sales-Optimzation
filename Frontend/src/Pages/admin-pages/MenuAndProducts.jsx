@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import Searchbar from "../../Components/Searchbar";
 import api from "../../api";
-import { EditIcon, PlusSquareIcon, ListIcon, Settings, LockKeyhole, RadarIcon, PhilippinePeso, LayoutGrid, X, ArchiveIcon, LucideForkKnifeCrossed } from "lucide-react";
+import { EditIcon, PlusSquareIcon, ListIcon, Settings, LockKeyhole, QrCodeIcon, PhilippinePeso, LayoutGrid, X, ArchiveIcon, LucideForkKnifeCrossed, CookingPotIcon } from "lucide-react";
 
 import EditProductDialog from "../../Components/EditProductDialog";
 import SuccessAlert from "../../Components/SuccessAlert";
@@ -13,6 +13,7 @@ import ManageGcashInfoDialog from "../../Components/ManageGcashInfoDialog";
 import ManagePosBalanceDialog from "../../Components/ManagePosBalanceDialog"; 
 import ManageServingsDialog from "../../Components/ManageServingsDialog";
 import ManageArchivedProductsDialog from "../../Components/ManageArchivedProductsDialog";
+import ManageProductsDialog from "../../Components/ManageProductsDialog";
 import { Skeleton } from "../../Components/ui/skeleton";
 
 const UNCATEGORIZED_FILTER_VALUE = "__uncategorized__";
@@ -30,6 +31,7 @@ function ProductList() {
   const [gcashInfoModalOpen, setGcashInfoModalOpen] = useState(false);
   const [posBalanceModalOpen, setPosBalanceModalOpen] = useState(false);
   const [manageServingsOpen, setManageServingsOpen] = useState(false);
+  const [manageProductsOpen, setManageProductsOpen] = useState(false);
   const [archiveModalOpen, setArchiveModalOpen] = useState(false);
   const [showControlCenter, setShowControlCenter] = useState(false);
 
@@ -145,6 +147,10 @@ function ProductList() {
     document.addEventListener("keydown", handleEscClose);
     return () => document.removeEventListener("keydown", handleEscClose);
   }, [showControlCenter]);
+
+  const assignableCategories = categories.filter(
+    (categoryOption) => categoryOption.value !== UNCATEGORIZED_FILTER_VALUE
+  );
 
   return (
     <div className="w-full min-h-screen p-4">
@@ -314,6 +320,13 @@ function ProductList() {
         onSaved={handleUpdatedProduct}
       />
 
+      <ManageProductsDialog
+        open={manageProductsOpen}
+        onOpenChange={setManageProductsOpen}
+        onSaved={handleUpdatedProduct}
+        categories={assignableCategories}
+      />
+
       <ManageArchivedProductsDialog
         open={archiveModalOpen}
         onOpenChange={setArchiveModalOpen}
@@ -365,7 +378,7 @@ function ProductList() {
                     }}
                     className="flex gap-2 items-center justify-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
                   >
-                    <RadarIcon size={18}/> GCash Infos
+                    <QrCodeIcon size={18}/> GCash Infos
                   </button>
 
                   <button
@@ -425,6 +438,17 @@ function ProductList() {
                   >
                     <LucideForkKnifeCrossed size={18} /> Manage Servings
                   </button>
+
+                  <button
+                    onClick={() => {
+                      setManageProductsOpen(true);
+                      setShowControlCenter(false);
+                    }}
+                    className="sm:col-span-2 flex gap-2 items-center justify-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
+                  >
+                    <CookingPotIcon size={18} /> Manage Products
+                  </button>
+                  
                 </div>
               </section>
             </div>
@@ -433,7 +457,7 @@ function ProductList() {
               <AddProductDialog
                 onSaved={handleUpdatedProduct}
                 existingProducts={products}
-                categories={categories}
+                categories={assignableCategories}
               >
                 <button
                   onClick={() => setShowControlCenter(false)}
@@ -452,7 +476,7 @@ function ProductList() {
           product={selectedProduct}
           onClose={() => setSelectedProduct(null)}
           onSaved={handleUpdatedProduct}
-          categories={categories}
+          categories={assignableCategories}
         />
       )}
     </div>

@@ -22,11 +22,6 @@ export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, 
   const handlePrint = useReactToPrint({
     contentRef: contentRef,
     documentTitle: `Receipt-${receiptDetails?.id || '000'}`,
-    onAfterPrint: () => {
-        if (onConfirm) {
-            onConfirm(); 
-        }
-    }
   });
 
   return (

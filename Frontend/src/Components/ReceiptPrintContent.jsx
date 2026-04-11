@@ -23,21 +23,20 @@ const ReceiptPrintContent = forwardRef(({ transactionData }, ref) => {
         @media print {
         @page {
           size: 58mm auto;
-          margin: 0mm !important; /* FIX 1: Force zero browser margins */
+          margin: 0mm !important;
         }
         
-        /* Target the iframe injected by react-to-print */
         html, body {
           width: 58mm !important;
           margin: 0 !important;
-          padding: 0 !important; /* FIX 2: Removed the 20px padding */
+          padding: 0 !important;
           background: #fff !important;
         }
 
         #receipt {
           width: 58mm !important;
           max-width: 58mm !important;
-          margin: 0 auto !important; /* Center if there's any micro-gap */
+          margin: 0 auto !important; 
           padding: 0 !important;
           box-sizing: border-box !important;
           overflow: hidden !important;
