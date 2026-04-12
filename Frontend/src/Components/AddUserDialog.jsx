@@ -248,7 +248,7 @@ export default function AddUserDialog({ onSaved, children }) {
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="province">Region</Label>
+                <Label htmlFor="province">Province</Label>
                 <select defaultValue="" name="province" id="province" required onChange={handleAddressChange} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background">
                   <option value="" disabled>Select Province</option>
                   {PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}

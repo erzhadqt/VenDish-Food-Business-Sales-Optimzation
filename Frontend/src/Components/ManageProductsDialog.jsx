@@ -386,7 +386,7 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
                 disabled={isProcessing}
                 className={isResetMode ? "border-gray-300" : "bg-blue-50 text-blue-700 hover:bg-blue-100"}
               >
-                {isResetMode ? "Cancel Reset Mode" : "Reset Servings Mode"}
+                {isResetMode ? "Cancel Reset" : "Reset Servings"}
               </Button>
             </div>
           </div>
@@ -433,7 +433,7 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
                       <th className="px-4 py-3 font-semibold min-w-[220px]">Product Name</th>
                       <th className="px-4 py-3 font-semibold w-48">Category</th>
                       <th className="px-4 py-3 font-semibold w-32 text-right">Price</th>
-                      <th className="px-4 py-3 font-semibold w-32 text-right">Servings</th>
+                      {/* <th className="px-4 py-3 font-semibold w-32 text-right">Servings</th> */}
                       <th className="px-4 py-3 font-semibold w-28 text-center">Status</th>
                     </tr>
                   </thead>
@@ -518,7 +518,7 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
                             )}
                           </td>
 
-                          <td className="px-4 py-3">
+                          {/* <td className="px-4 py-3">
                             {isResetMode ? (
                               <div className="text-right text-gray-900 font-medium">{product.stock_quantity ?? 0}</div>
                             ) : (
@@ -530,7 +530,7 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
                                 disabled={isProcessing}
                               />
                             )}
-                          </td>
+                          </td> */}
 
                           <td className="px-4 py-3 text-center">
                             {product.is_archived ? (

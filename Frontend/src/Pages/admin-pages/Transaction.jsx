@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { HistoryIcon, AlertCircle, Tag, EllipsisVertical, ChevronLeft, ChevronRight, Ban, User } from 'lucide-react';
+import { HistoryIcon, AlertCircle, Tag, EllipsisVertical, ChevronLeft, ChevronRight, Ban, User, X } from 'lucide-react';
 import api from '../../api';
 import ReceiptModal from '../../Components/ReceiptModal.jsx';
 import { Skeleton } from '../../Components/ui/skeleton';
@@ -10,14 +10,14 @@ const Transaction = () => {
     const [error, setError] = useState(null);
     const [selectedReceipt, setSelectedReceipt] = useState(null);
 
-    // 🔴 NEW: Lazy load pagination state from localStorage
+    // Lazy load pagination state from localStorage
     const [currentPage, setCurrentPage] = useState(() => {
         const savedPage = localStorage.getItem('transaction_page');
         return savedPage ? parseInt(savedPage, 10) : 1;
     });  
     const rowsPerPage = 5;  
 
-    // 🔴 NEW: Lazy load filter states from localStorage
+    // Lazy load filter states from localStorage
     const [filterStatus, setFilterStatus] = useState(() => {
         return localStorage.getItem('transaction_filterStatus') || 'ALL';
     }); 
@@ -34,7 +34,7 @@ const Transaction = () => {
         return localStorage.getItem('transaction_filterPaymentMode') || 'ALL';
     });
 
-    // 🔴 NEW: Auto-save states to localStorage on change
+    // Auto-save states to localStorage on change
     useEffect(() => {
         localStorage.setItem('transaction_page', currentPage.toString());
         localStorage.setItem('transaction_filterStatus', filterStatus);
@@ -43,6 +43,16 @@ const Transaction = () => {
         localStorage.setItem('transaction_filterDate', filterDate);
         localStorage.setItem('transaction_filterPaymentMode', filterPaymentMode);
     }, [currentPage, filterStatus, filterCoupon, filterCashier, filterDate, filterPaymentMode]);
+
+    // 🔴 NEW: Reset all filters to default
+    const handleClearFilters = () => {
+        setFilterDate('');
+        setFilterPaymentMode('ALL');
+        setFilterStatus('ALL');
+        setFilterCoupon('ALL');
+        setFilterCashier('ALL');
+        setCurrentPage(1);
+    };
 
     const formatCurrency = (amount) => {  
         return new Intl.NumberFormat('en-US', {  
@@ -101,7 +111,7 @@ const Transaction = () => {
 
     const totalPages = Math.ceil(filteredTransactions.length / rowsPerPage);  
     
-    // 🔴 NEW: Failsafe to prevent viewing an empty page if filters reduce total pages below current page
+    // Failsafe to prevent viewing an empty page if filters reduce total pages below current page
     const validCurrentPage = currentPage > totalPages && totalPages > 0 ? totalPages : currentPage;
 
     const paginatedTransactions = filteredTransactions.slice((validCurrentPage - 1) * rowsPerPage, validCurrentPage * rowsPerPage);  
@@ -119,7 +129,8 @@ const Transaction = () => {
                     </h1>  
                 </nav>  
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">  
+                {/* 🔴 MODIFIED: Changed lg:grid-cols-5 to lg:grid-cols-6 to fit the new button */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-6">  
                     <div className="flex flex-col">
                         <label className="text-sm font-medium text-gray-700 mb-1">Date</label>
                         <input 
@@ -164,6 +175,16 @@ const Transaction = () => {
                             ))}
                         </select>  
                     </div>  
+
+                    {/* 🔴 NEW: Clear Button Column */}
+                    <div className="flex flex-col justify-end">
+                        <button 
+                            onClick={handleClearFilters}
+                            className="flex items-center justify-center gap-2 border rounded-lg px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100 text-gray-700 font-medium transition-colors w-1/2 h-[38px]"
+                        >
+                            <X size={16} /> Clear
+                        </button>
+                    </div>
                 </div>  
 
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden min-h-[400px]">  

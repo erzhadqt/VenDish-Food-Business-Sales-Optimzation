@@ -208,11 +208,11 @@ function ProductList() {
           </div>
         )}
 
-        {showSuccess && (
+        {/* {showSuccess && (
           <div className="mb-6">
             <SuccessAlert />
           </div>
-        )}
+        )} */}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {products.map((p) => (
@@ -416,7 +416,7 @@ function ProductList() {
                     }}
                     className="flex gap-2 items-center justify-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
                   >
-                    <ArchiveIcon size={18}/> Archived Products
+                    <ArchiveIcon size={18}/> Archive Products
                   </button>
 
                   <button

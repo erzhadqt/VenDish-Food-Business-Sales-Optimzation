@@ -17,6 +17,19 @@ export default function ManageServingsDialog({ open, onOpenChange, onSaved }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  useEffect(() => {
+    let timeoutId;
+    if (error || success) {
+      timeoutId = setTimeout(() => {
+        setError("");
+        setSuccess("");
+      }, 3000);
+    }
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [error, success]);
+
   const sanitizeNonNegativeIntegerInput = (value) => String(value || "").replace(/\D/g, "");
 
   const parseNonNegativeInteger = (value) => {

@@ -10,7 +10,8 @@ import {
 } from "date-fns";
 import { 
   TrendingUp, Package, CalendarDays, 
-  Download, RefreshCw, PhilippinePesoIcon, Users, BarChart3, Clock
+  Download, RefreshCw, PhilippinePesoIcon, Users, BarChart3, Clock,
+  ShoppingBag
 } from "lucide-react";
 
 import api from '../../api'; 
@@ -732,7 +733,7 @@ export default function SalesAndReports() {
                 <div className="bg-white shadow-lg rounded-xl p-5 border-l-4 border-orange-500">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-gray-600 font-medium text-sm">Total Orders</h3>
-                  <Package className="text-orange-500" size={24} />
+                  <ShoppingBag className="text-orange-500" size={24} />
                 </div>
                 <p className="text-orange-500 font-bold text-3xl">{stats.totalOrders}</p>
                 </div>
