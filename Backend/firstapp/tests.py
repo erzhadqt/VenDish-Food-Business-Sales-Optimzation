@@ -7,7 +7,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from .models import OTP, PasswordResetToken, Review, Category, Product
+from .models import OTP, PasswordResetToken, EmailVerificationToken, Review, Category, Product
 
 
 @override_settings(
@@ -148,6 +148,119 @@ class ForgotPasswordOTPFlowTests(APITestCase):
 		)
 		self.assertEqual(second.status_code, status.HTTP_400_BAD_REQUEST)
 		self.assertEqual(second.data.get('label'), 'Used Token')
+
+
+@override_settings(
+	EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+	DEFAULT_FROM_EMAIL='noreply@example.com',
+	APP_DEEP_LINK_SCHEME='food',
+	BACKEND_BASE_URL='http://localhost:8000',
+	EMAIL_VERIFICATION_EXPIRY_MINUTES=30,
+)
+class EmailVerificationSignupFlowTests(APITestCase):
+	def setUp(self):
+		self.password = 'StrongPassword123!'
+		self.signup_payload = {
+			'username': 'pending_user',
+			'email': 'pending_user@example.com',
+			'password': self.password,
+			'first_name': 'Pending',
+			'last_name': 'User',
+		}
+
+	def test_register_creates_pending_user_and_sends_verification_email(self):
+		now_before = timezone.now()
+
+		response = self.client.post('/firstapp/users/register/', self.signup_payload, format='json')
+
+		self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+		self.assertIn('verify your email', response.data.get('message', '').lower())
+
+		user_model = get_user_model()
+		user = user_model.objects.get(username=self.signup_payload['username'])
+		self.assertFalse(user.is_active)
+
+		verification = EmailVerificationToken.objects.get(user=user)
+		self.assertTrue(verification.is_valid)
+
+		lifetime_seconds = (verification.expires_at - now_before).total_seconds()
+		self.assertGreaterEqual(lifetime_seconds, 30 * 60 - 5)
+		self.assertLessEqual(lifetime_seconds, 30 * 60 + 5)
+
+		self.assertEqual(len(mail.outbox), 1)
+		email_body = mail.outbox[0].body
+		self.assertIn('food://verify-email?token=', email_body)
+		self.assertIn('/firstapp/users/verify-email/?token=', email_body)
+		self.assertIn(verification.token, email_body)
+
+	def test_unverified_user_cannot_login_until_email_is_verified(self):
+		self.client.post('/firstapp/users/register/', self.signup_payload, format='json')
+
+		login_response = self.client.post(
+			'/firstapp/token/',
+			{
+				'username': self.signup_payload['username'],
+				'password': self.password,
+				'platform': 'app',
+			},
+			format='json',
+		)
+
+		self.assertEqual(login_response.status_code, status.HTTP_401_UNAUTHORIZED)
+		self.assertIn('verify your email', str(login_response.data.get('detail', '')).lower())
+
+		user_model = get_user_model()
+		user = user_model.objects.get(username=self.signup_payload['username'])
+		verification = EmailVerificationToken.objects.get(user=user)
+
+		verify_response = self.client.get(f'/firstapp/users/verify-email/?token={verification.token}')
+		self.assertEqual(verify_response.status_code, status.HTTP_200_OK)
+
+		user.refresh_from_db()
+		verification.refresh_from_db()
+		self.assertTrue(user.is_active)
+		self.assertFalse(verification.is_valid)
+		self.assertIsNotNone(verification.verified_at)
+
+		login_after_verify = self.client.post(
+			'/firstapp/token/',
+			{
+				'username': self.signup_payload['username'],
+				'password': self.password,
+				'platform': 'app',
+			},
+			format='json',
+		)
+
+		self.assertEqual(login_after_verify.status_code, status.HTTP_200_OK)
+		self.assertIn('access', login_after_verify.data)
+		self.assertIn('refresh', login_after_verify.data)
+
+	def test_expired_verification_token_is_rejected(self):
+		user_model = get_user_model()
+		user = user_model.objects.create_user(
+			username='expired_pending_user',
+			email='expired_pending_user@example.com',
+			password=self.password,
+			is_active=False,
+		)
+
+		verification = EmailVerificationToken.objects.create(
+			user=user,
+			token='expired-verification-token',
+			expires_at=timezone.now() - timedelta(minutes=1),
+			is_valid=True,
+		)
+
+		response = self.client.get(f'/firstapp/users/verify-email/?token={verification.token}')
+
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		self.assertIn('expired', str(response.data.get('error', '')).lower())
+
+		user.refresh_from_db()
+		verification.refresh_from_db()
+		self.assertFalse(user.is_active)
+		self.assertFalse(verification.is_valid)
 
 
 class ReviewAdminReplyTests(APITestCase):

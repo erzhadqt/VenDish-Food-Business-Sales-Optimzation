@@ -95,7 +95,6 @@ const ReceiptPrintContent = forwardRef(({ transactionData }, ref) => {
         <div style={{ textAlign: 'center', fontSize: '8px', marginBottom: '4px', borderBottom: '1px solid #000', paddingBottom: '4px', lineHeight: '1.3' }}>
           <div style={{ marginBottom: '1px' }}>Baliwasan, Zamboanga City</div>
           <div>TIN: 123-456-789-000</div>
-          <div>Permit: ATP-2025-56789</div>
         </div>
 
         {/* DATE */}

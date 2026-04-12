@@ -8,7 +8,7 @@ from django.conf import settings
 from datetime import timedelta
 import re
 
-from .models import Product, Category, Receipt, ReceiptItem, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, Review, UserProfile, OTP, Notification, StaffInvitationToken
+from .models import Product, Category, Receipt, ReceiptItem, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, Review, UserProfile, OTP, Notification, StaffInvitationToken, EmailVerificationToken
 
 
 def _normalize_gcash_reference(value):
@@ -44,6 +44,16 @@ class UserSerializer(serializers.ModelSerializer):
             )
         return self._pending_invitation_user_ids_cache
 
+    def _pending_email_verification_user_ids(self):
+        if not hasattr(self, '_pending_email_verification_user_ids_cache'):
+            self._pending_email_verification_user_ids_cache = set(
+                EmailVerificationToken.objects.filter(
+                    is_valid=True,
+                    expires_at__gte=timezone.now(),
+                ).values_list('user_id', flat=True)
+            )
+        return self._pending_email_verification_user_ids_cache
+
     def get_has_completed_transaction(self, obj):
         # Check if the user has any receipt where they are the customer and status is completed
         # Excluding voided ones, assuming status=COMPLETED is what we count
@@ -61,6 +71,9 @@ class UserSerializer(serializers.ModelSerializer):
             return "Active"
 
         if obj.is_staff and obj.id in self._pending_invitation_user_ids():
+            return "Pending"
+
+        if not obj.is_staff and obj.id in self._pending_email_verification_user_ids():
             return "Pending"
 
         return "Deactivated"

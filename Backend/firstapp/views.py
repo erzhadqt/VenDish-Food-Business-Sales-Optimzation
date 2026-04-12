@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404, render
 from django.core.management import call_command
+from django.core.mail import send_mail
 from django.db import transaction, IntegrityError
 from django.utils import timezone
 from django.conf import settings
@@ -24,6 +25,7 @@ from django.utils.dateparse import parse_datetime
 from django.db.models import Sum, Count, Q, Exists, OuterRef
 
 from django.contrib.auth.hashers import make_password, check_password
+import logging
 import base64
 import hashlib
 import hmac
@@ -32,6 +34,7 @@ from io import StringIO
 import json
 import requests
 import uuid
+import random
 
 import secrets
 
@@ -41,7 +44,7 @@ from rest_framework.permissions import AllowAny
 from .serializers import (
     UserSerializer, FeedbackSerializer, ProductSerializer, CategorySerializer, ReceiptSerializer, CouponSerializer, HomePageSerializer, ServicesPageSerializer, AboutPageSerializer, ContactPageSerializer, CouponCriteriaSerializer, StaffPerformanceSerializer, ReviewSerializer, OTPSerializer, NotificationSerializer
 )   
-from .models import Product, Category, Receipt, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, ReceiptItem, Review, OTP, PasswordResetToken, StoreSettings, StaffInvitationToken, PaymentTransaction, PaymentWebhookEventLog, Notification
+from .models import Product, Category, Receipt, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, ReceiptItem, Review, OTP, PasswordResetToken, EmailVerificationToken, StoreSettings, StaffInvitationToken, PaymentTransaction, PaymentWebhookEventLog, Notification
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.exceptions import AuthenticationFailed
 
@@ -108,6 +111,9 @@ PAYMONGO_ALLOWED_EVENTS = {
 
 PAYMONGO_REPLAY_WINDOW_MINUTES = 15
 STAFF_INVITATION_EXPIRY_MINUTES = max(1, int(getattr(settings, 'STAFF_INVITATION_EXPIRY_MINUTES', 15)))
+EMAIL_VERIFICATION_EXPIRY_MINUTES = max(1, int(getattr(settings, 'EMAIL_VERIFICATION_EXPIRY_MINUTES', 30)))
+
+logger = logging.getLogger(__name__)
 
 
 @api_view(['GET', 'POST'])
@@ -350,6 +356,67 @@ def thermal_receipt_view(request, receipt_id):
     return render(request, 'thermal_receipt.html', context)
 
 
+def _build_email_verification_link(token):
+    app_scheme = (getattr(settings, 'APP_DEEP_LINK_SCHEME', '') or 'food').strip().replace('://', '')
+    if not app_scheme:
+        app_scheme = 'food'
+    return f"{app_scheme}://verify-email?token={token}"
+
+
+def _build_email_verification_fallback_link(token):
+    backend_base_url = (getattr(settings, 'BACKEND_BASE_URL', '') or '').rstrip('/')
+    if not backend_base_url:
+        backend_base_url = 'http://localhost:8000'
+    return f"{backend_base_url}/firstapp/users/verify-email/?token={token}"
+
+
+def _create_email_verification_token(user):
+    EmailVerificationToken.objects.filter(user=user, is_valid=True).update(is_valid=False)
+
+    expires_at = timezone.now() + timedelta(minutes=EMAIL_VERIFICATION_EXPIRY_MINUTES)
+    token_str = secrets.token_urlsafe(32)
+
+    return EmailVerificationToken.objects.create(
+        user=user,
+        token=token_str,
+        expires_at=expires_at,
+        is_valid=True,
+    )
+
+
+def _send_email_verification_email(user, token):
+    verification_link = _build_email_verification_link(token)
+    fallback_link = _build_email_verification_fallback_link(token)
+
+    send_mail(
+        subject='Verify Your Email – Kuya Vince Karinderya',
+        message=(
+            f"Hi {user.first_name or user.username},\n\n"
+            "Thank you for signing up. Please verify your email by clicking the link below:\n\n"
+            f"{verification_link}\n\n"
+            "If the app does not open automatically, use this fallback link:\n"
+            f"{fallback_link}\n\n"
+            f"This verification link expires in {EMAIL_VERIFICATION_EXPIRY_MINUTES} minutes.\n"
+            "If you did not create this account, please ignore this email.\n\n"
+            "– Kuya Vince Karinderya"
+        ),
+        html_message=(
+            "<div style='font-family: sans-serif;'>"
+            f"<h3>Hi {user.first_name or user.username},</h3>"
+            "<p>Thank you for signing up. Please verify your email to activate your account.</p>"
+            f"<p><a href='{verification_link}' style='padding: 10px 20px; background-color: #B71C1C; color: white; text-decoration: none; border-radius: 6px; display: inline-block;'>Verify Email</a></p>"
+            f"<p>If the app does not open automatically, use this fallback link:</p>"
+            f"<p><a href='{fallback_link}'>{fallback_link}</a></p>"
+            f"<p><strong>This link expires in {EMAIL_VERIFICATION_EXPIRY_MINUTES} minutes.</strong></p>"
+            "<p>If you did not create this account, please ignore this email.</p>"
+            "</div>"
+        ),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[user.email],
+        fail_silently=False,
+    )
+
+
 # -------------------------------
 # USER CRUD
 # -------------------------------
@@ -359,6 +426,44 @@ class CreateUserView(generics.CreateAPIView):
     serializer_class = UserSerializer
     permission_classes = [AllowAny]
     authentication_classes = []  # Public endpoint — skip JWT validation
+
+    def create(self, request, *args, **kwargs):
+        data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+
+        data['is_staff'] = False
+        data['is_superuser'] = False
+        data['is_active'] = False
+
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            with transaction.atomic():
+                user = serializer.save()
+                verification_token = _create_email_verification_token(user)
+                _send_email_verification_email(user, verification_token.token)
+        except Exception as exc:
+            logger.error(
+                "Failed to complete legacy signup email verification setup for '%s': %s",
+                data.get('email', ''),
+                exc,
+            )
+            return Response(
+                {
+                    "error": "We could not send the verification email. Please try signing up again.",
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            {
+                "user": serializer.data,
+                "message": "Account created successfully. Please verify your email before logging in.",
+            },
+            status=status.HTTP_201_CREATED,
+            headers=headers,
+        )
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by("-id")
@@ -430,15 +535,118 @@ class UserViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], permission_classes=[AllowAny], url_path='register')
     def register(self, request):
-        serializer = self.get_serializer(data=request.data)
-        if serializer.is_valid():
-            # This calls UserSerializer.create(), which saves all fields in 'validated_data'
-            user = serializer.save() 
-            return Response({
+        data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+
+        # Public signup always creates a regular pending user.
+        data['is_staff'] = False
+        data['is_superuser'] = False
+        data['is_active'] = False
+
+        serializer = self.get_serializer(data=data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            with transaction.atomic():
+                user = serializer.save()
+                verification_token = _create_email_verification_token(user)
+                _send_email_verification_email(user, verification_token.token)
+        except Exception as exc:
+            logger.error(
+                "Failed to complete signup email verification setup for '%s': %s",
+                data.get('email', ''),
+                exc,
+            )
+            return Response(
+                {
+                    "error": "We could not send the verification email. Please try signing up again.",
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response(
+            {
                 "user": serializer.data,
-                "message": "User created successfully"
-            }, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                "message": "Account created successfully. Please verify your email before logging in.",
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=False, methods=['get', 'post'], permission_classes=[AllowAny], url_path='verify-email')
+    def verify_email(self, request):
+        payload = request.query_params if request.method == 'GET' else request.data
+        token = str(payload.get('token', '')).strip()
+
+        if not token:
+            return Response({"error": "Verification token is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        verification = EmailVerificationToken.objects.select_related('user').filter(token=token).first()
+        if not verification:
+            return Response({"error": "Invalid verification link."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not verification.is_valid:
+            return Response({"error": "This verification link has already been used."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if verification.expires_at <= timezone.now():
+            verification.is_valid = False
+            verification.save(update_fields=['is_valid'])
+            return Response(
+                {"error": "This verification link has expired. Please request a new verification email."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = verification.user
+        user.is_active = True
+        user.save(update_fields=['is_active'])
+
+        profile = getattr(user, 'profile', None)
+        if profile and profile.deactivated_at is not None:
+            profile.deactivated_at = None
+            profile.save(update_fields=['deactivated_at'])
+
+        verification.is_valid = False
+        verification.verified_at = timezone.now()
+        verification.save(update_fields=['is_valid', 'verified_at'])
+
+        EmailVerificationToken.objects.filter(user=user, is_valid=True).exclude(id=verification.id).update(is_valid=False)
+
+        return Response(
+            {"message": "Email verified successfully. You can now log in."},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny], url_path='resend-verification-email')
+    def resend_verification_email(self, request):
+        email = str(request.data.get('email', '')).strip().lower()
+        if not email:
+            return Response({"error": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.filter(email__iexact=email, is_staff=False).first()
+
+        # Return a generic message to prevent account enumeration.
+        generic_message = (
+            "If an account pending verification exists for this email, "
+            "a new verification link has been sent."
+        )
+
+        if not user:
+            return Response({"message": generic_message}, status=status.HTTP_200_OK)
+
+        profile = getattr(user, 'profile', None)
+        if user.is_active or (profile and profile.deactivated_at is not None):
+            return Response({"message": generic_message}, status=status.HTTP_200_OK)
+
+        try:
+            verification_token = _create_email_verification_token(user)
+            _send_email_verification_email(user, verification_token.token)
+        except Exception as exc:
+            logger.error("Failed to resend verification email to '%s': %s", email, exc)
+            return Response(
+                {"error": "Unable to send verification email right now. Please try again later."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response({"message": generic_message}, status=status.HTTP_200_OK)
 
     # [NEW] 'Me' Endpoint to fetch/update current user details
     @action(detail=False, methods=['get', 'patch', 'put'], permission_classes=[IsAuthenticated], url_path='me')
@@ -479,6 +687,48 @@ class UserViewSet(viewsets.ModelViewSet):
         user.profile.save()
 
         return Response({"message": "Account deactivated successfully. It will be permanently deleted in 30 days."}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny], url_path='reactivate')
+    def reactivate_account(self, request):
+        """
+        Reactivates a deactivated regular-user account after verifying credentials.
+        """
+        username = str(request.data.get('username', '')).strip()
+        password = request.data.get('password')
+
+        if not username:
+            return Response({"error": "Username is required to reactivate account."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not password:
+            return Response({"error": "Password is required to reactivate account."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.filter(username=username, is_staff=False).first()
+        if not user:
+            return Response({"error": "No account found with the provided username."}, status=status.HTTP_404_NOT_FOUND)
+
+        profile = getattr(user, 'profile', None)
+        is_deactivated = bool(profile and profile.deactivated_at)
+
+        if user.is_active and not is_deactivated:
+            return Response({"error": "This account is already active. Please log in."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not is_deactivated:
+            return Response(
+                {"error": "This account is pending email verification. Please verify your email first."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not user.check_password(password):
+            return Response({"error": "Incorrect password."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.is_active = True
+        user.save(update_fields=['is_active'])
+
+        if profile and profile.deactivated_at is not None:
+            profile.deactivated_at = None
+            profile.save(update_fields=['deactivated_at'])
+
+        return Response({"message": "Account reactivated successfully. You can now log in."}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['post'], permission_classes=[IsAdminUser], url_path='cleanup-deactivated')
     def cleanup_deactivated(self, request):
@@ -616,7 +866,21 @@ class PlatformTokenObtainPairSerializer(TokenObtainPairSerializer):
             raise AuthenticationFailed("This staff account is blocked from web login")
 
         if platform == "app" and not user.is_staff and not user.is_active:
-            raise AuthenticationFailed("This user account is blocked from app login")
+            has_pending_verification = EmailVerificationToken.objects.filter(
+                user=user,
+                is_valid=True,
+                expires_at__gte=timezone.now(),
+            ).exists()
+
+            profile = getattr(user, 'profile', None)
+            is_deactivated = bool(profile and profile.deactivated_at)
+
+            if has_pending_verification or not is_deactivated:
+                raise AuthenticationFailed(
+                    "Please verify your email before logging in. Check your inbox for the verification link."
+                )
+
+            raise AuthenticationFailed("This account is deactivated. Reactivate your account to continue.")
 
         refresh = self.get_token(user)
         return {
@@ -1825,10 +2089,6 @@ class ContactPageViewSet(viewsets.ModelViewSet):
             return Response([], status=200)
         serializer = self.get_serializer(latest)
         return Response(serializer.data)
-
-import random
-import secrets
-from django.core.mail import send_mail
 
 OTP_EXPIRY_MINUTES = 15
 PASSWORD_RESET_TOKEN_EXPIRY_MINUTES = 5

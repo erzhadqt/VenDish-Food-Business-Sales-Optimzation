@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Layout, Coffee, Info, Phone, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
+import { Save, Layout, Coffee, Info, Phone, Smartphone, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import api from '../../api';
 import { Skeleton } from '../../Components/ui/skeleton';
 
@@ -50,6 +50,12 @@ const DEFAULT_CONTACT = {
   header: { highlight: "CONTACT", suffix: "US", subtitle: "We’d love to hear from you!" },
   info: { phone: "0912 345 6789", email: "kuyavince@example.com", address: "Cagayan de Oro City", facebookLink: "https://facebook.com", facebookLabel: "Kuya Vince Karinderya" }
 };
+const DEFAULT_APP = {
+  location: "Cagayan de Oro City",
+  operatingHours: "Everyday: 7:00 AM \u2013 10:00 PM",
+  phone: "0912 345 6789",
+  email: "kuyavince@example.com",
+};
 
 const getLatestRecord = (data) => {
   if (Array.isArray(data)) return data[data.length - 1] || null;
@@ -75,6 +81,7 @@ const CMS = () => {
   const [servicesData, setServicesData] = useState(DEFAULT_SERVICES);
   const [aboutData, setAboutData] = useState(DEFAULT_ABOUT);
   const [contactData, setContactData] = useState(DEFAULT_CONTACT);
+  const [appData, setAppData] = useState(DEFAULT_APP);
   const [heroImageFile, setHeroImageFile] = useState(null);
   const [carouselImageFiles, setCarouselImageFiles] = useState(Array(10).fill(null));
   const [locationImageFile, setLocationImageFile] = useState(null);
@@ -200,6 +207,13 @@ const CMS = () => {
             },
           });
         }
+
+        setAppData({
+          location: contactApiData?.address || DEFAULT_APP.location,
+          operatingHours: aboutApiData?.open_hours || DEFAULT_APP.operatingHours,
+          phone: contactApiData?.phone_number || DEFAULT_APP.phone,
+          email: contactApiData?.email || DEFAULT_APP.email,
+        });
       } catch (error) {
         console.error("Failed to load CMS data from backend:", error);
       } finally {
@@ -349,6 +363,10 @@ const CMS = () => {
             if (locationImageFile) {
               setLocationImageFile(null);
             }
+            setAppData(prev => ({
+              ...prev,
+              operatingHours: aboutData.location?.openHours || prev.operatingHours,
+            }));
             setStatus({ type: 'success', message: 'Saved ABOUT to backend!' });
         }
         else if (activeTab === 'contact') {
@@ -371,7 +389,86 @@ const CMS = () => {
                   setPageIds(prev => ({ ...prev, contact: res.data.id }));
                 }
             }
+            setAppData(prev => ({
+              ...prev,
+              location: contactData.info.address,
+              phone: contactData.info.phone,
+              email: contactData.info.email,
+            }));
             setStatus({ type: 'success', message: 'Saved CONTACT to backend!' });
+        }
+        else if (activeTab === 'app') {
+            const aboutPayload = new FormData();
+            aboutPayload.append('open_hours', appData.operatingHours || '');
+            if (locationImageFile) {
+              aboutPayload.append('location_image', locationImageFile);
+            }
+
+            let savedAboutData = null;
+
+            if (pageIds.about) {
+              const res = await api.patch(`/firstapp/about/${pageIds.about}/`, aboutPayload, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+              });
+              savedAboutData = res.data;
+            } else {
+              const res = await api.post('/firstapp/about/', aboutPayload, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+              });
+              savedAboutData = res.data;
+              if (res.data?.id) {
+                setPageIds(prev => ({ ...prev, about: res.data.id }));
+              }
+            }
+
+            const contactPayload = {
+              header_highlight: contactData.header.highlight || DEFAULT_CONTACT.header.highlight,
+              header_suffix: contactData.header.suffix || DEFAULT_CONTACT.header.suffix,
+              subtitle: contactData.header.subtitle || DEFAULT_CONTACT.header.subtitle,
+              phone_number: appData.phone || '',
+              email: appData.email || '',
+              address: appData.location || '',
+              fb_page: contactData.info.facebookLink || DEFAULT_CONTACT.info.facebookLink,
+              fb_label: contactData.info.facebookLabel || DEFAULT_CONTACT.info.facebookLabel,
+            };
+
+            let savedContactData = null;
+
+            if (pageIds.contact) {
+              const res = await api.put(`/firstapp/contact-page/${pageIds.contact}/`, contactPayload);
+              savedContactData = res.data;
+            } else {
+              const res = await api.post('/firstapp/contact-page/', contactPayload);
+              savedContactData = res.data;
+              if (res.data?.id) {
+                setPageIds(prev => ({ ...prev, contact: res.data.id }));
+              }
+            }
+
+            setAboutData(prev => ({
+              ...prev,
+              location: {
+                ...prev.location,
+                openHours: appData.operatingHours,
+                locationImage: savedAboutData?.location_image || prev.location?.locationImage || '',
+              },
+            }));
+
+            setContactData(prev => ({
+              ...prev,
+              info: {
+                ...prev.info,
+                phone: savedContactData?.phone_number || appData.phone,
+                email: savedContactData?.email || appData.email,
+                address: savedContactData?.address || appData.location,
+              },
+            }));
+
+            if (locationImageFile) {
+              setLocationImageFile(null);
+            }
+
+            setStatus({ type: 'success', message: 'Saved APP INFO to backend!' });
         }
     } catch (error) {
         console.error("Save failed", error);
@@ -405,7 +502,7 @@ const CMS = () => {
             <div className="flex justify-between items-center mb-6">
                 <div>
                   <h1 className="text-2xl font-black text-gray-900 tracking-tight">CONTENT MANAGEMENT</h1>
-                  <p className="text-sm text-gray-500 mt-1">Update your website's landing page content instantly</p>
+                  <p className="text-sm text-gray-500 mt-1">Update your website and app content instantly</p>
                 </div>
                 <button onClick={handleSave} disabled={saving} className="bg-red-600 text-white px-6 py-2.5 rounded-lg font-bold flex items-center gap-2 hover:bg-red-700 transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed">
                     {saving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>}
@@ -415,7 +512,7 @@ const CMS = () => {
             
             {/* Tabs */}
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-              {[ {id:'home', icon: Layout, label:'Home'}, {id:'services', icon: Coffee, label:'Services'}, {id:'about', icon: Info, label:'About'}, {id:'contact', icon: Phone, label:'Contact'} ].map(t => (
+              {[ {id:'home', icon: Layout, label:'Home'}, {id:'services', icon: Coffee, label:'Services'}, {id:'about', icon: Info, label:'About'}, {id:'contact', icon: Phone, label:'Contact'}, {id:'app', icon: Smartphone, label:'App'} ].map(t => (
                     <button key={t.id} onClick={() => setActiveTab(t.id)} className={`px-5 py-2.5 rounded-lg flex items-center gap-2 text-sm font-bold transition-all whitespace-nowrap ${activeTab === t.id ? 'bg-red-50 text-red-600 border border-red-100 shadow-sm' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
                         <t.icon size={16}/> {t.label}
                     </button>
@@ -617,36 +714,6 @@ const CMS = () => {
                         </div>
                         <InputGroup label="Footer / Slogan" value={aboutData.story.footer} onChange={(v) => updateState(setAboutData, aboutData, 'story', 'footer', v)} />
                     </section>
-                    <section className="bg-white p-6 border border-gray-200 rounded-xl shadow-sm">
-                        <h2 className="font-bold text-lg mb-6 text-gray-800 flex items-center gap-2"><span className="w-1.5 h-6 bg-red-500 rounded-full"></span>Location Tab Settings (App)</h2>
-                        <p className="text-xs text-gray-500 mb-4">These values are displayed in the mobile app's Location tab.</p>
-                        <InputGroup label="Open Hours" value={aboutData.location?.openHours || ''} onChange={(v) => updateState(setAboutData, aboutData, 'location', 'openHours', v)} />
-                        <div className="mt-2">
-                          <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">Location / Map Image</label>
-                          <div className="flex items-start gap-4">
-                            <div className="w-48 h-32 rounded-lg border border-gray-200 overflow-hidden bg-gray-100 flex items-center justify-center shrink-0">
-                              {(locationImageFile || aboutData.location?.locationImage) ? (
-                                <img
-                                  src={locationImageFile ? URL.createObjectURL(locationImageFile) : resolveImageUrl(aboutData.location.locationImage)}
-                                  alt="Location preview"
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <span className="text-xs text-gray-500">No image</span>
-                              )}
-                            </div>
-                            <div className="flex-1 space-y-2">
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) => setLocationImageFile(e.target.files?.[0] || null)}
-                                className="w-full p-2.5 border border-gray-300 rounded-lg text-sm bg-gray-50"
-                              />
-                              <p className="text-xs text-gray-500">Upload an image of your shop location or map screenshot.</p>
-                            </div>
-                          </div>
-                        </div>
-                    </section>
                 </div>
             )}
 
@@ -671,6 +738,51 @@ const CMS = () => {
                         <div className="grid md:grid-cols-2 gap-5 mt-2">
                              <InputGroup label="FB Label" value={contactData.info.facebookLabel} onChange={(v) => updateState(setContactData, contactData, 'info', 'facebookLabel', v)} />
                              <InputGroup label="FB Link URL" value={contactData.info.facebookLink} onChange={(v) => updateState(setContactData, contactData, 'info', 'facebookLink', v)} />
+                        </div>
+                    </section>
+                </div>
+            )}
+
+            {/* APP TAB */}
+            {activeTab === 'app' && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                    <section className="bg-white p-6 border border-gray-200 rounded-xl shadow-sm">
+                        <h2 className="font-bold text-lg mb-6 text-gray-800 flex items-center gap-2"><span className="w-1.5 h-6 bg-red-500 rounded-full"></span>About Tab + Location Tab (Mobile App)</h2>
+                        <p className="text-xs text-gray-500 mb-4">These values are used by the mobile app About and Location tabs.</p>
+                        <InputGroup label="Location" type="textarea" value={appData.location} onChange={(v) => setAppData(prev => ({ ...prev, location: v }))} />
+                        <InputGroup label="Operating Hours" value={appData.operatingHours} onChange={(v) => setAppData(prev => ({ ...prev, operatingHours: v }))} />
+                        <div className="grid md:grid-cols-2 gap-5 mt-1">
+                          <InputGroup label="Phone Number" value={appData.phone} onChange={(v) => setAppData(prev => ({ ...prev, phone: v }))} />
+                          <InputGroup label="Email" type="email" value={appData.email} onChange={(v) => setAppData(prev => ({ ...prev, email: v }))} />
+                        </div>
+                    </section>
+
+                    <section className="bg-white p-6 border border-gray-200 rounded-xl shadow-sm">
+                        <h2 className="font-bold text-lg mb-6 text-gray-800 flex items-center gap-2"><span className="w-1.5 h-6 bg-red-500 rounded-full"></span>Location Map Image (Mobile App)</h2>
+                        <div className="mt-2">
+                          <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">Location / Map Image</label>
+                          <div className="flex items-start gap-4">
+                            <div className="w-48 h-32 rounded-lg border border-gray-200 overflow-hidden bg-gray-100 flex items-center justify-center shrink-0">
+                              {(locationImageFile || aboutData.location?.locationImage) ? (
+                                <img
+                                  src={locationImageFile ? URL.createObjectURL(locationImageFile) : resolveImageUrl(aboutData.location.locationImage)}
+                                  alt="Location preview"
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <span className="text-xs text-gray-500">No image</span>
+                              )}
+                            </div>
+                            <div className="flex-1 space-y-2">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => setLocationImageFile(e.target.files?.[0] || null)}
+                                className="w-full p-2.5 border border-gray-300 rounded-lg text-sm bg-gray-50"
+                              />
+                              <p className="text-xs text-gray-500">Upload an image of your shop location or map screenshot.</p>
+                            </div>
+                          </div>
                         </div>
                     </section>
                 </div>

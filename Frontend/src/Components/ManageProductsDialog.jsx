@@ -348,7 +348,7 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
         <DialogHeader className="pb-4 border-b">
           <DialogTitle className="flex items-center gap-2 text-xl">
             <CookingPot className="text-blue-600" size={24} /> 
-            Manage Inventory & Pricing
+            Manage Servings and Products
           </DialogTitle>
           <DialogDescription className="text-gray-500 mt-1">
             {isResetMode
@@ -434,7 +434,7 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
                   <thead className="bg-gray-100 text-gray-600 sticky top-0 z-10 shadow-sm border-b border-gray-200">
                     <tr>
                       {isResetMode && <th className="px-4 py-3 w-12 font-semibold"></th>}
-                      <th className="px-4 py-3 font-semibold min-w-[220px]">Product Name</th>
+                      <th className="px-4 py-3 font-semibold min-w-55">Product Name</th>
                       <th className="px-4 py-3 font-semibold w-48">Category</th>
                       <th className="px-4 py-3 font-semibold w-32 text-right">Price</th>
                       <th className="px-4 py-3 font-semibold w-32 text-right">Servings</th>
@@ -579,7 +579,7 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
                     <ChevronLeft size={16} />
                   </Button>
                   
-                  <span className="text-sm font-medium text-gray-700 px-2 min-w-[80px] text-center">
+                  <span className="text-sm font-medium text-gray-700 px-2 min-w-20 text-center">
                     Page {currentPage} of {totalPages}
                   </span>
                   
