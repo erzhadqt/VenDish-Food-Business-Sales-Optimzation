@@ -49,7 +49,7 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
       timeoutId = setTimeout(() => {
         setError("");
         setSuccess("");
-      }, 3000);
+      }, 2000);
     }
     return () => {
       if (timeoutId) clearTimeout(timeoutId);
@@ -103,10 +103,14 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
       setSuccess("");
 
       try {
-        const response = await api.get("/firstapp/products/?include_archived=true");
-        const sortedProducts = [...(Array.isArray(response.data) ? response.data : [])].sort((a, b) =>
-          (a.product_name || "").localeCompare((b.product_name || ""), undefined, { sensitivity: "base" })
-        );
+        // Changed to omit archived products from the API response
+        const response = await api.get("/firstapp/products/");
+        
+        const sortedProducts = [...(Array.isArray(response.data) ? response.data : [])]
+          .filter(product => !product.is_archived) // Frontend safety filter
+          .sort((a, b) =>
+            (a.product_name || "").localeCompare((b.product_name || ""), undefined, { sensitivity: "base" })
+          );
 
         setProducts(sortedProducts);
         setDrafts(createDraftMap(sortedProducts));
@@ -375,8 +379,8 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
                   disabled={filteredProducts.length === 0 || isProcessing}
                   className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                 >
-                  {allFilteredSelected ? <Square className="mr-2 h-4 w-4" /> : <CheckSquare className="mr-2 h-4 w-4" />}
-                  {allFilteredSelected ? "Deselect All Filtered" : "Select All Filtered"}
+                  {allFilteredSelected ? <CheckSquare className="mr-2 h-4 w-4" /> : <Square className="mr-2 h-4 w-4" />}
+                  {allFilteredSelected ? "Deselect All" : "Select All"}
                 </Button>
               )}
               
@@ -391,7 +395,7 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
             </div>
           </div>
 
-          {/* Feedback Messages - Floating nicely above the table */}
+          {/* Feedback Messages */}
           {error && (
             <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-4 py-3 flex items-center gap-2 shadow-sm animate-in fade-in slide-in-from-top-2">
               <AlertCircle size={18} className="shrink-0" />
@@ -433,7 +437,7 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
                       <th className="px-4 py-3 font-semibold min-w-[220px]">Product Name</th>
                       <th className="px-4 py-3 font-semibold w-48">Category</th>
                       <th className="px-4 py-3 font-semibold w-32 text-right">Price</th>
-                      {/* <th className="px-4 py-3 font-semibold w-32 text-right">Servings</th> */}
+                      <th className="px-4 py-3 font-semibold w-32 text-right">Servings</th>
                       <th className="px-4 py-3 font-semibold w-28 text-center">Status</th>
                     </tr>
                   </thead>
@@ -518,7 +522,7 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
                             )}
                           </td>
 
-                          {/* <td className="px-4 py-3">
+                          <td className="px-4 py-3">
                             {isResetMode ? (
                               <div className="text-right text-gray-900 font-medium">{product.stock_quantity ?? 0}</div>
                             ) : (
@@ -530,14 +534,11 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
                                 disabled={isProcessing}
                               />
                             )}
-                          </td> */}
+                          </td>
 
                           <td className="px-4 py-3 text-center">
-                            {product.is_archived ? (
-                              <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 w-24">
-                                Archived
-                              </span>
-                            ) : (Number(product.stock_quantity ?? 0) > 0) ? (
+                            {/* Removed the archived check here */}
+                            {(Number(product.stock_quantity ?? 0) > 0) ? (
                               <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 w-24">
                                 Available
                               </span>

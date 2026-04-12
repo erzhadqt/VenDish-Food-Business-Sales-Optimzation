@@ -202,7 +202,7 @@ const PromoManagement = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search by promo name or code"
-                className="pl-9 sm:w-72"
+                className="pl-9 sm:w-80"
               />
             </div>
 

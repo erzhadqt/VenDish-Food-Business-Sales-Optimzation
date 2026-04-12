@@ -35,6 +35,19 @@ export default function ManageArchivedProductsDialog({ open, onOpenChange, onSav
   };
 
   useEffect(() => {
+      let timeoutId;
+      if (error || success) {
+        timeoutId = setTimeout(() => {
+          setError("");
+          setSuccess("");
+        }, 2000);
+      }
+      return () => {
+        if (timeoutId) clearTimeout(timeoutId);
+      };
+    }, [error, success]);
+
+  useEffect(() => {
     const fetchProducts = async () => {
       if (!open) return;
 

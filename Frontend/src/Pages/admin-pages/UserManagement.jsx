@@ -179,7 +179,7 @@ export default function UserManagement() {
                 placeholder="Search users..."
                 value={searchQuery}
                 onChange={handleSearchChange}
-                className="pl-10 pr-4 py-2.5 min-w-100 lg:w-64 bg-white border border-gray-300 text-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent shadow-sm transition-colors"
+                className="pl-10 pr-4 py-2.5 min-w-80 lg:w-64 bg-white border border-gray-300 text-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent shadow-sm transition-colors"
               />
             </div>
 

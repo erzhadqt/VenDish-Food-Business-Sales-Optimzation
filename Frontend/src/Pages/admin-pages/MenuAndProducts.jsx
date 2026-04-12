@@ -314,11 +314,11 @@ function ProductList() {
         onOpenChange={setPosBalanceModalOpen}
       />
 
-      <ManageServingsDialog
+      {/* <ManageServingsDialog
         open={manageServingsOpen}
         onOpenChange={setManageServingsOpen}
         onSaved={handleUpdatedProduct}
-      />
+      /> */}
 
       <ManageProductsDialog
         open={manageProductsOpen}
@@ -429,7 +429,7 @@ function ProductList() {
                     <Settings size={18}/> Manage Categories
                   </button>
 
-                  <button
+                  {/* <button
                     onClick={() => {
                       setManageServingsOpen(true);
                       setShowControlCenter(false);
@@ -437,8 +437,7 @@ function ProductList() {
                     className="sm:col-span-2 flex gap-2 items-center justify-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
                   >
                     <LucideForkKnifeCrossed size={18} /> Manage Servings
-                  </button>
-
+                  </button> */}
                   <button
                     onClick={() => {
                       setManageProductsOpen(true);
