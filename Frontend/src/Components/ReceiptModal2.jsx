@@ -18,6 +18,11 @@ import ReceiptPrintContent from "./ReceiptPrintContent";
 
 export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, onOpenChange }) {
   const contentRef = useRef(null);
+    const cashierName =
+        receiptDetails?.cashier_name ||
+        receiptDetails?.cashier?.username ||
+        receiptDetails?.cashier ||
+        "Unknown";
 
   const handlePrint = useReactToPrint({
     contentRef: contentRef,
@@ -51,6 +56,10 @@ export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, 
 
                 <p className="text-muted-foreground mb-4 text-xs">
                     {new Date(receiptDetails.created_at).toLocaleString()}
+                </p>
+
+                <p className="text-muted-foreground mb-4 text-xs">
+                    Cashier: <span className="font-semibold text-foreground">{cashierName}</span>
                 </p>
 
                 <div className="space-y-3 mb-4">

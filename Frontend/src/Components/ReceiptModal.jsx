@@ -4,6 +4,12 @@ import { X, Printer } from 'lucide-react';
 const ReceiptModal = ({ open, onClose, receiptDetails }) => {
     if (!open || !receiptDetails) return null;
 
+    const cashierName =
+        receiptDetails.cashier_name ||
+        receiptDetails.cashier?.username ||
+        receiptDetails.cashier ||
+        "Unknown";
+
     const handlePrint = () => {
         window.print();
     };
@@ -55,6 +61,11 @@ const ReceiptModal = ({ open, onClose, receiptDetails }) => {
                                     {new Date(receiptDetails.created_at).toLocaleDateString()}
                                 </p>
                             </div>
+                        </div>
+
+                        <div className="mb-4 text-sm text-gray-700">
+                            <span className="text-gray-500">Cashier:</span>{" "}
+                            <span className="font-semibold">{cashierName}</span>
                         </div>
 
                         {/* Items List */}

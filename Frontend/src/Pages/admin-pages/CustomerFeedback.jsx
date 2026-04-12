@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Star, MessageSquare, TrendingUp, Eye, Search } from 'lucide-react';
+import { Star, MessageSquare, TrendingUp, Eye, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import api from '../../api';
 import { Skeleton } from '../../Components/ui/skeleton';
 import { requestWithMethodFallback } from '../../utils/requestWithMethodFallback';
@@ -21,7 +21,7 @@ const resolveMediaUrl = (path) => {
 };
 
 const CustomerFeedback = () => {
-  // 🔴 NEW: Lazy load states from localStorage
+  // Lazy load states from localStorage
   const [activeTab, setActiveTab] = useState(() => {
     return localStorage.getItem('feedback_activeTab') || 'customer';
   }); 
@@ -40,6 +40,17 @@ const CustomerFeedback = () => {
     return localStorage.getItem('feedback_foodRatingFilter') || 'all';
   });
 
+  // 🔴 NEW: Pagination states
+  const [currentShopPage, setCurrentShopPage] = useState(() => {
+    const saved = localStorage.getItem('feedback_currentShopPage');
+    return saved ? parseInt(saved, 10) : 1;
+  });
+  const [currentFoodPage, setCurrentFoodPage] = useState(() => {
+    const saved = localStorage.getItem('feedback_currentFoodPage');
+    return saved ? parseInt(saved, 10) : 1;
+  });
+  const ITEMS_PER_PAGE = 5;
+
   const [feedbacks, setFeedbacks] = useState([]);
   const [filteredFeedbacks, setFilteredFeedbacks] = useState([]);
   const [foodFeedbacks, setFoodFeedbacks] = useState([]);
@@ -55,14 +66,16 @@ const CustomerFeedback = () => {
   const [replyError, setReplyError] = useState('');
   const [isReplySubmitting, setIsReplySubmitting] = useState(false);
 
-  // 🔴 NEW: Save state to localStorage whenever it changes
+  // Save state to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem('feedback_activeTab', activeTab);
     localStorage.setItem('feedback_searchTerm', searchTerm);
     localStorage.setItem('feedback_ratingFilter', ratingFilter);
     localStorage.setItem('feedback_searchFoodTerm', searchFoodTerm);
     localStorage.setItem('feedback_foodRatingFilter', foodRatingFilter);
-  }, [activeTab, searchTerm, ratingFilter, searchFoodTerm, foodRatingFilter]);
+    localStorage.setItem('feedback_currentShopPage', currentShopPage.toString());
+    localStorage.setItem('feedback_currentFoodPage', currentFoodPage.toString());
+  }, [activeTab, searchTerm, ratingFilter, searchFoodTerm, foodRatingFilter, currentShopPage, currentFoodPage]);
 
   useEffect(() => {
     const loadFeedbacks = async () => {
@@ -109,8 +122,6 @@ const CustomerFeedback = () => {
 
         setFeedbacks(shopReviews);
         setFoodFeedbacks(productReviews);
-
-        // We no longer call setFiltered directly here, the other useEffects will handle it
         localStorage.removeItem('customer_feedbacks'); 
       } catch (err) {
         console.error('Error loading feedbacks:', err);
@@ -131,6 +142,7 @@ const CustomerFeedback = () => {
       f.comment.toLowerCase().includes(searchTerm.toLowerCase())
     );
     setFilteredFeedbacks(filtered);
+    setCurrentShopPage(1); // 🔴 Reset to page 1 on filter change
   }, [searchTerm, ratingFilter, feedbacks]);
 
   // Filter food feedback
@@ -142,12 +154,23 @@ const CustomerFeedback = () => {
       f.comment.toLowerCase().includes(searchFoodTerm.toLowerCase())
     );
     setFilteredFoodFeedbacks(filtered);
+    setCurrentFoodPage(1); // 🔴 Reset to page 1 on filter change
   }, [searchFoodTerm, foodRatingFilter, foodFeedbacks]);
 
   const totalFeedbacks = feedbacks.length;
   const averageRating = feedbacks.length > 0 ? (feedbacks.reduce((sum, f) => sum + f.rating, 0) / feedbacks.length).toFixed(1) : 0;
   const fiveStarCount = feedbacks.filter(f => f.rating === 5).length;
   const fiveStarPercentage = feedbacks.length > 0 ? ((fiveStarCount / feedbacks.length) * 100).toFixed(0) : 0;
+
+  // 🔴 NEW: Pagination Calculations for Shop
+  const totalShopPages = Math.ceil(filteredFeedbacks.length / ITEMS_PER_PAGE);
+  const validShopPage = currentShopPage > totalShopPages && totalShopPages > 0 ? totalShopPages : currentShopPage;
+  const paginatedShopFeedbacks = filteredFeedbacks.slice((validShopPage - 1) * ITEMS_PER_PAGE, validShopPage * ITEMS_PER_PAGE);
+
+  // 🔴 NEW: Pagination Calculations for Food
+  const totalFoodPages = Math.ceil(filteredFoodFeedbacks.length / ITEMS_PER_PAGE);
+  const validFoodPage = currentFoodPage > totalFoodPages && totalFoodPages > 0 ? totalFoodPages : currentFoodPage;
+  const paginatedFoodFeedbacks = filteredFoodFeedbacks.slice((validFoodPage - 1) * ITEMS_PER_PAGE, validFoodPage * ITEMS_PER_PAGE);
 
   const renderStars = (rating) => (
     <div className="flex gap-1">
@@ -351,7 +374,7 @@ const CustomerFeedback = () => {
 
             {filteredFeedbacks.length>0 ? (
               <div className="space-y-4">
-                {filteredFeedbacks.map(f => (
+                {paginatedShopFeedbacks.map(f => (
                   <div key={f.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex-1">
@@ -364,7 +387,6 @@ const CustomerFeedback = () => {
                         </p>
                       </div>
                       <div className="flex gap-2">
-                        {/* Use Unified view function */}
                         <button onClick={()=>handleViewReview(f)} className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Eye size={18} /></button>
                         <button
                           onClick={() => handleOpenReplyDialog(f)}
@@ -372,22 +394,11 @@ const CustomerFeedback = () => {
                         >
                           {f.admin_reply ? 'Edit Reply' : 'Reply'}
                         </button>
-                        
-                        {/* <DeleteConfirmDialog
-                          title={`Delete review by ${f.customer_name}?`}
-                          description="Are you sure you want to delete this customer feedback? This action cannot be undone."
-                          onConfirm={() => handleDeleteFeedback(f.id)}
-                        >
-                          <button className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                            <Trash2 size={18} />
-                          </button>
-                        </DeleteConfirmDialog> */}
                       </div>
                     </div>
                     
                     <p className="text-gray-700 leading-relaxed">{f.comment}</p>
                     
-                    {/* IMAGE COMES BEFORE ADMIN REPLY */}
                     {f.image && (
                       <div className="mt-4">
                         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Attached Image</p>
@@ -400,7 +411,6 @@ const CustomerFeedback = () => {
                       </div>
                     )}
 
-                    {/* ADMIN REPLY COMES AFTER IMAGE */}
                     {f.admin_reply && (
                       <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
                         <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">
@@ -417,6 +427,25 @@ const CustomerFeedback = () => {
                     
                   </div>
                 ))}
+                
+                {/* 🔴 NEW: Pagination Controls for Shop */}
+                <div className="flex justify-between sm:justify-end items-center gap-2 mt-4 pt-4 border-t border-gray-100">  
+                    <button 
+                        onClick={() => setCurrentShopPage(prev => Math.max(prev - 1, 1))} 
+                        disabled={validShopPage === 1} 
+                        className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                    >  
+                        <ChevronLeft size={20} />  
+                    </button>  
+                    <span className="text-sm text-gray-600">Page {validShopPage} of {totalShopPages || 1}</span>  
+                    <button 
+                        onClick={() => setCurrentShopPage(prev => Math.min(prev + 1, totalShopPages))} 
+                        disabled={validShopPage === totalShopPages || totalShopPages === 0} 
+                        className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                    >  
+                        <ChevronRight size={20} />  
+                    </button>  
+                </div>
               </div>
             ) : (
               <div className="text-center py-16 bg-white rounded-lg border border-gray-200">
@@ -451,7 +480,7 @@ const CustomerFeedback = () => {
 
             {filteredFoodFeedbacks.length>0 ? (
               <div className="space-y-4">
-                {filteredFoodFeedbacks.map(f => (
+                {paginatedFoodFeedbacks.map(f => (
                   <div key={f.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex-1">
@@ -465,7 +494,6 @@ const CustomerFeedback = () => {
                         </div>
                       </div>
                       <div className="flex gap-2">
-                         {/* Use Unified view function */}
                         <button onClick={()=>handleViewReview(f)} className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Eye size={18} /></button>
                         <button
                           onClick={() => handleOpenReplyDialog(f)}
@@ -473,22 +501,11 @@ const CustomerFeedback = () => {
                         >
                           {f.admin_reply ? 'Edit Reply' : 'Reply'}
                         </button>
-                        
-                        {/* <DeleteConfirmDialog
-                          title={`Delete review for ${f.food_name}?`}
-                          description="Are you sure you want to delete this food review? This action cannot be undone."
-                          onConfirm={() => handleDeleteFoodFeedback(f.id)}
-                        >
-                          <button className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                            <Trash2 size={18} />
-                          </button>
-                        </DeleteConfirmDialog> */}
                       </div>
                     </div>
                     
                     <p className="text-gray-700 leading-relaxed">{f.comment}</p>
 
-                    {/* IMAGE COMES BEFORE ADMIN REPLY */}
                     {f.image && (
                       <div className="mt-4">
                         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Attached Image</p>
@@ -501,7 +518,6 @@ const CustomerFeedback = () => {
                       </div>
                     )}
 
-                    {/* ADMIN REPLY COMES AFTER IMAGE */}
                     {f.admin_reply && (
                       <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
                         <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">
@@ -518,6 +534,25 @@ const CustomerFeedback = () => {
                     
                   </div>
                 ))}
+
+                {/* 🔴 NEW: Pagination Controls for Food */}
+                <div className="flex justify-between sm:justify-end items-center gap-2 mt-4 pt-4 border-t border-gray-100">  
+                    <button 
+                        onClick={() => setCurrentFoodPage(prev => Math.max(prev - 1, 1))} 
+                        disabled={validFoodPage === 1} 
+                        className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                    >  
+                        <ChevronLeft size={20} />  
+                    </button>  
+                    <span className="text-sm text-gray-600">Page {validFoodPage} of {totalFoodPages || 1}</span>  
+                    <button 
+                        onClick={() => setCurrentFoodPage(prev => Math.min(prev + 1, totalFoodPages))} 
+                        disabled={validFoodPage === totalFoodPages || totalFoodPages === 0} 
+                        className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                    >  
+                        <ChevronRight size={20} />  
+                    </button>  
+                </div>
               </div>
             ) : (
               <div className="text-center py-16 bg-white rounded-lg border border-gray-200">

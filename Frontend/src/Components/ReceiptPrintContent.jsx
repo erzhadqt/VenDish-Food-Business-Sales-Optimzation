@@ -17,6 +17,12 @@ const ReceiptPrintContent = forwardRef(({ transactionData }, ref) => {
     ? new Date(transactionData.created_at)
     : new Date();
 
+  const cashierName =
+    transactionData?.cashier_name ||
+    transactionData?.cashier?.username ||
+    transactionData?.cashier ||
+    "Unknown";
+
   return (
     <div ref={ref} id="receipt" style={{ background: '#fff', color: '#000' }}>
       <style>{`
@@ -96,6 +102,11 @@ const ReceiptPrintContent = forwardRef(({ transactionData }, ref) => {
         <div className="receipt-row" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', marginBottom: '4px' }}>
           <span>{created.toLocaleDateString()}</span>
           <span>{created.toLocaleTimeString()}</span>
+        </div>
+
+        <div className="receipt-row" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', marginBottom: '4px' }}>
+          <span>Cashier:</span>
+          <span style={{ maxWidth: '65%', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cashierName}</span>
         </div>
 
         {/* ITEMS */}

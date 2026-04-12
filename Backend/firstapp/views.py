@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from rest_framework.filters import SearchFilter, OrderingFilter
 from datetime import timedelta
 from django.db.models import Sum, Count, Q
-from django.db.models.functions import TruncDate
+from django.db.models.functions import TruncDay, TruncWeek, TruncMonth, TruncYear
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.exceptions import InvalidToken
@@ -1493,21 +1493,60 @@ class DailySalesReportViewSet(viewsets.ViewSet):
         user = request.user
         
         cashier_filter = request.query_params.get('cashier', None)
+        period = (request.query_params.get('period') or 'daily').strip().lower()
+        start_raw = request.query_params.get('start')
+        end_raw = request.query_params.get('end')
+
+        def _parse_dt(raw_value):
+            if not raw_value:
+                return None
+            parsed = parse_datetime(raw_value)
+            if not parsed:
+                return None
+            if timezone.is_naive(parsed):
+                parsed = timezone.make_aware(parsed)
+            return parsed
+
+        range_start = _parse_dt(start_raw)
+        range_end = _parse_dt(end_raw)
+        if range_start and range_end and range_start > range_end:
+            range_start, range_end = range_end, range_start
+
+        trunc_by_period = {
+            'custom': TruncDay,
+            'daily': TruncDay,
+            'weekly': TruncWeek,
+            'monthly': TruncMonth,
+            'yearly': TruncYear,
+        }
+        trunc_func = trunc_by_period.get(period, TruncDay)
+
+        def _bucket_key(value):
+            if value is None:
+                return ""
+            if hasattr(value, 'isoformat'):
+                return value.isoformat()
+            return str(value)
 
         if not user.is_superuser:
             queryset = queryset.filter(cashier=user)
         elif cashier_filter: 
             queryset = queryset.filter(cashier__username=cashier_filter)
+
+        if range_start:
+            queryset = queryset.filter(created_at__gte=range_start)
+        if range_end:
+            queryset = queryset.filter(created_at__lte=range_end)
         
         report_data = (
             queryset
-            .annotate(report_date=TruncDate('created_at'))
-            .values('report_date')
+            .annotate(report_bucket=trunc_func('created_at'))
+            .values('report_bucket')
             .annotate(
                 total_revenue=Sum('total'),
                 total_orders=Count('id'),
             )
-            .order_by('-report_date')
+            .order_by('-report_bucket')
         )
 
         void_queryset = Receipt.objects.filter(status='VOIDED')
@@ -1515,33 +1554,59 @@ class DailySalesReportViewSet(viewsets.ViewSet):
             void_queryset = void_queryset.filter(cashier=user)
         elif cashier_filter:
             void_queryset = void_queryset.filter(cashier__username=cashier_filter)
+
+        if range_start:
+            void_queryset = void_queryset.filter(created_at__gte=range_start)
+        if range_end:
+            void_queryset = void_queryset.filter(created_at__lte=range_end)
             
         void_data = (
             void_queryset
-            .annotate(report_date=TruncDate('created_at'))
-            .values('report_date')
+            .annotate(report_bucket=trunc_func('created_at'))
+            .values('report_bucket')
             .annotate(voided_orders=Count('id'))
         )
-        void_map = {str(item['report_date']): item['voided_orders'] for item in void_data}
+        void_map = {_bucket_key(item['report_bucket']): item['voided_orders'] for item in void_data}
 
         top_seller_map = {}
+        least_seller_map = {}
+        least_qty_map = {}
+        product_sales_map = {}
         receipt_ids = queryset.values_list('id', flat=True)
         if receipt_ids:
             item_stats = (
                 ReceiptItem.objects.filter(receipt__in=receipt_ids)
-                .annotate(sale_date=TruncDate('receipt__created_at'))
-                .values('sale_date', 'product_name')
+                .annotate(report_bucket=trunc_func('receipt__created_at'))
+                .values('report_bucket', 'product_name')
                 .annotate(qty_sold=Sum('quantity'))
-                .order_by('sale_date', '-qty_sold') 
+                .order_by('report_bucket', '-qty_sold', 'product_name') 
             )
             for stat in item_stats:
-                date_str = str(stat['sale_date']) 
+                date_str = _bucket_key(stat['report_bucket'])
+                product_name = (stat['product_name'] or '').strip()
+                qty_sold = stat['qty_sold'] or 0
+
+                if not product_name:
+                    continue
+
+                if date_str not in product_sales_map:
+                    product_sales_map[date_str] = {}
+                product_sales_map[date_str][product_name] = qty_sold
+
                 if date_str not in top_seller_map:
-                    top_seller_map[date_str] = stat['product_name']
+                    top_seller_map[date_str] = product_name
+                if date_str not in least_seller_map or qty_sold < least_qty_map[date_str]:
+                    least_seller_map[date_str] = product_name
+                    least_qty_map[date_str] = qty_sold
+                elif qty_sold == least_qty_map[date_str]:
+                    current_name = (least_seller_map.get(date_str) or "").lower()
+                    candidate_name = product_name.lower()
+                    if not current_name or candidate_name < current_name:
+                        least_seller_map[date_str] = product_name
 
         final_response = []
         for item in report_data:
-            date_str = str(item['report_date'])
+            date_str = _bucket_key(item['report_bucket'])
             total_rev = item['total_revenue'] or 0
             
             final_response.append({
@@ -1551,7 +1616,9 @@ class DailySalesReportViewSet(viewsets.ViewSet):
                 "total_cost": 0,
                 "total_orders": item['total_orders'],
                 "voided_orders": void_map.get(date_str, 0),
-                "top_selling_product": top_seller_map.get(date_str, "N/A")
+                "top_selling_product": top_seller_map.get(date_str, "N/A"),
+                "least_selling_product": least_seller_map.get(date_str, "N/A"),
+                "daily_product_sales": product_sales_map.get(date_str, {})
             })
 
         return Response(final_response)

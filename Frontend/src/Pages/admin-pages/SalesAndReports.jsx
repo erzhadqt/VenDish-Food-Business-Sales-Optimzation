@@ -4,12 +4,12 @@ import {
   LineChart, Line, Legend, AreaChart, Area, PieChart, Pie, Cell
 } from "recharts";
 import { 
-  format, startOfMonth, endOfMonth, isWithinInterval, parseISO, 
+  format, startOfMonth, endOfMonth, parseISO, 
   startOfWeek, endOfWeek, startOfYear, endOfYear, startOfDay, endOfDay,
   eachDayOfInterval, eachMonthOfInterval, subYears 
 } from "date-fns";
 import { 
-  TrendingUp, Package, CalendarDays, 
+  TrendingUp, TrendingDown, CalendarDays, 
   Download, RefreshCw, PhilippinePesoIcon, Users, BarChart3, Clock,
   ShoppingBag
 } from "lucide-react";
@@ -21,10 +21,71 @@ const periods = ["Custom Range", "Daily", "Weekly", "Monthly", "Yearly"];
 const chartTypes = ["Bar", "Line", "Area"];
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
+const PERIOD_QUERY_MAP = {
+  "Custom Range": "custom",
+  "Daily": "daily",
+  "Weekly": "weekly",
+  "Monthly": "monthly",
+  "Yearly": "yearly",
+};
+
+const getRangeForPeriod = (selectedPeriod, selectedRange) => {
+  const refDate = selectedRange?.[0] || new Date();
+
+  if (selectedPeriod === "Custom Range") {
+    return {
+      start: selectedRange?.[0] || null,
+      end: selectedRange?.[1] || null,
+    };
+  }
+
+  if (selectedPeriod === "Daily") {
+    return { start: startOfMonth(refDate), end: endOfMonth(refDate) };
+  }
+
+  if (selectedPeriod === "Weekly") {
+    return { start: startOfWeek(refDate), end: endOfWeek(refDate) };
+  }
+
+  if (selectedPeriod === "Monthly") {
+    return { start: startOfYear(refDate), end: endOfYear(refDate) };
+  }
+
+  if (selectedPeriod === "Yearly") {
+    return { start: startOfYear(subYears(refDate, 4)), end: endOfYear(refDate) };
+  }
+
+  return { start: null, end: null };
+};
+
+const formatBucketLabel = (bucketValue, selectedPeriod, compact = false) => {
+  if (!bucketValue) return "N/A";
+
+  const parsed = parseISO(String(bucketValue));
+  if (Number.isNaN(parsed.getTime())) return String(bucketValue);
+
+  if (selectedPeriod === "Weekly") {
+    const weekEnd = endOfWeek(parsed);
+    return compact
+      ? `Wk ${format(parsed, "MMM d")}`
+      : `${format(parsed, "MMM d")} - ${format(weekEnd, "MMM d, yyyy")}`;
+  }
+
+  if (selectedPeriod === "Monthly") {
+    return format(parsed, compact ? "MMM" : "MMM yyyy");
+  }
+
+  if (selectedPeriod === "Yearly") {
+    return format(parsed, "yyyy");
+  }
+
+  return format(parsed, compact ? "MMM d" : "MMM d, yyyy");
+};
+
 const TimelineLoadingSkeleton = () => (
   <>
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-      {Array.from({ length: 3 }).map((_, index) => (
+      {Array.from({ length: 4 }).map((_, index) => (
         <div key={index} className="bg-white shadow-lg rounded-xl p-5 border-l-4 border-gray-200">
           <Skeleton className="h-4 w-1/2 mb-3" />
           <Skeleton className="h-8 w-2/3 mb-2" />
@@ -48,7 +109,8 @@ const TimelineLoadingSkeleton = () => (
     <div className="bg-white rounded-xl shadow-lg overflow-hidden mt-6 p-4 space-y-3">
       <Skeleton className="h-10 w-full" />
       {Array.from({ length: 5 }).map((_, index) => (
-        <div key={index} className="grid grid-cols-5 gap-4">
+        <div key={index} className="grid grid-cols-6 gap-4">
+          <Skeleton className="h-5 w-full" />
           <Skeleton className="h-5 w-full" />
           <Skeleton className="h-5 w-full" />
           <Skeleton className="h-5 w-full" />
@@ -88,6 +150,7 @@ const StaffLoadingSkeleton = () => (
 export default function SalesAndReports() {
   // --- STATE ---
   const [reports, setReports] = useState([]); 
+  const [chartReports, setChartReports] = useState([]);
   const [staffReports, setStaffReports] = useState([]); 
   const [loading, setLoading] = useState(true);
 
@@ -123,12 +186,38 @@ export default function SalesAndReports() {
   }, []);
 
   // 2. FETCH REPORTS DYNAMICALLY
-  const fetchReports = async (cashierFilter = "ALL") => {
+  const fetchReports = async (cashierFilter = "ALL", selectedPeriod = period, selectedRange = dateRange) => {
     setLoading(true);
     try {
-      const queryParam = cashierFilter !== "ALL" ? `?cashier=${encodeURIComponent(cashierFilter)}` : "";
-      const timelineRes = await api.get(`/firstapp/sales/${queryParam}`);
-      setReports(timelineRes.data);         
+      const params = new URLSearchParams();
+      if (cashierFilter !== "ALL") {
+        params.set("cashier", cashierFilter);
+      }
+
+      params.set("period", PERIOD_QUERY_MAP[selectedPeriod] || "daily");
+
+      const { start, end } = getRangeForPeriod(selectedPeriod, selectedRange);
+      if (start instanceof Date && !Number.isNaN(start.getTime())) {
+        params.set("start", start.toISOString());
+      }
+      if (end instanceof Date && !Number.isNaN(end.getTime())) {
+        params.set("end", end.toISOString());
+      }
+
+      const timelineRes = await api.get(`/firstapp/sales/?${params.toString()}`);
+      const timelineData = Array.isArray(timelineRes.data) ? timelineRes.data : [];
+      setReports(timelineData);
+
+      let nextChartReports = timelineData;
+      if (selectedPeriod === "Weekly") {
+        // Weekly chart should show daily progression across the selected week.
+        const chartParams = new URLSearchParams(params.toString());
+        chartParams.set("period", "daily");
+        const weeklyChartRes = await api.get(`/firstapp/sales/?${chartParams.toString()}`);
+        nextChartReports = Array.isArray(weeklyChartRes.data) ? weeklyChartRes.data : [];
+      }
+
+      setChartReports(nextChartReports);
 
       if (isAdmin) {
           const staffRes = await api.get('/firstapp/sales/by-staff/');
@@ -149,14 +238,16 @@ export default function SalesAndReports() {
       }
     } catch (error) {
       console.error("Failed to fetch reports:", error);
+      setReports([]);
+      setChartReports([]);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchReports(filterCashier);
-  }, [isAdmin, filterCashier]);
+    fetchReports(filterCashier, period, dateRange);
+  }, [isAdmin, filterCashier, period, dateRange]);
 
   // 3. HANDLE CLICK OUTSIDE CALENDAR TO CLOSE
   useEffect(() => {
@@ -178,7 +269,7 @@ export default function SalesAndReports() {
     try {
       setLoading(true);
       await api.post('/firstapp/sales/refresh-today/');
-      await fetchReports(filterCashier); 
+      await fetchReports(filterCashier, period, dateRange); 
     } catch (error) {
       console.error("Failed to refresh today's report:", error);
     } finally {
@@ -187,156 +278,160 @@ export default function SalesAndReports() {
   };
 
   // --- DATA FILTERING (Timeline) ---
-  const filteredReports = useMemo(() => {
-    return reports.filter((report) => {
-      if (!report.report_date) return false;
-      
-      // Assumes report_date contains the full timestamp if backend is updated for exact time
-      const reportDate = parseISO(report.report_date); 
-      const refDate = dateRange[0] || new Date(); 
-      
-      if (period === "Custom Range") {
-        if (!dateRange[0] || !dateRange[1]) return true;
-        // CHANGED: Now using exact Date/Time selected instead of forcing to startOfDay/endOfDay
-        return isWithinInterval(reportDate, { 
-          start: dateRange[0], 
-          end: dateRange[1] 
-        });
-      }
-      else if (period === "Daily") {
-        return isWithinInterval(reportDate, { 
-          start: startOfMonth(refDate), end: endOfMonth(refDate)
-        });
-      } 
-      else if (period === "Weekly") {
-        return isWithinInterval(reportDate, { 
-          start: startOfWeek(refDate), end: endOfWeek(refDate) 
-        });
-      }
-      else if (period === "Monthly") {
-         return isWithinInterval(reportDate, {
-          start: startOfYear(refDate), end: endOfYear(refDate)
-        });
-      }
-      else if (period === "Yearly") {
-         return isWithinInterval(reportDate, { 
-          start: startOfYear(subYears(refDate, 4)), end: endOfYear(refDate) 
-        });
-      }
-      return true;
-    });
-  }, [reports, dateRange, period]);
+  const filteredReports = useMemo(() => reports, [reports]);
 
   // --- CHART DATA (Timeline) ---
   const chartData = useMemo(() => {
     const getVal = (val) => parseFloat(val || 0);
-    const refDate = dateRange[0] || new Date();
-
-    if (period === "Custom Range") {
-        if (!dateRange[0] || !dateRange[1]) return [];
-        // Keep charting X-axis by days to prevent chart layout breakage
-        const start = startOfDay(dateRange[0]);
-        const end = endOfDay(dateRange[1]);
-        const days = eachDayOfInterval({ start, end });
-
-        return days.map(day => {
-            const dayStr = format(day, 'yyyy-MM-dd');
-            const found = filteredReports.find(r => r.report_date.startsWith(dayStr));
-            return {
-                label: format(day, "MMM d"), 
-                revenue: found ? getVal(found.total_revenue) : 0,
-                orders: found ? found.total_orders : 0
-            };
-        });
-    }
 
     if (period === "Daily") {
-        const start = startOfMonth(refDate);
-        const end = endOfMonth(refDate);
-        const days = eachDayOfInterval({ start, end });
+      const { start, end } = getRangeForPeriod("Daily", dateRange);
+      if (!(start instanceof Date) || !(end instanceof Date)) return [];
 
-        return days.map(day => {
-            const dayStr = format(day, 'yyyy-MM-dd');
-            const found = filteredReports.find(r => r.report_date.startsWith(dayStr));
-            return {
-                label: format(day, "MMM d"), 
-                revenue: found ? getVal(found.total_revenue) : 0,
-                orders: found ? found.total_orders : 0
-            };
+      const byDay = new Map();
+      chartReports.forEach((report) => {
+        if (!report?.report_date) return;
+        const parsed = parseISO(String(report.report_date));
+        if (Number.isNaN(parsed.getTime())) return;
+
+        const key = format(parsed, "yyyy-MM-dd");
+        const current = byDay.get(key) || { revenue: 0, orders: 0 };
+        byDay.set(key, {
+          revenue: current.revenue + getVal(report.total_revenue),
+          orders: current.orders + Number(report.total_orders || 0),
         });
+      });
+
+      return eachDayOfInterval({ start, end }).map((day) => {
+        const key = format(day, "yyyy-MM-dd");
+        const found = byDay.get(key);
+        return {
+          label: format(day, "MMM d"),
+          revenue: found ? found.revenue : 0,
+          orders: found ? found.orders : 0,
+        };
+      });
     }
 
     if (period === "Weekly") {
-        const start = startOfWeek(refDate);
-        const end = endOfWeek(refDate);
-        const days = eachDayOfInterval({ start, end });
-        
-        return days.map(day => {
-            const dayStr = format(day, 'yyyy-MM-dd');
-            const found = filteredReports.find(r => r.report_date.startsWith(dayStr));
-            return {
-                label: format(day, 'EEE'), 
-                revenue: found ? getVal(found.total_revenue) : 0,
-                orders: found ? found.total_orders : 0
-            };
+      const { start, end } = getRangeForPeriod("Weekly", dateRange);
+      if (!(start instanceof Date) || !(end instanceof Date)) return [];
+
+      const byDay = new Map();
+      chartReports.forEach((report) => {
+        if (!report?.report_date) return;
+        const parsed = parseISO(String(report.report_date));
+        if (Number.isNaN(parsed.getTime())) return;
+
+        const key = format(parsed, "yyyy-MM-dd");
+        const current = byDay.get(key) || { revenue: 0, orders: 0 };
+        byDay.set(key, {
+          revenue: current.revenue + getVal(report.total_revenue),
+          orders: current.orders + Number(report.total_orders || 0),
         });
+      });
+
+      return eachDayOfInterval({ start, end }).map((day) => {
+        const key = format(day, "yyyy-MM-dd");
+        const found = byDay.get(key);
+        return {
+          label: format(day, "EEE"),
+          revenue: found ? found.revenue : 0,
+          orders: found ? found.orders : 0,
+        };
+      });
     }
 
     if (period === "Monthly") {
-        const start = startOfYear(refDate);
-        const end = endOfYear(refDate);
-        const months = eachMonthOfInterval({ start, end });
+      const { start, end } = getRangeForPeriod("Monthly", dateRange);
+      if (!(start instanceof Date) || !(end instanceof Date)) return [];
 
-        return months.map(month => {
-            const monthName = format(month, "MMM");
-            const monthReports = filteredReports.filter(r => {
-                return format(parseISO(r.report_date), "MMM yyyy") === format(month, "MMM yyyy");
-            });
-            
-            const totalRev = monthReports.reduce((sum, r) => sum + getVal(r.total_revenue), 0);
-            const totalOrd = monthReports.reduce((sum, r) => sum + (r.total_orders || 0), 0);
+      const byMonth = new Map();
+      chartReports.forEach((report) => {
+        if (!report?.report_date) return;
+        const parsed = parseISO(String(report.report_date));
+        if (Number.isNaN(parsed.getTime())) return;
 
-            return {
-                label: monthName, 
-                revenue: totalRev,
-                orders: totalOrd
-            };
+        const key = format(parsed, "yyyy-MM");
+        const current = byMonth.get(key) || { revenue: 0, orders: 0 };
+        byMonth.set(key, {
+          revenue: current.revenue + getVal(report.total_revenue),
+          orders: current.orders + Number(report.total_orders || 0),
         });
+      });
+
+      return eachMonthOfInterval({ start, end }).map((month) => {
+        const key = format(month, "yyyy-MM");
+        const found = byMonth.get(key);
+        return {
+          label: format(month, "MMM"),
+          revenue: found ? found.revenue : 0,
+          orders: found ? found.orders : 0,
+        };
+      });
     }
 
-    if (period === "Yearly") {
-        const currentYear = refDate.getFullYear();
-        const years = [currentYear - 4, currentYear - 3, currentYear - 2, currentYear - 1, currentYear];
-
-        return years.map(year => {
-            const yearStr = year.toString();
-            const yearReports = filteredReports.filter(r => r.report_date.startsWith(yearStr));
-            
-            return {
-                label: yearStr, 
-                revenue: yearReports.reduce((sum, r) => sum + getVal(r.total_revenue), 0),
-                orders: yearReports.reduce((sum, r) => sum + (r.total_orders || 0), 0)
-            };
-        });
-    }
-
-    return [];
-  }, [filteredReports, period, dateRange]);
+    return [...chartReports]
+      .sort((a, b) => {
+        const aTime = Date.parse(a.report_date || "");
+        const bTime = Date.parse(b.report_date || "");
+        if (!Number.isNaN(aTime) && !Number.isNaN(bTime)) {
+          return aTime - bTime;
+        }
+        return String(a.report_date || "").localeCompare(String(b.report_date || ""));
+      })
+      .map((report) => ({
+        label: formatBucketLabel(report.report_date, period, true),
+        revenue: getVal(report.total_revenue),
+        orders: Number(report.total_orders || 0),
+      }));
+  }, [chartReports, period, dateRange]);
 
   // --- WIDGET STATS ---
   const stats = useMemo(() => {
     const totalRev = filteredReports.reduce((acc, curr) => acc + parseFloat(curr.total_revenue || 0), 0);
     const totalOrders = filteredReports.reduce((acc, curr) => acc + (curr.total_orders || 0), 0);
     
-    const sellers = {};
+    const productTotals = {};
     filteredReports.forEach(r => {
-      if(r.top_selling_product && r.top_selling_product !== "N/A") {
-        sellers[r.top_selling_product] = (sellers[r.top_selling_product] || 0) + 1;
-      }
-    });
-    const topSellerName = Object.keys(sellers).sort((a,b) => sellers[b] - sellers[a])[0] || "N/A";
+      const dailySales = r?.daily_product_sales;
+      if (!dailySales || typeof dailySales !== "object") return;
 
-    return { totalRev, totalOrders, topSellerName };
+      Object.entries(dailySales).forEach(([productName, qty]) => {
+        const safeName = String(productName || "").trim();
+        const parsedQty = Number(qty || 0);
+        if (!safeName || !Number.isFinite(parsedQty) || parsedQty <= 0) return;
+
+        productTotals[safeName] = (productTotals[safeName] || 0) + parsedQty;
+      });
+    });
+
+    let topSellerName = "N/A";
+    let leastSellerName = "N/A";
+    const productTotalEntries = Object.entries(productTotals);
+    if (productTotalEntries.length > 0) {
+      const sortedByQty = [...productTotalEntries].sort((a, b) => {
+        if (a[1] !== b[1]) return a[1] - b[1];
+        return a[0].localeCompare(b[0]);
+      });
+      leastSellerName = sortedByQty[0][0];
+      topSellerName = sortedByQty[sortedByQty.length - 1][0];
+    } else {
+      const topSellers = {};
+      const leastSellers = {};
+      filteredReports.forEach((r) => {
+        if (r.top_selling_product && r.top_selling_product !== "N/A") {
+          topSellers[r.top_selling_product] = (topSellers[r.top_selling_product] || 0) + 1;
+        }
+        if(r.least_selling_product && r.least_selling_product !== "N/A") {
+          leastSellers[r.least_selling_product] = (leastSellers[r.least_selling_product] || 0) + 1;
+        }
+      });
+      topSellerName = Object.keys(topSellers).sort((a,b) => topSellers[b] - topSellers[a])[0] || "N/A";
+      leastSellerName = Object.keys(leastSellers).sort((a,b) => leastSellers[b] - leastSellers[a])[0] || "N/A";
+    }
+
+    return { totalRev, totalOrders, topSellerName, leastSellerName };
   }, [filteredReports]);
 
   // --- SORTING ---
@@ -352,6 +447,15 @@ export default function SalesAndReports() {
     let aValue = a[sortConfig.key];
     let bValue = b[sortConfig.key];
 
+    if (sortConfig.key === 'report_date') {
+        const aDate = Date.parse(aValue || '');
+        const bDate = Date.parse(bValue || '');
+        if (!Number.isNaN(aDate) && !Number.isNaN(bDate)) {
+          aValue = aDate;
+          bValue = bDate;
+        }
+    }
+
     if(['total_revenue', 'total_orders', 'voided_orders'].includes(sortConfig.key)) {
         aValue = parseFloat(aValue || 0);
         bValue = parseFloat(bValue || 0);
@@ -366,6 +470,13 @@ export default function SalesAndReports() {
     const baseText = `${period} revenue tracking`;
     return filterCashier === 'ALL' ? baseText : `${baseText} for: ${filterCashier}`;
   }, [period, filterCashier]);
+
+  const periodColumnTitle = useMemo(() => {
+    if (period === 'Weekly') return 'Week';
+    if (period === 'Monthly') return 'Month';
+    if (period === 'Yearly') return 'Year';
+    return 'Day';
+  }, [period]);
 
   // --- EXPORT FUNCTION ---
   const exportToCSV = () => {
@@ -456,12 +567,7 @@ export default function SalesAndReports() {
       }, null);
 
       const highestRevenueDayLabel = highestRevenueDay?.report_date
-        ? (() => {
-            const parsed = parseISO(highestRevenueDay.report_date);
-            return Number.isNaN(parsed.getTime())
-              ? highestRevenueDay.report_date
-              : format(parsed, 'yyyy-MM-dd HH:mm:ss');
-          })()
+        ? formatBucketLabel(highestRevenueDay.report_date, period)
         : 'N/A';
 
       summaryRows = [
@@ -472,16 +578,18 @@ export default function SalesAndReports() {
         ['Total Voided Orders', totalVoidedOrders],
         ['Average Order Value (PHP)', formatMoney(averageOrderValue)],
         ['Top Seller', stats.topSellerName || 'N/A'],
-        ['Highest Revenue Entry', highestRevenueDayLabel],
+        ['Least Seller', stats.leastSellerName || 'N/A'],
+        [`Highest Revenue ${periodColumnTitle}`, highestRevenueDayLabel],
       ];
 
       detailHeaders = [
         'No.',
-        'Date Time',
+        periodColumnTitle,
         'Total Orders',
         'Total Revenue (PHP)',
         'Voided Orders',
         'Top Seller',
+        'Least Seller',
         'Average Order Value (PHP)',
       ];
 
@@ -490,13 +598,7 @@ export default function SalesAndReports() {
         const orders = Number(report.total_orders || 0);
         const aov = orders > 0 ? revenue / orders : 0;
 
-        let displayDate = 'N/A';
-        if (report.report_date) {
-          const parsed = parseISO(report.report_date);
-          displayDate = Number.isNaN(parsed.getTime())
-            ? report.report_date
-            : format(parsed, 'yyyy-MM-dd HH:mm:ss');
-        }
+        const displayDate = formatBucketLabel(report.report_date, period);
 
         return [
           index + 1,
@@ -505,6 +607,7 @@ export default function SalesAndReports() {
           formatMoney(revenue),
           Number(report.voided_orders || 0),
           report.top_selling_product || 'N/A',
+          report.least_selling_product || 'N/A',
           formatMoney(aov),
         ];
       });
@@ -748,6 +851,17 @@ export default function SalesAndReports() {
                   {filterCashier === 'ALL' ? 'Most bought' : `Top item for ${filterCashier}`}
                 </p>
                 </div>
+
+                <div className="bg-white shadow-lg rounded-xl p-5 border-l-4 border-red-500">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-gray-600 font-medium text-sm">Least Seller</h3>
+                  <TrendingDown className="text-red-500" size={24} />
+                </div>
+                <p className="text-red-500 font-bold text-xl truncate">{stats.leastSellerName}</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {filterCashier === 'ALL' ? 'Least bought' : `Least item for ${filterCashier}`}
+                </p>
+                </div>
               </div>
 
               {/* CHARTS */}
@@ -800,20 +914,21 @@ export default function SalesAndReports() {
               {/* TABLE */}
               <div className="bg-white rounded-xl shadow-lg overflow-hidden mt-6">
                 <div className="overflow-x-auto">
-                <table className="min-w-[800px] w-full">
+                <table className="min-w-200 w-full">
                   <thead>
                   <tr className="bg-gray-800 text-white">
-                    <th onClick={() => handleSort('report_date')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Date {sortConfig.key === 'report_date' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                    <th onClick={() => handleSort('report_date')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">{periodColumnTitle} {sortConfig.key === 'report_date' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
                     <th onClick={() => handleSort('total_orders')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Orders {sortConfig.key === 'total_orders' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
                     <th onClick={() => handleSort('total_revenue')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Revenue {sortConfig.key === 'total_revenue' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
                     <th onClick={() => handleSort('top_selling_product')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Top Seller {sortConfig.key === 'top_selling_product' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                    <th onClick={() => handleSort('least_selling_product')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Least Seller {sortConfig.key === 'least_selling_product' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
                     <th onClick={() => handleSort('voided_orders')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Voided {sortConfig.key === 'voided_orders' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
                   </tr>
                   </thead>
                   <tbody>
                   {sortedTableData.length > 0 ? sortedTableData.map((report) => (
                     <tr key={report.id || report.report_date} className="border-b hover:bg-gray-50 transition-colors">
-                    <td className="py-3 px-4 text-sm font-medium text-gray-900">{report.report_date}</td>
+                    <td className="py-3 px-4 text-sm font-medium text-gray-900">{formatBucketLabel(report.report_date, period)}</td>
                     <td className="py-3 px-4 text-sm text-gray-600">{report.total_orders}</td>
                     <td className="py-3 px-4 text-sm font-semibold text-blue-700">₱ {parseFloat(report.total_revenue).toLocaleString()}</td>
                     <td className="py-3 px-4 text-sm text-gray-600">
@@ -821,11 +936,16 @@ export default function SalesAndReports() {
                         {report.top_selling_product || "N/A"}
                       </span>
                     </td>
+                    <td className="py-3 px-4 text-sm text-gray-600">
+                      <span className="bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs font-medium">
+                        {report.least_selling_product || "N/A"}
+                      </span>
+                    </td>
                     <td className="py-3 px-4 text-sm font-bold text-red-600">{parseFloat(report.voided_orders).toLocaleString()}</td>
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan="5" className="text-center py-8 text-gray-500">
+                      <td colSpan="6" className="text-center py-8 text-gray-500">
                         No sales reports found.
                       </td>
                     </tr>
