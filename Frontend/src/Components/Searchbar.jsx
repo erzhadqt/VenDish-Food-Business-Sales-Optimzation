@@ -86,8 +86,8 @@ const Searchbar = ({ onSearch, categories, initialQuery = "", initialCategory = 
           >
             <option value="product_name">A - Z</option>
             <option value="-product_name">Z - A</option>
-            <option value="-price">Highest Price</option>
-            <option value="price">Lowest Price</option>
+            <option value="-price">Highest-Lowest Price</option>
+            <option value="price">Lowest-Highest Price</option>
           </select>
 
           <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">

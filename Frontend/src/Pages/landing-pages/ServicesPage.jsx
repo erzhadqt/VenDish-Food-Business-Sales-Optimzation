@@ -110,7 +110,7 @@ const ServicesPage = () => {
         <div className="grid lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-12 items-center mb-12 sm:mb-16 lg:mb-20 animate-fade-in">
           
           {/* Service Cards */}
-          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
             {content.services.map((service, idx) => {
               const IconComponent = ICON_MAP[service.iconName] || Utensils;
 

@@ -87,11 +87,11 @@ const AboutPage = () => {
 
         {/* HEADER SECTION */}
         <div className="text-center space-y-2 sm:space-y-3 md:space-y-4 px-2 sm:px-0">
-          <h1 className="text-2xl xs:text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold leading-tight">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold leading-tight">
             {content.header.line1} <span className="text-red-600">{content.header.line1Highlight}</span> {content.header.line1End}{" "}
             <span className="text-red-600 block sm:inline">{content.header.line1Highlight2}</span>
           </h1>
-          <h2 className="text-xl xs:text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mt-2">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mt-2">
             {content.header.line2} <span className="text-red-600">{content.header.line2Highlight}</span> {content.header.line2End}{" "}
             <span className="text-red-600">{content.header.line2Highlight2}</span>
           </h2>
@@ -99,7 +99,7 @@ const AboutPage = () => {
 
         {/* VALUES SECTION */}
         <div className="max-w-5xl mx-auto text-center pt-10 sm:pt-16 md:pt-20 px-2 sm:px-0">
-          <div className="grid grid-cols-1 xs:grid-cols-3 sm:grid-cols-3 gap-4 sm:gap-8 mb-8 sm:mb-12">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-8 mb-8 sm:mb-12">
             {content.values.map((val, i) => {
               const Icon = ICON_MAP[val.iconName] || Heart;
               return (
@@ -159,12 +159,12 @@ const AboutPage = () => {
           )}
 
           {/* TESTIMONIAL SELECTOR */}
-          <div className="flex flex-col xs:flex-row flex-wrap justify-center gap-3 sm:gap-4 max-w-4xl mx-auto mt-4 sm:mt-6 px-2 sm:px-0">
+          <div className="mx-auto mt-4 flex max-w-4xl flex-col flex-wrap justify-center gap-3 px-2 sm:mt-6 sm:flex-row sm:gap-4 sm:px-0">
             {content.testimonials.map((t, idx) => (
               <button
                 key={idx}
                 onClick={() => setCurrentTestimonial(idx)}
-                className={`flex-1 w-full xs:w-auto sm:min-w-[200px] md:min-w-[250px] border rounded-xl p-3 sm:p-4 transition-all duration-300 ${
+                className={`w-full sm:min-w-48 md:min-w-60 border rounded-xl p-3 sm:p-4 transition-all duration-300 ${
                   idx === currentTestimonial
                     ? 'border-red-600 bg-red-50 shadow-md'
                     : 'border-gray-200 bg-white hover:border-red-300'

@@ -1,9 +1,15 @@
 import React from "react";
 import { Menu, X } from "lucide-react";
-import { NavLink } from "react-router-dom";
-import { useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
 const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const location = useLocation();
+
+  useEffect(() => {
+    setIsOpen(false);
+  }, [location.pathname]);
+
   const pages = [
     { name: "home", path: "/" },
     { name: "services", path: "/services" },
@@ -12,8 +18,8 @@ const Navigation = () => {
     // { name: 'admin', path: '/login'},
   ];
   return (
-    <nav className="fixed top-0 left-0 w-screen bg-white/90 backdrop-blur-md shadow-md z-50">
-      <div className="w-screen px-4 sm:px-6 flex items-center justify-between h-16 sm:h-18 md:h-20">
+    <nav className="fixed inset-x-0 top-0 w-full bg-white/90 backdrop-blur-md shadow-md z-50">
+      <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:h-18 sm:px-6 md:h-20 lg:px-8">
         {/* Logo */}
         <NavLink
           to="/"
@@ -26,7 +32,7 @@ const Navigation = () => {
           ></img>
           <h1 className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-gray-800 truncate">
             <span className="text-red-600">KUYA VINCE</span>{" "}
-            <span className="hidden xs:inline">KARINDERYA</span>
+            <span className="hidden sm:inline">KARINDERYA</span>
           </h1>
         </NavLink>
         {/* Desktop Menu */}
@@ -60,6 +66,7 @@ const Navigation = () => {
         <div className="lg:hidden">
           <button
             onClick={() => setIsOpen(!isOpen)}
+            aria-expanded={isOpen}
             aria-label="Toggle menu"
             className="text-gray-700 hover:text-red-600 transition p-1"
           >
@@ -74,7 +81,7 @@ const Navigation = () => {
       {/* Mobile Menu */}
       {isOpen && (
         <div className="lg:hidden bg-white shadow-md border-t border-gray-200 animate-fade-in">
-          <div className="flex flex-col items-start p-3 sm:p-4 space-y-2 sm:space-y-3">
+          <div className="mx-auto flex w-full max-w-7xl flex-col items-start space-y-2 px-4 pb-4 pt-3 sm:space-y-3 sm:px-6 lg:px-8">
             {pages.map((page) => (
               <NavLink
                 key={page.name}

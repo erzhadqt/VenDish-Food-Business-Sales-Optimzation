@@ -105,7 +105,7 @@ const HomePage = () => {
   ];
 
   return (
-    <div className="w-screen min-h-screen bg-linear-to-br from-white via-red-100 to-white font-poppins pt-20 lg:pt-0">
+    <div className="w-full min-h-screen bg-linear-to-br from-white via-red-100 to-white font-poppins pt-20 sm:pt-24">
       <Navigation />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
@@ -116,12 +116,12 @@ const HomePage = () => {
           {/* Left Content */}
           <div className="flex-1 text-center lg:text-left space-y-4 sm:space-y-6 lg:space-y-8 animate-fade-in w-full">
             <div className="space-y-1 sm:space-y-2 lg:space-y-3">
-              <h1 className="text-2xl xs:text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 leading-tight">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 leading-tight">
                 <span>{content.hero.line1Start} </span>
                 <span className="text-red-600">{content.hero.line1Highlight}</span>
                 <span> {content.hero.line1End}</span>
               </h1>
-              <h2 className="text-xl xs:text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-gray-800">
+              <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-gray-800">
                 {content.hero.line2Start} <span className="text-red-600">{content.hero.line2Highlight}</span>
               </h2>
             </div>
@@ -165,7 +165,7 @@ const HomePage = () => {
                       href="#"
                       className={`${social.color} w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center cursor-pointer hover:scale-110 transition-all duration-300 shadow-md hover:shadow-lg`}
                     >
-                      <Icon size={18} className="text-white sm:w-[20px] sm:h-[20px]" />
+                      <Icon size={18} className="text-white sm:w-5 sm:h-5" />
                     </a>
                   );
                 })}
@@ -175,7 +175,7 @@ const HomePage = () => {
 
           {/* Right Content - Logo Circle */}
           <div className="flex-1 flex justify-center lg:justify-end animate-fade-in w-full">
-            <div className="relative w-48 h-48 xs:w-56 xs:h-56 sm:w-72 sm:h-72 md:w-80 md:h-80 lg:w-96 lg:h-96">
+            <div className="relative h-52 w-52 sm:h-72 sm:w-72 md:h-80 md:w-80 lg:h-96 lg:w-96">
               <div className="absolute inset-0 bg-red-200 rounded-full"></div>
               <div className="animate-bounce relative w-full h-full bg-linear-to-r from-red-500 to-red-700 rounded-full items-center justify-center shadow-2xl border-4 sm:border-8 border-white text-white bg-cover bg-center" style={{ backgroundImage: `url('${resolveImageUrl(content.hero.heroImage)}')` }}>
               </div>
@@ -186,7 +186,7 @@ const HomePage = () => {
         {/* Features Section */}
         <section className="bg-white py-10 sm:py-12 lg:py-20 px-4 sm:px-6 md:px-8 border-t border-gray-100 shadow-2xl animate-fade-in rounded-xl my-6 sm:my-8">
           <div className="text-center mb-10 lg:mb-12">
-            <h2 className="text-2xl xs:text-3xl sm:text-4xl md:text-5xl lg:text-5xl font-bold text-gray-900 mb-3">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-gray-900 mb-3">
               WHY CHOOSE <span className="text-red-600">KUYA VINCE</span>
             </h2>
             <p className="text-gray-600 text-base sm:text-lg max-w-2xl mx-auto">
@@ -214,20 +214,20 @@ const HomePage = () => {
           {/* Left Content: Text and Button */}
           <div className="flex flex-col items-center lg:items-start text-center lg:text-left space-y-6 lg:w-1/2 w-full">
             <TextAnimations />
-            <p className="flex items-center gap-2 text-zinc-700 text-base sm:text-lg">
-              Get our app now <ArrowDownIcon size={24} className="sm:w-[26px] sm:h-[26px]" />
+            <p className="flex items-center gap-2 text-center text-zinc-700 text-base sm:text-lg">
+              Get our app now <ArrowDownIcon size={24} className="sm:w-6 sm:h-6" />
             </p>
             <button
               onClick={() => window.location.replace('https://expo.dev/artifacts/eas/pX1PYjw5N7sRdNQiGFCjj8.apk')}
               className="bg-red-600 px-6 py-3 rounded-xl text-lg sm:text-xl font-bold text-white flex items-center gap-2 hover:bg-red-700 transition-all w-full sm:w-auto justify-center"
             >
               Get app
-              <Smartphone size={24} className="sm:w-[30px] sm:h-[30px]" />
+              <Smartphone size={24} className="sm:w-7 sm:h-7" />
             </button>
           </div>
 
           {/* Right Content: Carousel */}
-          <div className="lg:w-1/2 w-full bg-linear-to-br from-gray-100 via-red-100 to-gray-100 px-4 sm:px-10 py-6 sm:py-0 shadow-lg rounded-xl">
+          <div className="w-full rounded-xl bg-linear-to-br from-gray-100 via-red-100 to-gray-100 px-3 py-4 shadow-lg sm:px-6 sm:py-6 lg:w-1/2 lg:px-8">
             <div className="w-full max-w-4xl mx-auto">
               <Carousel slides={slides} />
             </div>

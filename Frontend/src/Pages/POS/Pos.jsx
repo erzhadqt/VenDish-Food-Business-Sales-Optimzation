@@ -21,11 +21,13 @@ const POS_STORAGE_KEYS = {
   gcashPending: "pos_gcash_pending",
   menuSearch: "pos_menuSearch",
   menuCategory: "pos_menuCategory",
+  menuSort: "pos_menuSort",
 };
 
 const POS_QUERY_KEYS = {
   search: "posSearch",
   category: "posCategory",
+  sort: "posSort",
 };
 
 const Pos = () => {
@@ -46,6 +48,17 @@ const Pos = () => {
     storageKey: POS_STORAGE_KEYS.menuSearch,
     defaultValue: "",
     parse: (rawValue, fallback) => rawValue ?? fallback,
+  });
+
+  const [menuSortOrder, setMenuSortOrder] = usePersistedQueryState({
+    searchParams,
+    queryKey: POS_QUERY_KEYS.sort,
+    storageKey: POS_STORAGE_KEYS.menuSort,
+    defaultValue: "az",
+    parse: (rawValue, fallback) => {
+      const allowedValues = ["az", "za", "price_desc", "price_asc"];
+      return allowedValues.includes(rawValue) ? rawValue : fallback;
+    },
   });
   const [selectedDiscount, setSelectedDiscount] = useState(null); 
   const [cartItems, setCartItems] = useState(() => {
@@ -173,12 +186,13 @@ const Pos = () => {
 
     applyQueryParam(nextParams, POS_QUERY_KEYS.search, normalizedSearch);
     applyQueryParam(nextParams, POS_QUERY_KEYS.category, selectedCategory, (value) => !value || value === "All");
+    applyQueryParam(nextParams, POS_QUERY_KEYS.sort, menuSortOrder, (value) => !value || value === "az");
 
     const currentQuery = location.search.startsWith("?") ? location.search.slice(1) : location.search;
     if (nextParams.toString() !== currentQuery) {
       setSearchParams(nextParams, { replace: true });
     }
-  }, [menuSearchQuery, selectedCategory, location.search, setSearchParams]);
+  }, [menuSearchQuery, selectedCategory, menuSortOrder, location.search, setSearchParams]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -243,10 +257,35 @@ const Pos = () => {
       return productName.includes(search) || categoryName.includes(search);
     });
 
-    return [...searchedFoods].sort((a, b) =>
+    const safePrice = (value) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+
+    const sortedFoods = [...searchedFoods];
+
+    if (menuSortOrder === "za") {
+      sortedFoods.sort((a, b) =>
+        (b.product_name || "").localeCompare((a.product_name || ""), undefined, { sensitivity: "base" })
+      );
+      return sortedFoods;
+    }
+
+    if (menuSortOrder === "price_desc") {
+      sortedFoods.sort((a, b) => safePrice(b.price) - safePrice(a.price));
+      return sortedFoods;
+    }
+
+    if (menuSortOrder === "price_asc") {
+      sortedFoods.sort((a, b) => safePrice(a.price) - safePrice(b.price));
+      return sortedFoods;
+    }
+
+    sortedFoods.sort((a, b) =>
       (a.product_name || "").localeCompare((b.product_name || ""), undefined, { sensitivity: "base" })
     );
-  }, [products, selectedCategory, menuSearchQuery]);
+    return sortedFoods;
+  }, [products, selectedCategory, menuSearchQuery, menuSortOrder]);
 
   const selectedCustomerInfo = useMemo(
     () => users.find((user) => user.id === selectedCustomer) || null,
@@ -963,6 +1002,17 @@ const Pos = () => {
                       {category}
                     </option>
                   ))}
+                </select>
+
+                <select
+                  value={menuSortOrder}
+                  onChange={(e) => setMenuSortOrder(e.target.value)}
+                  className="w-full sm:w-56 px-3 py-2 text-sm border border-gray-200 rounded-md bg-white outline-none focus:ring-2 focus:ring-red-200"
+                >
+                  <option value="az">A - Z</option>
+                  <option value="za">Z - A</option>
+                  <option value="price_desc">Highest-Lowest Price</option>
+                  <option value="price_asc">Lowest-Highest Price</option>
                 </select>
                 </div>
 
