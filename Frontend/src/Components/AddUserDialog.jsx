@@ -185,10 +185,6 @@ export default function AddUserDialog({ onSaved, children }) {
     if (values.city === "Other") requireField("other_city");
     if (values.barangay === "Other") requireField("other_barangay");
 
-    if (normalizedValue(values.username) && normalizedValue(values.username).length < 8) {
-      addError("username", "Username must be at least 8 characters long.");
-    }
-
     if (normalizedValue(values.password) && normalizedValue(values.password).length < 8) {
       addError("password", "Password must be at least 8 characters long.");
     }
@@ -268,7 +264,6 @@ export default function AddUserDialog({ onSaved, children }) {
     } catch (err) {
       console.error("Failed to add user:", err.response?.data || err);
       
-      // 🔴 NEW: Proper error parsing matching your UpdateUserDialog
       let errorMessage = "Failed to add new user.";
       const backendFieldErrors = {};
       
@@ -360,8 +355,6 @@ export default function AddUserDialog({ onSaved, children }) {
                 required 
                 placeholder="johndoe" 
                 maxLength={30} 
-                minLength={8}
-                title="Username must be at least 8 characters long"
                 onInput={(e) => sanitizeInput(e, 'username')} 
                 aria-invalid={!!fieldErrors.username}
               />

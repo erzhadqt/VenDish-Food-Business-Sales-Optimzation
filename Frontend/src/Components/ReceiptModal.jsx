@@ -52,6 +52,36 @@ const ReceiptModal = ({ open, onClose, receiptDetails }) => {
         receiptDetails.customer_name ||
         "Walk-in";
 
+    // Helper function to calculate and display both percentage and raw value
+    const getCouponDisplay = (coupon) => {
+        if (!coupon.criteria_details) return `- ${coupon.rate}`;
+        const { discount_type, discount_value, target_product } = coupon.criteria_details;
+        
+        if (discount_type === 'percentage') {
+            let baseAmount = parseFloat(receiptDetails.subtotal || 0);
+            
+            // Check if the percentage is applied only to a specific targeted product
+            if (target_product) {
+                const targetItem = receiptDetails.items.find(item => {
+                    const itemId = typeof item.product === 'object' ? item.product?.id : item.product;
+                    return itemId === target_product;
+                });
+                if (targetItem) {
+                    baseAmount = parseFloat(targetItem.price) * targetItem.quantity;
+                }
+            }
+            
+            const rawValue = (parseFloat(discount_value) / 100) * baseAmount;
+            return `- ${coupon.rate} (₱${rawValue.toFixed(2)})`;
+        } else if (discount_type === 'fixed') {
+            return `- ₱${parseFloat(discount_value).toFixed(2)}`;
+        } else if (discount_type === 'free_item') {
+            return `- FREE ITEM`;
+        }
+        
+        return `- ${coupon.rate}`;
+    };
+
     return (
         <div className="relative z-50">
             {/* Hidden print layout (thermal-receipt friendly) */}
@@ -72,10 +102,10 @@ const ReceiptModal = ({ open, onClose, receiptDetails }) => {
 
             {/* --- MODAL CONTENT --- */}
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
-                <div className="w-full max-w-md bg-white rounded-lg shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div className="w-full max-w-md bg-white rounded-lg shadow-xl overflow-hidden flex flex-col max-h-[95vh] animate-in fade-in zoom-in duration-200">
                     
-                    {/* Header */}
-                    <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 bg-gray-50">
+                    {/* Header (Pinned) */}
+                    <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 bg-gray-50 flex-shrink-0">
                         <h3 className="font-semibold text-gray-900">Receipt Details</h3>
                         <button 
                             onClick={onClose}
@@ -86,7 +116,7 @@ const ReceiptModal = ({ open, onClose, receiptDetails }) => {
                     </div>
 
                     {/* Scrollable Body */}
-                    <div className="max-h-[70vh] overflow-y-auto px-6 py-6">
+                    <div className="max-h-[60vh] overflow-y-auto overflow-x-hidden px-6 py-6">
                         <div className="flex justify-between items-end mb-6">
                             <div>
                                 <p className="text-sm text-gray-500">Receipt ID</p>
@@ -153,13 +183,15 @@ const ReceiptModal = ({ open, onClose, receiptDetails }) => {
                                 <span className="font-semibold text-foreground font-mono">₱{receiptDetails.vat}</span>
                             </div>
                             
-                            {/* --- UPDATED COUPON SECTION --- */}
+                            {/* Applied Coupons */}
                             {receiptDetails.coupon_details && receiptDetails.coupon_details.length > 0 && (
                                 <div className="space-y-1 py-1">
                                     {receiptDetails.coupon_details.map((coupon, idx) => (
                                         <div key={idx} className="flex justify-between text-sm text-green-600">
                                             <span>Discount ({coupon.code})</span>
-                                            <span>- {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'PHP' }).format(coupon.rate)}</span>
+                                            <span className="font-semibold font-mono whitespace-nowrap">
+                                                {getCouponDisplay(coupon)}
+                                            </span>
                                         </div>
                                     ))}
                                 </div>
@@ -208,8 +240,8 @@ const ReceiptModal = ({ open, onClose, receiptDetails }) => {
                         </div>
                     </div>
 
-                    {/* Footer */}
-                    <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+                    {/* Footer (Pinned) */}
+                    <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 flex-shrink-0 bg-white">
                         <button 
                             onClick={handlePrint}
                             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none"

@@ -97,6 +97,12 @@ export default function ManageArchivedProductsDialog({ open, onOpenChange, onSav
   const allArchivedVisibleSelected =
     archivedProducts.length > 0 && archivedProducts.every((product) => selectedArchivedIds.has(product.id));
 
+  const selectedArchiveCount = selectedIds.size;
+  const selectedRestoreCount = selectedArchivedIds.size;
+  const hasArchiveSelection = selectedArchiveCount > 0;
+  const hasRestoreSelection = selectedRestoreCount > 0;
+  const hasAnySelection = hasArchiveSelection || hasRestoreSelection;
+
   const toggleSelectProduct = (productId) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -143,10 +149,10 @@ export default function ManageArchivedProductsDialog({ open, onOpenChange, onSav
     });
   };
 
-  const handleArchiveSelected = async () => {
+  const handleArchiveSelected = async ({ silent = false, notifyParent = true } = {}) => {
     if (selectedIds.size === 0) {
-      setError("Select at least one product to archive.");
-      return;
+      if (!silent) setError("Select at least one product to archive.");
+      return { success: false, count: 0 };
     }
 
     setArchiving(true);
@@ -186,20 +192,22 @@ export default function ManageArchivedProductsDialog({ open, onOpenChange, onSav
         return next;
       });
 
-      setSuccess(`Archived ${archivedCount} product(s).`);
-      if (onSaved) onSaved();
+      if (!silent) setSuccess(`Archived ${archivedCount} product(s).`);
+      if (notifyParent && onSaved) onSaved();
+      return { success: true, count: archivedCount };
     } catch (archiveError) {
       console.error("Failed to archive products:", archiveError);
-      setError("Failed to archive selected products. Please try again.");
+      if (!silent) setError("Failed to archive selected products. Please try again.");
+      return { success: false, count: 0 };
     } finally {
       setArchiving(false);
     }
   };
 
-  const handleUnarchiveSelected = async () => {
+  const handleUnarchiveSelected = async ({ silent = false, notifyParent = true } = {}) => {
     if (selectedArchivedIds.size === 0) {
-      setError("Select at least one archived product to restore.");
-      return;
+      if (!silent) setError("Select at least one archived product to restore.");
+      return { success: false, count: 0 };
     }
 
     setUnarchiving(true);
@@ -238,15 +246,70 @@ export default function ManageArchivedProductsDialog({ open, onOpenChange, onSav
         return next;
       });
 
-      setSuccess(`Restored ${unarchivedCount} product(s) from archive.`);
-      if (onSaved) onSaved();
+      if (!silent) setSuccess(`Restored ${unarchivedCount} product(s) from archive.`);
+      if (notifyParent && onSaved) onSaved();
+      return { success: true, count: unarchivedCount };
     } catch (unarchiveError) {
       console.error("Failed to unarchive products:", unarchiveError);
-      setError("Failed to restore selected products. Please try again.");
+      if (!silent) setError("Failed to restore selected products. Please try again.");
+      return { success: false, count: 0 };
     } finally {
       setUnarchiving(false);
     }
   };
+
+  const handleApplyArchiveAction = async () => {
+    if (!hasAnySelection) {
+      setError("Select at least one product to archive or restore.");
+      return;
+    }
+
+    if (hasArchiveSelection && hasRestoreSelection) {
+      setError("");
+      setSuccess("");
+
+      const archiveResult = await handleArchiveSelected({ silent: true, notifyParent: false });
+      const restoreResult = await handleUnarchiveSelected({ silent: true, notifyParent: false });
+
+      if (archiveResult.success || restoreResult.success) {
+        const fragments = [];
+        if (archiveResult.count > 0) fragments.push(`archived ${archiveResult.count}`);
+        if (restoreResult.count > 0) fragments.push(`restored ${restoreResult.count}`);
+        setSuccess(`Successfully ${fragments.join(" and ")} product(s).`);
+        if (onSaved) onSaved();
+      } else {
+        setError("Failed to apply archive changes. Please try again.");
+      }
+      return;
+    }
+
+    if (hasArchiveSelection) {
+      await handleArchiveSelected();
+      return;
+    }
+
+    await handleUnarchiveSelected();
+  };
+
+  const mergedActionLabel = archiving
+    ? "Archiving..."
+    : unarchiving
+      ? "Restoring..."
+      : hasArchiveSelection && hasRestoreSelection
+        ? `Apply Changes (${selectedArchiveCount + selectedRestoreCount})`
+        : hasArchiveSelection
+          ? `Archive Selected (${selectedArchiveCount})`
+          : hasRestoreSelection
+            ? `Unarchive Selected (${selectedRestoreCount})`
+            : "Select Items";
+
+  const mergedActionClassName = hasArchiveSelection && hasRestoreSelection
+    ? "bg-blue-600 hover:bg-blue-700"
+    : hasArchiveSelection
+      ? "bg-amber-600 hover:bg-amber-700"
+      : hasRestoreSelection
+        ? "bg-emerald-600 hover:bg-emerald-700"
+        : "";
 
   const formatArchivedAt = (value) => {
     if (!value) return "-";
@@ -274,7 +337,7 @@ export default function ManageArchivedProductsDialog({ open, onOpenChange, onSav
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search by product name or category"
-              className="pl-9"
+              className="pl-9 w-1/2"
             />
           </div>
 
@@ -437,19 +500,11 @@ export default function ManageArchivedProductsDialog({ open, onOpenChange, onSav
           </Button>
           <Button
             type="button"
-            onClick={handleArchiveSelected}
-            disabled={isProcessing || selectedIds.size === 0}
-            className="bg-amber-600 hover:bg-amber-700"
+            onClick={handleApplyArchiveAction}
+            disabled={isProcessing || !hasAnySelection}
+            className={mergedActionClassName}
           >
-            {archiving ? "Archiving..." : "Archive Selected"}
-          </Button>
-          <Button
-            type="button"
-            onClick={handleUnarchiveSelected}
-            disabled={isProcessing || selectedArchivedIds.size === 0}
-            className="bg-emerald-600 hover:bg-emerald-700"
-          >
-            {unarchiving ? "Restoring..." : "Unarchive Selected"}
+            {mergedActionLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

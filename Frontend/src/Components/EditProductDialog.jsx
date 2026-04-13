@@ -12,11 +12,10 @@ import {
 } from "../Components/ui/dialog";
 import { Input } from "../Components/ui/input";
 import { Label } from "../Components/ui/label";
-import { Alert, AlertDescription, AlertTitle } from "../Components/ui/alert";
 import { AlertCircle } from "lucide-react";
 import { Skeleton } from "../Components/ui/skeleton";
 
-export default function EditProductDialog({ product, onClose, onSaved, categories = [] }) {
+export default function EditProductDialog({ product, onClose, onSaved, categories = [], existingProducts = [] }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({});
@@ -44,31 +43,22 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
     return mergedClass;
   };
 
-  // 🔴 Strict sanitization for Product Name
   const handleProductNameChange = (e) => {
-    // Only allows Letters, Numbers, Spaces, Hyphens, Apostrophes, and Ampersands.
     let val = e.target.value.replace(/[^a-zA-Z0-9\s\-'&]/g, '');
     setProductName(val);
     clearFieldError("product_name");
   };
 
-  // 🔴 Strict sanitization for Price
   const handlePriceChange = (e) => {
     let val = e.target.value.replace(/[^0-9.]/g, '');
-    
     const parts = val.split('.');
     if (parts.length > 2) {
       val = parts[0] + '.' + parts.slice(1).join('');
     }
-    
-    // Optional: Limit length to prevent crazy high numbers
-    if (val.length <= 15) {
-      setPrice(val);
-      clearFieldError("price");
-    }
+    setPrice(val);
+    clearFieldError("price");
   };
 
-  // 🔴 Strict sanitization for Servings
   const handleServingsChange = (e) => {
     let val = e.target.value.replace(/[^0-9]/g, '');
     setServings(val);
@@ -93,16 +83,8 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
       nextFieldErrors.product_name = "Product name must contain letters.";
     }
 
-    if (!category) {
-      nextFieldErrors.category = "Category must not be blank.";
-    }
-
     if (price === "" || Number.isNaN(numericPrice) || numericPrice <= 0) {
       nextFieldErrors.price = "Price must be greater than 0.";
-    }
-
-    if (servings === "") {
-      nextFieldErrors.servings = "Servings must not be blank.";
     }
 
     if (Object.keys(nextFieldErrors).length > 0) {
@@ -112,14 +94,41 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
       return;
     }
 
-    // 🔴 Validation: Check for empty spaces
+    // ✅ FIX: Advanced Similarity Check
+    // Removes all spaces, dashes, and special characters, then converts to lowercase
+    const normalizeForComparison = (str = "") => String(str).toLowerCase().replace(/[^a-z0-9]/g, '');
+    
+    const baseNewName = normalizeForComparison(normalizedProductName);
+
+    const isDuplicate = existingProducts.some((p) => {
+      // Ignore the current product being edited
+      if (p.id === product.id) return false;
+      
+      const baseExistingName = normalizeForComparison(p?.product_name);
+      return baseExistingName === baseNewName;
+    });
+
+    if (isDuplicate) {
+      setFieldErrors({ product_name: "A similar product name already exists." });
+      setError("A similar product name already exists in your menu.");
+      setLoading(false); 
+      return; 
+    }
+
     const formData = new FormData();
     
     formData.append("product_name", normalizedProductName);
     formData.append("price", numericPrice);
-    formData.append("category", category);
+    
+    if (category) {
+      formData.append("category", category);
+    } else {
+      formData.append("category", ""); 
+    }
+
     const parsedServings = parseInt(servings || "0", 10);
     const servingCount = Number.isFinite(parsedServings) ? Math.max(0, parsedServings) : 0;
+    
     formData.append("stock_quantity", servingCount);
     formData.append("track_stock", "true");
     formData.append("is_available", String(servingCount > 0));
@@ -141,7 +150,6 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
     }
   };
 
-  // Wrapper for closing to clear errors
   const handleClose = () => {
     setError(null);
     setFieldErrors({});
@@ -152,7 +160,7 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
 
   return (
     <Dialog open={true} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[450px] z-50">
+      <DialogContent className="sm:max-w-112.5 z-50">
         <DialogHeader>
           <DialogTitle>Edit Product</DialogTitle>
           <DialogDescription>
@@ -188,10 +196,9 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
         <>
 
         {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Error</AlertTitle>
-            <AlertDescription className="space-y-1">
+          <div className="bg-red-50 text-red-600 text-sm p-3 rounded-md flex items-start gap-2 border border-red-200">
+            <AlertCircle size={16} className="mt-0.5" />
+            <div className="space-y-1">
               <p>{error}</p>
               {topErrorItems.length > 0 && (
                 <ul className="list-disc pl-4">
@@ -200,8 +207,8 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
                   ))}
                 </ul>
               )}
-            </AlertDescription>
-          </Alert>
+            </div>
+          </div>
         )}
 
         <form onSubmit={handleSave} className="grid gap-4" noValidate>
@@ -210,9 +217,9 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
             <Input 
               name="product_name" 
               value={productName}
-              onChange={handleProductNameChange} // 🔴 Added handler
+              onChange={handleProductNameChange}
               required 
-              maxLength={50}
+              maxLength={20}
               className={getInputClassName("product_name")}
               aria-invalid={!!fieldErrors.product_name}
             />
@@ -228,13 +235,10 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
                 setCategory(e.target.value);
                 clearFieldError("category");
               }}
-              required
               className={`px-3 py-2 border rounded-md ${fieldErrors.category ? "border-red-500 focus:ring-red-500" : ""}`}
               aria-invalid={!!fieldErrors.category}
             >
-              <option value="" disabled>
-                Select category
-              </option>
+              <option value="">Select Category</option>
               {categories.length > 0 ? (
                 categories.map((c) => (
                   <option key={c.value} value={c.value}>
@@ -248,30 +252,31 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
           </div>
 
           <div className="grid gap-2">
-            <Label>Price</Label>
+            <Label>Price (₱)</Label>
             <Input
               name="price"
-              type="text"           // 🔴 Changed to text for regex
-              inputMode="decimal"   // 🔴 Added for mobile keyboard
+              type="text"
+              inputMode="decimal"
+              placeholder="0.00"
               value={price}
               onChange={handlePriceChange} 
               required
-              maxLength={10}
+              maxLength={13}
               className={getInputClassName("price")}
               aria-invalid={!!fieldErrors.price}
             />
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="servings">Servings Available <p className="text-xs text-muted-foreground">(Restock?)</p></Label>
+            <Label htmlFor="servings">Servings Available <p className="inline text-xs text-muted-foreground">(Restock?)</p></Label>
             <Input
               id="servings"
-              type="text"           // 🔴 Changed to text for regex
-              inputMode="numeric"   // 🔴 Added for mobile keyboard
+              type="text"
+              inputMode="numeric"
+              placeholder="0"
               value={servings}
-              onChange={handleServingsChange} // 🔴 Added handler
-              required
-              maxLength={10}
+              onChange={handleServingsChange}
+              maxLength={11}
               className={getInputClassName("servings")}
               aria-invalid={!!fieldErrors.servings}
             />

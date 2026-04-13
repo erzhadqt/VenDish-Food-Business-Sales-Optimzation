@@ -15,6 +15,10 @@ const formatPrice = (value) => {
   return parsed.toFixed(2);
 };
 
+const normalizeProductNameForComparison = (value = "") => {
+  return String(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+};
+
 // Helper function to extract meaningful API error messages
 const extractErrorMessage = (error, fallback = "An unexpected error occurred.") => {
   if (error?.response?.data?.detail) return error.response.data.detail;
@@ -230,6 +234,45 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
     setSuccess("");
 
     try {
+      // Build the final name state (current + draft) before sending any API call.
+      const pendingNameById = new Map(
+        products.map((product) => {
+          const draftName = drafts[product.id]?.product_name;
+          const pendingName = String(draftName ?? product.product_name ?? "").trim();
+          return [product.id, pendingName];
+        })
+      );
+
+      const duplicateNameConflicts = [];
+      changedProductIds.forEach((productId) => {
+        const product = products.find((item) => item.id === productId);
+        if (!product) return;
+
+        const originalName = String(product.product_name || "").trim();
+        const pendingName = String(pendingNameById.get(productId) || "").trim();
+        const nameChanged = pendingName !== originalName;
+        if (!nameChanged) return;
+
+        const normalizedPendingName = normalizeProductNameForComparison(pendingName);
+        if (!normalizedPendingName) return;
+
+        const duplicateEntry = products.find((candidate) => {
+          if (candidate.id === productId) return false;
+
+          const candidateName = String(pendingNameById.get(candidate.id) || "").trim();
+          return normalizeProductNameForComparison(candidateName) === normalizedPendingName;
+        });
+
+        if (duplicateEntry) {
+          duplicateNameConflicts.push(`"${pendingName}" conflicts with "${duplicateEntry.product_name}".`);
+        }
+      });
+
+      if (duplicateNameConflicts.length > 0) {
+        setError(`Duplicate product name detected. ${duplicateNameConflicts[0]}`);
+        return;
+      }
+
       const updates = changedProductIds.map((productId) => {
         const product = products.find((item) => item.id === productId);
         const draft = drafts[productId] || {};

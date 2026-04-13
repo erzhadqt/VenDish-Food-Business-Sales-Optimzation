@@ -8,6 +8,9 @@ import api from "../api";
 import DeleteConfirmDialog from "./DeleteConfirmDialog"; 
 import { Skeleton } from "../Components/ui/skeleton";
 
+const CATEGORY_NAME_ALLOWED_REGEX = /^[a-zA-Z0-9\s\-'&]+$/;
+const CATEGORY_NAME_HAS_LETTER_REGEX = /[a-zA-Z]/;
+
 export default function ManageCategoryDialog({ open, onOpenChange, onSaved }) {
   const [view, setView] = useState("list"); // 'list' or 'form'
   const [loading, setLoading] = useState(false);
@@ -59,7 +62,8 @@ export default function ManageCategoryDialog({ open, onOpenChange, onSaved }) {
   };
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const sanitizedValue = e.target.value.replace(/[^a-zA-Z0-9\s\-'&]/g, "");
+    setFormData({ ...formData, [e.target.name]: sanitizedValue });
     setError(""); // Clear errors when typing
 
     setFieldErrors((prev) => {
@@ -107,9 +111,27 @@ export default function ManageCategoryDialog({ open, onOpenChange, onSaved }) {
     e.preventDefault();
     const normalizedName = formData.name.trim();
 
+    const nextFieldErrors = {};
+
     if (!normalizedName) {
-      setFieldErrors({ name: "Category name must not be blank." });
-      setError("Please review the highlighted fields. 1 validation issue found.");
+      nextFieldErrors.name = "Category name must not be blank.";
+    }
+
+    if (normalizedName && !CATEGORY_NAME_ALLOWED_REGEX.test(normalizedName)) {
+      nextFieldErrors.name = "Category name can only contain letters, numbers, spaces, hyphens, apostrophes, and ampersands.";
+    }
+
+    if (normalizedName && !CATEGORY_NAME_HAS_LETTER_REGEX.test(normalizedName)) {
+      nextFieldErrors.name = "Category name must contain letters (numbers or symbols only are not allowed).";
+    }
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors);
+      setError(
+        `Please review the highlighted fields. ${Object.keys(nextFieldErrors).length} validation issue${
+          Object.keys(nextFieldErrors).length > 1 ? "s" : ""
+        } found.`
+      );
       return;
     }
 

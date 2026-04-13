@@ -115,6 +115,12 @@ export default function ManageArchivedCouponsDialog({ open, onOpenChange, onSave
   const allArchivedVisibleSelected =
     archivedCoupons.length > 0 && archivedCoupons.every((coupon) => selectedArchivedIds.has(coupon.id));
 
+  const selectedArchiveCount = selectedIds.size;
+  const selectedRestoreCount = selectedArchivedIds.size;
+  const hasArchiveSelection = selectedArchiveCount > 0;
+  const hasRestoreSelection = selectedRestoreCount > 0;
+  const hasAnySelection = hasArchiveSelection || hasRestoreSelection;
+
   const toggleSelectCoupon = (couponId) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -161,10 +167,10 @@ export default function ManageArchivedCouponsDialog({ open, onOpenChange, onSave
     });
   };
 
-  const handleArchiveSelected = async () => {
+  const handleArchiveSelected = async ({ silent = false, notifyParent = true } = {}) => {
     if (selectedIds.size === 0) {
-      setError("Select at least one coupon to archive.");
-      return;
+      if (!silent) setError("Select at least one coupon to archive.");
+      return { success: false, count: 0 };
     }
 
     setArchiving(true);
@@ -202,20 +208,22 @@ export default function ManageArchivedCouponsDialog({ open, onOpenChange, onSave
         return next;
       });
 
-      setSuccess(`Archived ${archivedCount} coupon(s).`);
-      if (onSaved) onSaved();
+      if (!silent) setSuccess(`Archived ${archivedCount} coupon(s).`);
+      if (notifyParent && onSaved) onSaved();
+      return { success: true, count: archivedCount };
     } catch (archiveError) {
       console.error("Failed to archive coupons:", archiveError);
-      setError("Failed to archive selected coupons. Please try again.");
+      if (!silent) setError("Failed to archive selected coupons. Please try again.");
+      return { success: false, count: 0 };
     } finally {
       setArchiving(false);
     }
   };
 
-  const handleUnarchiveSelected = async () => {
+  const handleUnarchiveSelected = async ({ silent = false, notifyParent = true } = {}) => {
     if (selectedArchivedIds.size === 0) {
-      setError("Select at least one archived coupon to restore.");
-      return;
+      if (!silent) setError("Select at least one archived coupon to restore.");
+      return { success: false, count: 0 };
     }
 
     setUnarchiving(true);
@@ -252,15 +260,70 @@ export default function ManageArchivedCouponsDialog({ open, onOpenChange, onSave
         return next;
       });
 
-      setSuccess(`Restored ${unarchivedCount} coupon(s) from archive.`);
-      if (onSaved) onSaved();
+      if (!silent) setSuccess(`Restored ${unarchivedCount} coupon(s) from archive.`);
+      if (notifyParent && onSaved) onSaved();
+      return { success: true, count: unarchivedCount };
     } catch (unarchiveError) {
       console.error("Failed to unarchive coupons:", unarchiveError);
-      setError("Failed to restore selected coupons. Please try again.");
+      if (!silent) setError("Failed to restore selected coupons. Please try again.");
+      return { success: false, count: 0 };
     } finally {
       setUnarchiving(false);
     }
   };
+
+  const handleApplyArchiveAction = async () => {
+    if (!hasAnySelection) {
+      setError("Select at least one coupon to archive or restore.");
+      return;
+    }
+
+    if (hasArchiveSelection && hasRestoreSelection) {
+      setError("");
+      setSuccess("");
+
+      const archiveResult = await handleArchiveSelected({ silent: true, notifyParent: false });
+      const restoreResult = await handleUnarchiveSelected({ silent: true, notifyParent: false });
+
+      if (archiveResult.success || restoreResult.success) {
+        const fragments = [];
+        if (archiveResult.count > 0) fragments.push(`archived ${archiveResult.count}`);
+        if (restoreResult.count > 0) fragments.push(`restored ${restoreResult.count}`);
+        setSuccess(`Successfully ${fragments.join(" and ")} coupon(s).`);
+        if (onSaved) onSaved();
+      } else {
+        setError("Failed to apply archive changes. Please try again.");
+      }
+      return;
+    }
+
+    if (hasArchiveSelection) {
+      await handleArchiveSelected();
+      return;
+    }
+
+    await handleUnarchiveSelected();
+  };
+
+  const mergedActionLabel = archiving
+    ? "Archiving..."
+    : unarchiving
+      ? "Restoring..."
+      : hasArchiveSelection && hasRestoreSelection
+        ? `Apply Changes (${selectedArchiveCount + selectedRestoreCount})`
+        : hasArchiveSelection
+          ? `Archive Selected (${selectedArchiveCount})`
+          : hasRestoreSelection
+            ? `Unarchive Selected (${selectedRestoreCount})`
+            : "Select Items";
+
+  const mergedActionClassName = hasArchiveSelection && hasRestoreSelection
+    ? "bg-blue-600 hover:bg-blue-700"
+    : hasArchiveSelection
+      ? "bg-amber-600 hover:bg-amber-700"
+      : hasRestoreSelection
+        ? "bg-emerald-600 hover:bg-emerald-700"
+        : "";
 
   const formatDateTime = (value) => {
     if (!value) return "-";
@@ -476,19 +539,11 @@ export default function ManageArchivedCouponsDialog({ open, onOpenChange, onSave
           </Button>
           <Button
             type="button"
-            onClick={handleArchiveSelected}
-            disabled={isProcessing || selectedIds.size === 0}
-            className="bg-amber-600 hover:bg-amber-700"
+            onClick={handleApplyArchiveAction}
+            disabled={isProcessing || !hasAnySelection}
+            className={mergedActionClassName}
           >
-            {archiving ? "Archiving..." : "Archive Selected"}
-          </Button>
-          <Button
-            type="button"
-            onClick={handleUnarchiveSelected}
-            disabled={isProcessing || selectedArchivedIds.size === 0}
-            className="bg-emerald-600 hover:bg-emerald-700"
-          >
-            {unarchiving ? "Restoring..." : "Unarchive Selected"}
+            {mergedActionLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

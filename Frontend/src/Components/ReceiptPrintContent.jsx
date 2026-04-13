@@ -11,7 +11,6 @@ const ReceiptPrintContent = forwardRef(({ transactionData, tinNumber }, ref) => 
   const cash = Number(transactionData?.cash_given || 0); 
   const change = Number(transactionData?.change || 0);
   
-  // ✅ FIX: Get all coupons from the array
   const coupons = transactionData?.coupon_details || [];
 
   const created = transactionData?.created_at
@@ -33,6 +32,39 @@ const ReceiptPrintContent = forwardRef(({ transactionData, tinNumber }, ref) => 
     tinNumber || transactionData?.tin_number,
     DEFAULT_TIN_NUMBER
   );
+
+  // ✅ FIX: Added getCouponDisplay specifically formatted for narrow thermal paper
+  const getCouponDisplay = (coupon) => {
+    if (!coupon.criteria_details) return `-${coupon.rate}`;
+    
+    const { discount_type, discount_value, target_product } = coupon.criteria_details;
+    
+    if (discount_type === 'percentage') {
+        let baseAmount = parseFloat(transactionData?.subtotal || 0);
+        
+        // Calculate based on a targeted product if applicable
+        if (target_product) {
+            const targetItem = items.find(item => {
+                const itemId = typeof item.product === 'object' ? item.product?.id : item.product;
+                return itemId === target_product;
+            });
+            if (targetItem) {
+                baseAmount = parseFloat(targetItem.price) * targetItem.quantity;
+            }
+        }
+        
+        const rawValue = (parseFloat(discount_value) / 100) * baseAmount;
+        // Output format: "-15%(45.00)" (Compact for 58mm printer)
+        return `-${coupon.rate}(${rawValue.toFixed(2)})`; 
+    } else if (discount_type === 'fixed') {
+        // Output format: "-50.00"
+        return `-${parseFloat(discount_value).toFixed(2)}`;
+    } else if (discount_type === 'free_item') {
+        return `-FREE`;
+    }
+    
+    return `-${coupon.rate}`;
+  };
 
   return (
     <div ref={ref} id="receipt" style={{ background: '#fff', color: '#000' }}>
@@ -162,13 +194,13 @@ const ReceiptPrintContent = forwardRef(({ transactionData, tinNumber }, ref) => 
             <span>{vat.toFixed(2)}</span>
           </div>
 
-          {/* DISCOUNT LOOP */}
+          {/* ✅ FIX: REPLACED NaN CAUSING CODE WITH getCouponDisplay */}
           {coupons.length > 0 && coupons.map((coupon, idx) => (
             <div key={idx} className="receipt-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1px' }}>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '60%' }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '40%' }}>
                 Disc({coupon.code}):
               </span>
-              <span>-{Number(coupon.rate).toFixed(2)}</span>
+              <span style={{ textAlign: 'right' }}>{getCouponDisplay(coupon)}</span>
             </div>
           ))}
 

@@ -15,6 +15,10 @@ import { Label } from "../Components/ui/label";
 import { AlertCircle } from "lucide-react"; 
 import api from "../api";
 
+const normalizeProductNameForComparison = (value = "") => {
+  return String(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+};
+
 export default function AddProductDialog({ onSaved, children, existingProducts = [], categories = [] }) {
   const [open, setOpen] = useState(false);
   const [productName, setProductName] = useState("");
@@ -108,14 +112,16 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
       return;
     }
 
-    // Validate that the product name isn't just empty spaces
-    const isDuplicate = existingProducts.some(
-      (p) => p.product_name.toLowerCase() === normalizedProductName.toLowerCase()
-    );
+    // Strict duplicate check: ignores spaces/case/special separators.
+    const normalizedCandidateName = normalizeProductNameForComparison(normalizedProductName);
+    const isDuplicate = existingProducts.some((p) => {
+      const existingName = normalizeProductNameForComparison(p?.product_name);
+      return existingName === normalizedCandidateName;
+    });
 
     if (isDuplicate) {
       setFieldErrors({ productName: "A product with this name already exists." });
-      setError("A product with this name already exists.");
+      setError("A similar product name already exists in your menu.");
       setLoading(false); 
       return; 
     }

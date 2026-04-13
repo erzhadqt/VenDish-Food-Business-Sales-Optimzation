@@ -482,6 +482,7 @@ function ProductList() {
           onClose={() => setSelectedProduct(null)}
           onSaved={handleUpdatedProduct}
           categories={assignableCategories}
+          existingProducts={products}
         />
       )}
     </div>

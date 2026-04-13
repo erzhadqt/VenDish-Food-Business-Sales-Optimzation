@@ -96,7 +96,7 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
     setError(null);
 
     // 🔴 1. Basic validation for text inputs
-    if(!code || !ruleName) { setError("Please fill in all required fields (Code, Promotion Name)."); return; }
+    if(!code || !ruleName) { setError("Please fill in all required fields (Code, Promotion Name, and Date)."); return; }
     if(discountType !== 'free_item' && !discountValue) { setError("Please enter a discount value."); return; }
 
     // 🔴 2. Strict validation for claim and usage limit
@@ -159,7 +159,7 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
 
     } catch (err) {
       console.error(err);
-      setError("Error creating coupon. Code might already exist.");
+      setError("Error creating coupon. Promo Code already exist.");
     } finally {
       setLoading(false);
     }
@@ -193,7 +193,7 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                       <div className="space-y-1">
                           <Label>Code <span className="text-red-500">*</span></Label>
                           <div className="flex gap-2">
-                              <Input placeholder="CODE123" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className="uppercase font-mono tracking-widest"/>
+                              <Input placeholder="CODE123" maxLength={8} value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className="uppercase font-mono tracking-widest"/>
                               <Button variant="outline" size="icon" onClick={generateRandomCode}><Wand2 className="h-4 w-4" /></Button>
                           </div>
                       </div>
