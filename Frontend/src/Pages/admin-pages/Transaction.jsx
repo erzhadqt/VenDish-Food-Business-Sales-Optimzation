@@ -1,50 +1,92 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { HistoryIcon, AlertCircle, Tag, EllipsisVertical, ChevronLeft, ChevronRight, Ban, User, X } from 'lucide-react';
 import api from '../../api';
 import ReceiptModal from '../../Components/ReceiptModal.jsx';
 import { Skeleton } from '../../Components/ui/skeleton';
+import { applyQueryParam, usePersistedQueryState } from '../../utils/usePersistedQueryState';
+
+const parsePositivePage = (value, fallback = 1) => {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
 
 const Transaction = () => {
+    const [searchParams, setSearchParams] = useSearchParams();
+
     const [transactions, setTransactions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [selectedReceipt, setSelectedReceipt] = useState(null);
 
     // Lazy load pagination state from localStorage
-    const [currentPage, setCurrentPage] = useState(() => {
-        const savedPage = localStorage.getItem('transaction_page');
-        return savedPage ? parseInt(savedPage, 10) : 1;
+    const [currentPage, setCurrentPage] = usePersistedQueryState({
+        searchParams,
+        queryKey: 'page',
+        storageKey: 'transaction_page',
+        defaultValue: 1,
+        parse: (rawValue, fallback) => parsePositivePage(rawValue, fallback),
+        serialize: (value) => String(value),
     });  
     const rowsPerPage = 5;  
 
     // Lazy load filter states from localStorage
-    const [filterStatus, setFilterStatus] = useState(() => {
-        return localStorage.getItem('transaction_filterStatus') || 'ALL';
+    const [filterStatus, setFilterStatus] = usePersistedQueryState({
+        searchParams,
+        queryKey: 'status',
+        storageKey: 'transaction_filterStatus',
+        defaultValue: 'ALL',
     }); 
-    const [filterCoupon, setFilterCoupon] = useState(() => {
-        return localStorage.getItem('transaction_filterCoupon') || 'ALL';
+    const [filterCoupon, setFilterCoupon] = usePersistedQueryState({
+        searchParams,
+        queryKey: 'coupon',
+        storageKey: 'transaction_filterCoupon',
+        defaultValue: 'ALL',
     });
-    const [filterCashier, setFilterCashier] = useState(() => {
-        return localStorage.getItem('transaction_filterCashier') || 'ALL';
+    const [filterCashier, setFilterCashier] = usePersistedQueryState({
+        searchParams,
+        queryKey: 'cashier',
+        storageKey: 'transaction_filterCashier',
+        defaultValue: 'ALL',
     });
-    const [filterDate, setFilterDate] = useState(() => {
-        return localStorage.getItem('transaction_filterDate') || '';
+    const [filterDate, setFilterDate] = usePersistedQueryState({
+        searchParams,
+        queryKey: 'date',
+        storageKey: 'transaction_filterDate',
+        defaultValue: '',
     }); 
-    const [filterPaymentMode, setFilterPaymentMode] = useState(() => {
-        return localStorage.getItem('transaction_filterPaymentMode') || 'ALL';
+    const [filterPaymentMode, setFilterPaymentMode] = usePersistedQueryState({
+        searchParams,
+        queryKey: 'payment',
+        storageKey: 'transaction_filterPaymentMode',
+        defaultValue: 'ALL',
     });
 
     // Auto-save states to localStorage on change
     useEffect(() => {
-        localStorage.setItem('transaction_page', currentPage.toString());
-        localStorage.setItem('transaction_filterStatus', filterStatus);
-        localStorage.setItem('transaction_filterCoupon', filterCoupon);
-        localStorage.setItem('transaction_filterCashier', filterCashier);
-        localStorage.setItem('transaction_filterDate', filterDate);
-        localStorage.setItem('transaction_filterPaymentMode', filterPaymentMode);
-    }, [currentPage, filterStatus, filterCoupon, filterCashier, filterDate, filterPaymentMode]);
+        const params = new URLSearchParams();
+        applyQueryParam(params, 'date', filterDate);
+        applyQueryParam(params, 'payment', filterPaymentMode, (value) => value === 'ALL');
+        applyQueryParam(params, 'status', filterStatus, (value) => value === 'ALL');
+        applyQueryParam(params, 'coupon', filterCoupon, (value) => value === 'ALL');
+        applyQueryParam(params, 'cashier', filterCashier, (value) => value === 'ALL');
+        applyQueryParam(params, 'page', currentPage, (value) => Number(value) <= 1);
 
-    // 🔴 NEW: Reset all filters to default
+        if (params.toString() !== searchParams.toString()) {
+            setSearchParams(params, { replace: true });
+        }
+    }, [
+        currentPage,
+        filterStatus,
+        filterCoupon,
+        filterCashier,
+        filterDate,
+        filterPaymentMode,
+        searchParams,
+        setSearchParams,
+    ]);
+
+    // Reset all filters to default
     const handleClearFilters = () => {
         setFilterDate('');
         setFilterPaymentMode('ALL');
@@ -90,8 +132,9 @@ const Transaction = () => {
     }, [transactions]);
 
     const filteredTransactions = transactions.filter((receipt) => {  
+        const hasCoupons = Array.isArray(receipt.coupon_details) && receipt.coupon_details.length > 0;
         const statusMatch = filterStatus === 'ALL' || receipt.status === filterStatus;  
-        const couponMatch = filterCoupon === 'ALL' || (filterCoupon === 'WITH' && receipt.coupon_details) || (filterCoupon === 'WITHOUT' && !receipt.coupon_details);  
+        const couponMatch = filterCoupon === 'ALL' || (filterCoupon === 'WITH' && hasCoupons) || (filterCoupon === 'WITHOUT' && !hasCoupons);  
         const cashierMatch = filterCashier === 'ALL' || (receipt.cashier_name || "System") === filterCashier;
         const paymentModeMatch = filterPaymentMode === 'ALL' || receipt.payment_method === filterPaymentMode; 
         
@@ -129,7 +172,7 @@ const Transaction = () => {
                     </h1>  
                 </nav>  
 
-                {/* 🔴 MODIFIED: Changed lg:grid-cols-5 to lg:grid-cols-6 to fit the new button */}
+                {/* Updated Grid for exact 6 columns and consistent spacing */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-6">  
                     <div className="flex flex-col">
                         <label className="text-sm font-medium text-gray-700 mb-1">Date</label>
@@ -137,13 +180,13 @@ const Transaction = () => {
                             type="date" 
                             value={filterDate} 
                             onChange={(e) => { setFilterDate(e.target.value); setCurrentPage(1); }} 
-                            className="border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none w-full"
+                            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none w-full h-[38px]"
                         />
                     </div>
                     
                     <div className="flex flex-col">  
                         <label className="text-sm font-medium text-gray-700 mb-1">Payment Mode</label>  
-                        <select value={filterPaymentMode} onChange={(e) => { setFilterPaymentMode(e.target.value); setCurrentPage(1); }} className="border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none w-full">  
+                        <select value={filterPaymentMode} onChange={(e) => { setFilterPaymentMode(e.target.value); setCurrentPage(1); }} className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none w-full h-[38px]">  
                             <option value="ALL">All Modes</option>  
                             <option value="CASH">Cash</option>  
                             <option value="GCASH">GCash</option>  
@@ -152,23 +195,25 @@ const Transaction = () => {
 
                     <div className="flex flex-col">  
                         <label className="text-sm font-medium text-gray-700 mb-1">Status</label>  
-                        <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }} className="border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none w-full">  
+                        <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }} className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none w-full h-[38px]">  
                             <option value="ALL">All</option>  
                             <option value="COMPLETED">Completed</option>  
                             <option value="VOIDED">Voided</option>  
                         </select>  
                     </div>  
+
                     <div className="flex flex-col">  
                         <label className="text-sm font-medium text-gray-700 mb-1">Coupon</label>  
-                        <select value={filterCoupon} onChange={(e) => { setFilterCoupon(e.target.value); setCurrentPage(1); }} className="border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none w-full">  
+                        <select value={filterCoupon} onChange={(e) => { setFilterCoupon(e.target.value); setCurrentPage(1); }} className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none w-full h-[38px]">  
                             <option value="ALL">All</option>  
                             <option value="WITH">With Coupon</option>  
                             <option value="WITHOUT">Without Coupon</option>  
                         </select>  
                     </div>  
+
                     <div className="flex flex-col">  
                         <label className="text-sm font-medium text-gray-700 mb-1">Cashier</label>  
-                        <select value={filterCashier} onChange={(e) => { setFilterCashier(e.target.value); setCurrentPage(1); }} className="border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none w-full">  
+                        <select value={filterCashier} onChange={(e) => { setFilterCashier(e.target.value); setCurrentPage(1); }} className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none w-full h-[38px]">  
                             <option value="ALL">All Cashiers</option>  
                             {uniqueCashiers.map((name) => (
                                 <option key={name} value={name}>{name}</option>
@@ -176,13 +221,12 @@ const Transaction = () => {
                         </select>  
                     </div>  
 
-                    {/* 🔴 NEW: Clear Button Column */}
                     <div className="flex flex-col justify-end">
                         <button 
                             onClick={handleClearFilters}
-                            className="flex items-center justify-center gap-2 border rounded-lg px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100 text-gray-700 font-medium transition-colors w-1/2 h-[38px]"
+                            className="flex items-center justify-center gap-2 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100 shadow-sm text-gray-700 font-medium transition-colors w-full h-[38px]"
                         >
-                            <X size={16} /> Clear
+                            <X size={16} /> Clear Filters
                         </button>
                     </div>
                 </div>  

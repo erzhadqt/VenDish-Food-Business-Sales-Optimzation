@@ -33,6 +33,7 @@ export default function ForgotPasswordModal({ open, onOpenChange }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [fieldErrors, setFieldErrors] = useState({});
 
   // Reset all state when modal opens/closes
   useEffect(() => {
@@ -51,6 +52,7 @@ export default function ForgotPasswordModal({ open, onOpenChange }) {
         setSuccess("");
         setLoading(false);
         setResendCooldown(0);
+        setFieldErrors({});
       }, 300);
       return () => clearTimeout(timer);
     }
@@ -79,16 +81,34 @@ export default function ForgotPasswordModal({ open, onOpenChange }) {
     e.preventDefault();
     setError("");
     setSuccess("");
+    setFieldErrors({});
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const nextFieldErrors = {};
+
+    if (!normalizedEmail) {
+      nextFieldErrors.email = "Email must not be blank.";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      nextFieldErrors.email = "Please enter a valid email address.";
+    }
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors);
+      setError("Please review the highlighted fields. 1 validation issue found.");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const res = await api.post("/request-otp/", { email: email.trim().toLowerCase() });
+      const res = await api.post("/request-otp/", { email: normalizedEmail });
       setSuccess(res.data.details || "OTP sent! Check your email inbox. The code expires in 15 minutes.");
       setResendCooldown(60);
       
       // Move to OTP step after brief delay
       setTimeout(() => {
         setSuccess("");
+        setFieldErrors({});
         setStep(STEP_OTP);
       }, 1500);
     } catch (err) {
@@ -104,6 +124,14 @@ export default function ForgotPasswordModal({ open, onOpenChange }) {
   const handleOtpChange = (index, value) => {
     // Only allow single digit
     if (value && !/^\d$/.test(value)) return;
+
+    if (fieldErrors.otp) {
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next.otp;
+        return next;
+      });
+    }
 
     const newDigits = [...otpDigits];
     newDigits[index] = value;
@@ -141,7 +169,10 @@ export default function ForgotPasswordModal({ open, onOpenChange }) {
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
     const otp = otpDigits.join("");
+    setFieldErrors({});
+
     if (otp.length !== 6) {
+      setFieldErrors({ otp: "Please enter the complete 6-digit OTP." });
       setError("Please enter the complete 6-digit OTP.");
       return;
     }
@@ -161,6 +192,7 @@ export default function ForgotPasswordModal({ open, onOpenChange }) {
 
       setTimeout(() => {
         setSuccess("");
+        setFieldErrors({});
         setStep(STEP_RESET);
       }, 1500);
     } catch (err) {
@@ -176,6 +208,7 @@ export default function ForgotPasswordModal({ open, onOpenChange }) {
     if (resendCooldown > 0) return;
     setError("");
     setSuccess("");
+    setFieldErrors({});
     setLoading(true);
 
     try {
@@ -200,12 +233,34 @@ export default function ForgotPasswordModal({ open, onOpenChange }) {
   const handleResetPassword = async (e) => {
     e.preventDefault();
 
+    setFieldErrors({});
+    const nextFieldErrors = {};
+
+    if (!newPassword) {
+      nextFieldErrors.newPassword = "New password must not be blank.";
+    }
+
+    if (!confirmPassword) {
+      nextFieldErrors.confirmPassword = "Confirm password must not be blank.";
+    }
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors);
+      setError(`Please review the highlighted fields. ${Object.keys(nextFieldErrors).length} validation issue${Object.keys(nextFieldErrors).length > 1 ? "s" : ""} found.`);
+      return;
+    }
+
     if (newPassword.length < 8) {
+      setFieldErrors({ newPassword: "Password must be at least 8 characters long." });
       setError("Password must be at least 8 characters long.");
       return;
     }
 
     if (newPassword !== confirmPassword) {
+      setFieldErrors({
+        newPassword: "Passwords do not match.",
+        confirmPassword: "Passwords do not match.",
+      });
       setError("Passwords do not match.");
       return;
     }
@@ -233,6 +288,8 @@ export default function ForgotPasswordModal({ open, onOpenChange }) {
       setLoading(false);
     }
   };
+
+  const topErrorItems = Object.values(fieldErrors);
 
   // ---------------------------
   // Step descriptions
@@ -304,7 +361,16 @@ export default function ForgotPasswordModal({ open, onOpenChange }) {
         {error && (
           <div className="bg-red-50 text-red-600 p-3 rounded-xl flex items-center gap-2 border border-red-200 text-sm animate-fade-in">
             <AlertCircle size={16} className="shrink-0" />
-            <p className="font-medium">{error}</p>
+            <div className="space-y-1">
+              <p className="font-medium">{error}</p>
+              {topErrorItems.length > 0 && (
+                <ul className="list-disc pl-4">
+                  {topErrorItems.slice(0, 4).map((item, index) => (
+                    <li key={`${item}-${index}`}>{item}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         )}
 
@@ -320,7 +386,7 @@ export default function ForgotPasswordModal({ open, onOpenChange }) {
         {/* STEP 1: EMAIL INPUT       */}
         {/* ========================= */}
         {step === STEP_EMAIL && (
-          <form onSubmit={handleRequestOTP} className="space-y-4 py-2">
+          <form noValidate onSubmit={handleRequestOTP} className="space-y-4 py-2">
             <div className="space-y-2">
               <Label htmlFor="reset-email" className="text-xs font-bold text-gray-500 uppercase tracking-wide">Email Address</Label>
               <div className="relative group">
@@ -332,10 +398,19 @@ export default function ForgotPasswordModal({ open, onOpenChange }) {
                   type="email"
                   placeholder="name@example.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setFieldErrors((prev) => {
+                      if (!prev.email) return prev;
+                      const next = { ...prev };
+                      delete next.email;
+                      return next;
+                    });
+                  }}
                   required
                   autoFocus
-                  className="pl-10 py-5 rounded-xl border-gray-200 focus:border-red-500 focus:ring-red-500/20"
+                  className={`pl-10 py-5 rounded-xl border-gray-200 focus:border-red-500 focus:ring-red-500/20 ${fieldErrors.email ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                  aria-invalid={!!fieldErrors.email}
                 />
               </div>
             </div>
@@ -369,7 +444,7 @@ export default function ForgotPasswordModal({ open, onOpenChange }) {
         {/* STEP 2: OTP VERIFICATION  */}
         {/* ========================= */}
         {step === STEP_OTP && (
-          <form onSubmit={handleVerifyOTP} className="space-y-4 py-2">
+          <form noValidate onSubmit={handleVerifyOTP} className="space-y-4 py-2">
             <div className="space-y-3">
               <Label className="text-xs font-bold text-gray-500 uppercase tracking-wide text-center block">
                 Enter 6-Digit Code
@@ -386,7 +461,7 @@ export default function ForgotPasswordModal({ open, onOpenChange }) {
                     onChange={(e) => handleOtpChange(idx, e.target.value)}
                     onKeyDown={(e) => handleOtpKeyDown(idx, e)}
                     onPaste={idx === 0 ? handleOtpPaste : undefined}
-                    className="w-11 h-13 text-center text-xl font-bold bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all text-gray-800"
+                    className={`w-11 h-13 text-center text-xl font-bold bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all text-gray-800 ${fieldErrors.otp ? "border-red-500" : ""}`}
                   />
                 ))}
               </div>
@@ -433,7 +508,7 @@ export default function ForgotPasswordModal({ open, onOpenChange }) {
         {/* STEP 3: NEW PASSWORD      */}
         {/* ========================= */}
         {step === STEP_RESET && (
-          <form onSubmit={handleResetPassword} className="space-y-4 py-2">
+          <form noValidate onSubmit={handleResetPassword} className="space-y-4 py-2">
             <div className="space-y-2">
               <Label htmlFor="new-password" className="text-xs font-bold text-gray-500 uppercase tracking-wide">New Password</Label>
               <div className="relative group">
@@ -445,10 +520,19 @@ export default function ForgotPasswordModal({ open, onOpenChange }) {
                   type={showNewPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value);
+                    setFieldErrors((prev) => {
+                      if (!prev.newPassword) return prev;
+                      const next = { ...prev };
+                      delete next.newPassword;
+                      return next;
+                    });
+                  }}
                   required
                   autoFocus
-                  className="pl-10 pr-10 py-5 rounded-xl border-gray-200 focus:border-red-500 focus:ring-red-500/20"
+                  className={`pl-10 pr-10 py-5 rounded-xl border-gray-200 focus:border-red-500 focus:ring-red-500/20 ${fieldErrors.newPassword ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                  aria-invalid={!!fieldErrors.newPassword}
                 />
                 <button
                   type="button"
@@ -471,9 +555,18 @@ export default function ForgotPasswordModal({ open, onOpenChange }) {
                   type={showConfirmPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    setFieldErrors((prev) => {
+                      if (!prev.confirmPassword) return prev;
+                      const next = { ...prev };
+                      delete next.confirmPassword;
+                      return next;
+                    });
+                  }}
                   required
-                  className="pl-10 pr-10 py-5 rounded-xl border-gray-200 focus:border-red-500 focus:ring-red-500/20"
+                  className={`pl-10 pr-10 py-5 rounded-xl border-gray-200 focus:border-red-500 focus:ring-red-500/20 ${fieldErrors.confirmPassword ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                  aria-invalid={!!fieldErrors.confirmPassword}
                 />
                 <button
                   type="button"

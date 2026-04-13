@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   AlertDialog as ShadAlertDialog,
   AlertDialogContent,
@@ -15,14 +15,47 @@ import { Tag, Printer } from "lucide-react";
 import { useReactToPrint } from 'react-to-print';
 
 import ReceiptPrintContent from "./ReceiptPrintContent"; 
+import api from "../api";
+import { DEFAULT_TIN_NUMBER, normalizeTinNumber } from "../utils/tinNumber";
 
 export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, onOpenChange }) {
   const contentRef = useRef(null);
+    const [tinNumber, setTinNumber] = useState(DEFAULT_TIN_NUMBER);
+
+    useEffect(() => {
+        let isActive = true;
+
+        const fetchTinNumber = async () => {
+            try {
+                const res = await api.get(`/settings/?t=${Date.now()}`);
+                if (!isActive) return;
+                setTinNumber(normalizeTinNumber(res.data?.tin_number, DEFAULT_TIN_NUMBER));
+            } catch {
+                if (!isActive) return;
+                setTinNumber(DEFAULT_TIN_NUMBER);
+            }
+        };
+
+        if (open) {
+            fetchTinNumber();
+        } else {
+            setTinNumber(DEFAULT_TIN_NUMBER);
+        }
+
+        return () => {
+            isActive = false;
+        };
+    }, [open]);
+
     const cashierName =
         receiptDetails?.cashier_name ||
         receiptDetails?.cashier?.username ||
         receiptDetails?.cashier ||
         "Unknown";
+        const customerName =
+                `${receiptDetails?.customer_first_name || ""} ${receiptDetails?.customer_last_name || ""}`.trim() ||
+                receiptDetails?.customer_name ||
+                "Walk-in";
 
   const handlePrint = useReactToPrint({
     contentRef: contentRef,
@@ -43,6 +76,7 @@ export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, 
                 <ReceiptPrintContent 
                     ref={contentRef} 
                     transactionData={receiptDetails} 
+                    tinNumber={tinNumber}
                 />
             </div>
 
@@ -52,6 +86,7 @@ export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, 
                 <div className="text-center mb-6">
                     <h2 className="text-xl font-bold">Kuya Vince Karinderya</h2>
                     <p className="text-xs">Baliwasan, Zamboanga City</p>
+                    <p className="text-xs font-mono text-muted-foreground">TIN: {tinNumber}</p>
                 </div>
 
                 <p className="text-muted-foreground mb-4 text-xs">
@@ -60,6 +95,10 @@ export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, 
 
                 <p className="text-muted-foreground mb-4 text-xs">
                     Cashier: <span className="font-semibold text-foreground">{cashierName}</span>
+                </p>
+
+                <p className="text-muted-foreground mb-4 text-xs">
+                    Customer: <span className="font-semibold text-foreground">{customerName}</span>
                 </p>
 
                 <div className="space-y-3 mb-4">

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import Searchbar from "../../Components/Searchbar";
 import api from "../../api";
-import { EditIcon, PlusSquareIcon, ListIcon, Settings, LockKeyhole, QrCodeIcon, PhilippinePeso, LayoutGrid, X, ArchiveIcon, LucideForkKnifeCrossed, CookingPotIcon } from "lucide-react";
+import { EditIcon, PlusSquareIcon, ListIcon, Settings, LockKeyhole, QrCodeIcon, PhilippinePeso, LayoutGrid, X, ArchiveIcon, LucideForkKnifeCrossed, CookingPotIcon, ReceiptText } from "lucide-react";
 
 import EditProductDialog from "../../Components/EditProductDialog";
 import SuccessAlert from "../../Components/SuccessAlert";
@@ -11,6 +11,7 @@ import ManageCategoryDialog from "../../Components/ManageCategoryDialog";
 import ChangeVoidPinDialog from "../../Components/ChangeVoidPinDialog";
 import ManageGcashInfoDialog from "../../Components/ManageGcashInfoDialog";
 import ManagePosBalanceDialog from "../../Components/ManagePosBalanceDialog"; 
+import ManageTinNumberDialog from "../../Components/ManageTinNumberDialog";
 import ManageServingsDialog from "../../Components/ManageServingsDialog";
 import ManageArchivedProductsDialog from "../../Components/ManageArchivedProductsDialog";
 import ManageProductsDialog from "../../Components/ManageProductsDialog";
@@ -30,6 +31,7 @@ function ProductList() {
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [gcashInfoModalOpen, setGcashInfoModalOpen] = useState(false);
   const [posBalanceModalOpen, setPosBalanceModalOpen] = useState(false);
+  const [tinNumberModalOpen, setTinNumberModalOpen] = useState(false);
   const [manageServingsOpen, setManageServingsOpen] = useState(false);
   const [manageProductsOpen, setManageProductsOpen] = useState(false);
   const [archiveModalOpen, setArchiveModalOpen] = useState(false);
@@ -37,7 +39,6 @@ function ProductList() {
 
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // 🔴 NEW: Initialize state from URL first (for shared links), then localStorage (for persistence)
   const [searchQuery, setSearchQuery] = useState(() => {
     return searchParams.get("search") !== null 
       ? searchParams.get("search") 
@@ -50,11 +51,19 @@ function ProductList() {
       : localStorage.getItem("productList_category") || "";
   });
 
-  // 🔴 NEW: Save to localStorage whenever search or category changes
+  // 🔴 NEW: Add persistent state for sorting
+  const [sortOrder, setSortOrder] = useState(() => {
+    return searchParams.get("ordering") !== null 
+      ? searchParams.get("ordering") 
+      : localStorage.getItem("productList_ordering") || "product_name";
+  });
+
+  // 🔴 NEW: Sync sortOrder to localStorage
   useEffect(() => {
     localStorage.setItem("productList_search", searchQuery);
     localStorage.setItem("productList_category", filterCategory);
-  }, [searchQuery, filterCategory]);
+    localStorage.setItem("productList_ordering", sortOrder);
+  }, [searchQuery, filterCategory, sortOrder]);
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -78,10 +87,11 @@ function ProductList() {
     }
   }, []);
 
-  const fetchProducts = useCallback((query = "", category = "") => {
+  // 🔴 NEW: Add ordering parameter to the API Call
+  const fetchProducts = useCallback((query = "", category = "", ordering = "product_name") => {
     setLoading(true);
 
-    let url = `/firstapp/products/?search=${query}`;
+    let url = `/firstapp/products/?search=${query}&ordering=${ordering}`;
     if (category) {
       if (category === UNCATEGORIZED_FILTER_VALUE) {
         url += "&uncategorized=true";
@@ -93,47 +103,45 @@ function ProductList() {
     api
       .get(url)
       .then((res) => {
-        // 🔴 NEW: Sort products alphabetically by product_name
-        const sortedProducts = res.data.sort((a, b) => 
-          a.product_name.localeCompare(b.product_name, undefined, { sensitivity: 'base' })
-        );
-        
-        setProducts(sortedProducts);
+        // We let the backend ordering take control, removing the frontend sort override!
+        setProducts(res.data);
         setLoading(false);
       })
       .catch(() => setLoading(false));
   }, []);
 
-  // 🔴 NEW: Update local state, URL, and trigger a re-fetch
-  const handleSearch = useCallback((query, category) => {
+  // 🔴 NEW: Added sort option to the handleSearch callback
+  const handleSearch = useCallback((query, category, ordering) => {
     const newQuery = query || "";
     const newCat = category || "";
+    const newOrdering = ordering || "product_name";
 
     setSearchQuery(newQuery);
     setFilterCategory(newCat);
+    setSortOrder(newOrdering);
 
     // Update URL Params
     const params = {};
     if (newQuery) params.search = newQuery;
     if (newCat) params.category = newCat;
+    if (newOrdering !== "product_name") params.ordering = newOrdering; // Only show in URL if it isn't default
     setSearchParams(params);
   }, [setSearchParams]);
 
-  // 🔴 NEW: Listens to the local states instead of URL parameters directly
+  // 🔴 NEW: Include sortOrder in the dependency arrays
   useEffect(() => {
-    fetchProducts(searchQuery, filterCategory);
-  }, [searchQuery, filterCategory, fetchProducts]);
+    fetchProducts(searchQuery, filterCategory, sortOrder);
+  }, [searchQuery, filterCategory, sortOrder, fetchProducts]);
 
   useEffect(() => {
     fetchCategories();
   }, [fetchCategories]);
 
-  // 🔴 NEW: Uses the persistent states when refreshing after an update
   const handleUpdatedProduct = useCallback(() => {
-    fetchProducts(searchQuery, filterCategory);
+    fetchProducts(searchQuery, filterCategory, sortOrder);
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 2500);
-  }, [searchQuery, filterCategory, fetchProducts]);
+  }, [searchQuery, filterCategory, sortOrder, fetchProducts]);
 
   useEffect(() => {
     if (!showControlCenter) return;
@@ -170,11 +178,13 @@ function ProductList() {
         </nav>
 
         <div className="mb-8">
+          {/* 🔴 NEW: Passed the initialSort prop down to Searchbar */}
           <Searchbar
             categories={categories}
             onSearch={handleSearch}
             initialQuery={searchQuery}       
             initialCategory={filterCategory}
+            initialSort={sortOrder}
           />
         </div>
 
@@ -207,12 +217,6 @@ function ProductList() {
             <p className="text-gray-400 text-lg">No products found.</p>
           </div>
         )}
-
-        {/* {showSuccess && (
-          <div className="mb-6">
-            <SuccessAlert />
-          </div>
-        )} */}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {products.map((p) => (
@@ -257,7 +261,9 @@ function ProductList() {
                   
                   <div className="flex items-center justify-between">
                     <span className="text-gray-500">Price</span>
-                    <span className="text-lg font-bold text-gray-900">₱{p.price}</span>
+                    <span className="text-lg font-bold text-gray-900">
+                      ₱{parseFloat(p.price) % 1 === 0 ? parseInt(p.price) : parseFloat(p.price).toFixed(2)}
+                    </span>
                   </div>
 
                   <div className="flex items-center justify-between">
@@ -314,11 +320,10 @@ function ProductList() {
         onOpenChange={setPosBalanceModalOpen}
       />
 
-      {/* <ManageServingsDialog
-        open={manageServingsOpen}
-        onOpenChange={setManageServingsOpen}
-        onSaved={handleUpdatedProduct}
-      /> */}
+      <ManageTinNumberDialog
+        open={tinNumberModalOpen}
+        onOpenChange={setTinNumberModalOpen}
+      />
 
       <ManageProductsDialog
         open={manageProductsOpen}
@@ -400,6 +405,16 @@ function ProductList() {
                   >
                     <LockKeyhole size={18}/> Change Void Pin
                   </button>
+
+                  <button
+                    onClick={() => {
+                      setTinNumberModalOpen(true);
+                      setShowControlCenter(false);
+                    }}
+                    className="sm:col-span-2 flex gap-2 items-center justify-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
+                  >
+                    <ReceiptText size={18}/> Receipt TIN
+                  </button>
                 </div>
               </section>
 
@@ -429,15 +444,6 @@ function ProductList() {
                     <Settings size={18}/> Manage Categories
                   </button>
 
-                  {/* <button
-                    onClick={() => {
-                      setManageServingsOpen(true);
-                      setShowControlCenter(false);
-                    }}
-                    className="sm:col-span-2 flex gap-2 items-center justify-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
-                  >
-                    <LucideForkKnifeCrossed size={18} /> Manage Servings
-                  </button> */}
                   <button
                     onClick={() => {
                       setManageProductsOpen(true);

@@ -177,7 +177,9 @@ class ProductSerializer(serializers.ModelSerializer):
 
     category = serializers.SlugRelatedField(
         queryset=Category.objects.all(),
-        slug_field='name'
+        slug_field='name',
+        required=False,
+        allow_null=True
     )
     
     class Meta:
@@ -239,10 +241,11 @@ class CouponSerializer(serializers.ModelSerializer):
         model = Coupon
         fields = [
             'id', 'code', 'status', 'usage_limit', 'claim_limit', 'times_used', 'times_claimed',
-            'created_at', 'criteria_details', 'criteria_id',
+            'created_at', 'is_archived', 'archived_at', 'criteria_details', 'criteria_id',
             'name', 'product_name', 'rate', 'description', 
             'is_used'
         ]
+        read_only_fields = ['is_archived', 'archived_at']
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -351,10 +354,13 @@ class ReceiptItemSerializer(serializers.ModelSerializer):
 class ReceiptSerializer(serializers.ModelSerializer):
     items = ReceiptItemSerializer(many=True)
     cashier_name = serializers.SerializerMethodField()
+    customer_name = serializers.SerializerMethodField()
+    customer_first_name = serializers.SerializerMethodField()
+    customer_last_name = serializers.SerializerMethodField()
     
     # FIX: Changed to accept multiple IDs (many=True)
     coupons = serializers.PrimaryKeyRelatedField(
-        queryset=Coupon.objects.all(), 
+        queryset=Coupon.objects.filter(is_archived=False), 
         many=True,      # <--- Allow list
         required=False, 
         write_only=True
@@ -378,12 +384,32 @@ class ReceiptSerializer(serializers.ModelSerializer):
             'provider_reference',
             'status',
             'void_reason',
-            'cashier_name'
+            'cashier_name',
+            'customer_name',
+            'customer_first_name',
+            'customer_last_name'
         ]
         read_only_fields = ['payment_status', 'paid_at', 'provider_payment_id']
 
     def get_cashier_name(self, obj):
         return obj.cashier.username if obj.cashier else "Unknown"
+
+    def get_customer_name(self, obj):
+        if not obj.customer:
+            return "Walk-in"
+
+        full_name = f"{obj.customer.first_name} {obj.customer.last_name}".strip()
+        return full_name or obj.customer.username
+
+    def get_customer_first_name(self, obj):
+        if not obj.customer:
+            return ""
+        return obj.customer.first_name or ""
+
+    def get_customer_last_name(self, obj):
+        if not obj.customer:
+            return ""
+        return obj.customer.last_name or ""
 
     def validate_provider_reference(self, value):
         if value in [None, '']:
@@ -470,6 +496,7 @@ class ReviewSerializer(serializers.ModelSerializer):
     phone = serializers.CharField(source='user.profile.phone', read_only=True)
     address = serializers.CharField(source='user.profile.address', read_only=True)
     product_name = serializers.CharField(source='product.product_name', read_only=True)
+    product_category = serializers.CharField(source='product.category.name', read_only=True)
     profile_pic = serializers.SerializerMethodField(read_only=True)
     admin_reply = serializers.CharField(read_only=True)
     admin_reply_updated_at = serializers.DateTimeField(read_only=True)
@@ -523,7 +550,7 @@ class ReviewSerializer(serializers.ModelSerializer):
             'id', 'user', 'username', 
             'email', 'first_name', 'last_name', 'phone', 'address', # <--- Add them to fields
             'profile_pic', 'review_type', 
-            'product', 'product_name', 
+            'product', 'product_name', 'product_category',
             'rating', 'comment', 'image', 'admin_reply', 'admin_reply_updated_at', 'created_at'
         ]
         read_only_fields = ['user', 'admin_reply', 'admin_reply_updated_at', 'created_at']

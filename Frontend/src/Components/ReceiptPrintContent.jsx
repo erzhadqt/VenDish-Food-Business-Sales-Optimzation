@@ -1,6 +1,7 @@
 import React, { forwardRef } from "react";
+import { DEFAULT_TIN_NUMBER, normalizeTinNumber } from "../utils/tinNumber";
 
-const ReceiptPrintContent = forwardRef(({ transactionData }, ref) => {
+const ReceiptPrintContent = forwardRef(({ transactionData, tinNumber }, ref) => {
   
   const items = transactionData?.items || [];
   
@@ -22,6 +23,16 @@ const ReceiptPrintContent = forwardRef(({ transactionData }, ref) => {
     transactionData?.cashier?.username ||
     transactionData?.cashier ||
     "Unknown";
+
+  const customerFullName =
+    `${transactionData?.customer_first_name || ""} ${transactionData?.customer_last_name || ""}`.trim() ||
+    transactionData?.customer_name ||
+    "Walk-in";
+
+  const activeTinNumber = normalizeTinNumber(
+    tinNumber || transactionData?.tin_number,
+    DEFAULT_TIN_NUMBER
+  );
 
   return (
     <div ref={ref} id="receipt" style={{ background: '#fff', color: '#000' }}>
@@ -94,7 +105,7 @@ const ReceiptPrintContent = forwardRef(({ transactionData }, ref) => {
 
         <div style={{ textAlign: 'center', fontSize: '8px', marginBottom: '4px', borderBottom: '1px solid #000', paddingBottom: '4px', lineHeight: '1.3' }}>
           <div style={{ marginBottom: '1px' }}>Baliwasan, Zamboanga City</div>
-          <div>TIN: 123-456-789-000</div>
+          <div>TIN: {activeTinNumber}</div>
         </div>
 
         {/* DATE */}
@@ -106,6 +117,11 @@ const ReceiptPrintContent = forwardRef(({ transactionData }, ref) => {
         <div className="receipt-row" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', marginBottom: '4px' }}>
           <span>Cashier:</span>
           <span style={{ maxWidth: '65%', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cashierName}</span>
+        </div>
+
+        <div className="receipt-row" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', marginBottom: '4px' }}>
+          <span>Customer:</span>
+          <span style={{ maxWidth: '65%', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{customerFullName}</span>
         </div>
 
         {/* ITEMS */}

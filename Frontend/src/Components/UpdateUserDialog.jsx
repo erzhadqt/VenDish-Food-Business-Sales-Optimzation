@@ -18,6 +18,7 @@ import { Skeleton } from "../Components/ui/skeleton";
 export default function UpdateUserDialog({ user, onClose, onSaved }) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [fieldErrors, setFieldErrors] = useState({});
     
     // User info state
     const [username, setUsername] = useState(user?.username || "");
@@ -43,13 +44,54 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
             setAddress(user.address || "");
             setIsStaff(Boolean(user.is_staff));
             setIsActive(user.is_active !== false); // Defaults to true if undefined
+            setFieldErrors({});
         }
     }, [user]);
+
+    const clearFieldError = (fieldName) => {
+        setFieldErrors((prev) => {
+            if (!prev[fieldName]) return prev;
+            const next = { ...prev };
+            delete next[fieldName];
+            return next;
+        });
+    };
+
+    const getInputClassName = (fieldName) => {
+        const base = "h-10 px-3 w-full rounded-md border bg-white text-sm";
+        return fieldErrors[fieldName]
+            ? `${base} border-red-500 focus:ring-red-500`
+            : `${base} border-gray-300`;
+    };
 
     const handleSave = async (e) => {
         e.preventDefault();
         setLoading(true);
         setError(null); 
+        setFieldErrors({});
+
+        const nextFieldErrors = {};
+
+        if (user.is_staff) {
+            if (!String(username || "").trim()) {
+                nextFieldErrors.username = "Username must not be blank.";
+            }
+
+            const normalizedEmail = String(email || "").trim();
+            if (!normalizedEmail) {
+                nextFieldErrors.email = "Email must not be blank.";
+            } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+                nextFieldErrors.email = "Please enter a valid email address.";
+            }
+        }
+
+        if (Object.keys(nextFieldErrors).length > 0) {
+            setFieldErrors(nextFieldErrors);
+            const issueCount = Object.keys(nextFieldErrors).length;
+            setError(`Please review the highlighted fields. ${issueCount} validation issue${issueCount > 1 ? "s" : ""} found.`);
+            setLoading(false);
+            return;
+        }
 
         // Only send the fields the admin is allowed to change
         const payload = {
@@ -90,6 +132,10 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
                 if (typeof errorData === 'object') {
                     const errorMessages = [];
                     for (const [field, messages] of Object.entries(errorData)) {
+                        if (["username", "email", "first_name", "middle_name", "last_name", "phone", "address"].includes(field)) {
+                            nextFieldErrors[field] = Array.isArray(messages) ? messages.join(" ") : String(messages);
+                        }
+
                         if (Array.isArray(messages)) {
                             const fieldName = field.charAt(0).toUpperCase() + field.slice(1);
                             errorMessages.push(`${fieldName}: ${messages.join(" ")}`);
@@ -104,6 +150,10 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
             } else if (err.message) {
                 errorMessage = err.message;
             }
+
+            if (Object.keys(nextFieldErrors).length > 0) {
+                setFieldErrors(nextFieldErrors);
+            }
           
             setError(errorMessage);
         } finally {
@@ -113,8 +163,11 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
 
     const handleClose = () => {
         setError(null);
+        setFieldErrors({});
         onClose();
     };
+
+    const topErrorItems = Object.values(fieldErrors);
 
     return (
         <Dialog open={true} onOpenChange={handleClose}>
@@ -150,13 +203,20 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
                         {error && (
                             <Alert variant="destructive">
                                 <AlertCircle className="h-4 w-4" />
-                                <AlertDescription className="wrap-break-word">
-                                    {error}
+                                <AlertDescription className="wrap-break-word space-y-1">
+                                    <p>{error}</p>
+                                    {topErrorItems.length > 0 && (
+                                        <ul className="list-disc pl-4">
+                                            {topErrorItems.slice(0, 5).map((item, index) => (
+                                                <li key={`${item}-${index}`}>{item}</li>
+                                            ))}
+                                        </ul>
+                                    )}
                                 </AlertDescription>
                             </Alert>
                         )}
 
-                        <form onSubmit={handleSave} className="grid gap-4">
+                        <form noValidate onSubmit={handleSave} className="grid gap-4">
                             
                             {user.is_staff ? (
                                 <div className="grid gap-3 py-2">
@@ -166,9 +226,13 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
                                             type="text"
                                             id="username"
                                             value={username}
-                                            onChange={(e) => setUsername(e.target.value)}
-                                            className="h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm"
+                                            onChange={(e) => {
+                                                setUsername(e.target.value);
+                                                clearFieldError("username");
+                                            }}
+                                            className={getInputClassName("username")}
                                             required
+                                            aria-invalid={!!fieldErrors.username}
                                         />
                                     </div>
                                     <div className="grid gap-2">
@@ -177,9 +241,13 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
                                             type="email"
                                             id="email"
                                             value={email}
-                                            onChange={(e) => setEmail(e.target.value)}
-                                            className="h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm"
+                                            onChange={(e) => {
+                                                setEmail(e.target.value);
+                                                clearFieldError("email");
+                                            }}
+                                            className={getInputClassName("email")}
                                             required
+                                            aria-invalid={!!fieldErrors.email}
                                         />
                                     </div>
                                     <div className="grid grid-cols-3 gap-3">
@@ -189,8 +257,12 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
                                                 type="text"
                                                 id="firstName"
                                                 value={firstName}
-                                                onChange={(e) => setFirstName(e.target.value)}
-                                                className="h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm"
+                                                onChange={(e) => {
+                                                    setFirstName(e.target.value);
+                                                    clearFieldError("first_name");
+                                                }}
+                                                className={getInputClassName("first_name")}
+                                                aria-invalid={!!fieldErrors.first_name}
                                             />
                                         </div>
                                         <div className="grid gap-2">
@@ -199,8 +271,12 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
                                                 type="text"
                                                 id="middleName"
                                                 value={middleName}
-                                                onChange={(e) => setMiddleName(e.target.value)}
-                                                className="h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm"
+                                                onChange={(e) => {
+                                                    setMiddleName(e.target.value);
+                                                    clearFieldError("middle_name");
+                                                }}
+                                                className={getInputClassName("middle_name")}
+                                                aria-invalid={!!fieldErrors.middle_name}
                                             />
                                         </div>
                                         <div className="grid gap-2">
@@ -209,8 +285,12 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
                                                 type="text"
                                                 id="lastName"
                                                 value={lastName}
-                                                onChange={(e) => setLastName(e.target.value)}
-                                                className="h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm"
+                                                onChange={(e) => {
+                                                    setLastName(e.target.value);
+                                                    clearFieldError("last_name");
+                                                }}
+                                                className={getInputClassName("last_name")}
+                                                aria-invalid={!!fieldErrors.last_name}
                                             />
                                         </div>
                                     </div>
@@ -221,8 +301,12 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
                                                 type="text"
                                                 id="phone"
                                                 value={phone}
-                                                onChange={(e) => setPhone(e.target.value)}
-                                                className="h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm"
+                                                onChange={(e) => {
+                                                    setPhone(e.target.value);
+                                                    clearFieldError("phone");
+                                                }}
+                                                className={getInputClassName("phone")}
+                                                aria-invalid={!!fieldErrors.phone}
                                             />
                                         </div>
                                         <div className="grid gap-2">
@@ -231,8 +315,12 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
                                                 type="text"
                                                 id="address"
                                                 value={address}
-                                                onChange={(e) => setAddress(e.target.value)}
-                                                className="h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm"
+                                                onChange={(e) => {
+                                                    setAddress(e.target.value);
+                                                    clearFieldError("address");
+                                                }}
+                                                className={getInputClassName("address")}
+                                                aria-invalid={!!fieldErrors.address}
                                             />
                                     </div>
                                     </div>
@@ -246,24 +334,26 @@ export default function UpdateUserDialog({ user, onClose, onSaved }) {
                             )}
 
                             <div className="grid gap-3 py-2">
-                                {/* 1. Staff Checkbox */}
-                                <div className="flex items-start space-x-3 border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors">
-                                    <input
-                                        type="checkbox"
-                                        id="is_staff"
-                                        checked={isStaff}
-                                        onChange={(e) => setIsStaff(e.target.checked)}
-                                        className="h-4 w-4 mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                    />
-                                    <div className="grid gap-1.5 leading-none">
-                                        <Label htmlFor="is_staff" className="font-medium cursor-pointer text-gray-900">
-                                            Staff Access
-                                        </Label>
-                                        <p className="text-sm text-gray-500">
-                                            Allows the user to access the POS system and manage standard operations.
-                                        </p>
+                                {/* 1. Staff Checkbox (Conditionally Rendered ONLY for existing Staff accounts) */}
+                                {user.is_staff && (
+                                    <div className="flex items-start space-x-3 border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors">
+                                        <input
+                                            type="checkbox"
+                                            id="is_staff"
+                                            checked={isStaff}
+                                            onChange={(e) => setIsStaff(e.target.checked)}
+                                            className="h-4 w-4 mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                        />
+                                        <div className="grid gap-1.5 leading-none">
+                                            <Label htmlFor="is_staff" className="font-medium cursor-pointer text-gray-900">
+                                                Staff Access
+                                            </Label>
+                                            <p className="text-sm text-gray-500">
+                                                Allows the user to access the POS system and manage standard operations.
+                                            </p>
+                                        </div>
                                     </div>
-                                </div>
+                                )}
 
                                 {/* 2. Active Status Checkbox */}
                                 <div className="flex items-start space-x-3 border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors">

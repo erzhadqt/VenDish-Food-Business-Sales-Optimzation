@@ -16,6 +16,7 @@ export default function ManageCategoryDialog({ open, onOpenChange, onSaved }) {
   // Feedback States
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
   
   // Data States
   const [categoryList, setCategoryList] = useState([]);
@@ -48,6 +49,7 @@ export default function ManageCategoryDialog({ open, onOpenChange, onSaved }) {
       resetForm();
       setError("");
       setSuccess("");
+      setFieldErrors({});
     }
   }, [open]);
 
@@ -59,6 +61,13 @@ export default function ManageCategoryDialog({ open, onOpenChange, onSaved }) {
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     setError(""); // Clear errors when typing
+
+    setFieldErrors((prev) => {
+      if (!prev[e.target.name]) return prev;
+      const next = { ...prev };
+      delete next[e.target.name];
+      return next;
+    });
   };
 
   // Switch views and clear messages
@@ -66,6 +75,7 @@ export default function ManageCategoryDialog({ open, onOpenChange, onSaved }) {
     setView(newView);
     setError("");
     setSuccess("");
+    setFieldErrors({});
   };
 
   // --- EDIT ACTION ---
@@ -95,15 +105,22 @@ export default function ManageCategoryDialog({ open, onOpenChange, onSaved }) {
   // --- SAVE ACTION (CREATE OR UPDATE) ---
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.name.trim()) return;
+    const normalizedName = formData.name.trim();
+
+    if (!normalizedName) {
+      setFieldErrors({ name: "Category name must not be blank." });
+      setError("Please review the highlighted fields. 1 validation issue found.");
+      return;
+    }
 
     setLoading(true);
     setError("");
     setSuccess("");
+    setFieldErrors({});
 
     try {
       const payload = {
-        name: formData.name.trim(),
+        name: normalizedName,
       };
 
       if (editId) {
@@ -124,11 +141,17 @@ export default function ManageCategoryDialog({ open, onOpenChange, onSaved }) {
 
     } catch (error) {
       console.error("Error saving category:", error);
-      setError(error.response?.data?.name?.[0] || "Failed to save category. It might already exist.");
+      const backendNameError = error.response?.data?.name?.[0];
+      if (backendNameError) {
+        setFieldErrors({ name: backendNameError });
+      }
+      setError(backendNameError || "Failed to save category. It might already exist.");
     } finally {
       setLoading(false);
     }
   };
+
+  const topErrorItems = Object.values(fieldErrors);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -148,7 +171,16 @@ export default function ManageCategoryDialog({ open, onOpenChange, onSaved }) {
         {error && (
           <div className="bg-red-50 text-red-600 p-3 rounded-md flex items-center gap-2 border border-red-200 text-sm mt-2">
             <AlertCircle size={16} className="shrink-0" />
-            <p>{error}</p>
+            <div className="space-y-1">
+              <p>{error}</p>
+              {topErrorItems.length > 0 && (
+                <ul className="list-disc pl-4">
+                  {topErrorItems.slice(0, 3).map((item, index) => (
+                    <li key={`${item}-${index}`}>{item}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         )}
         {success && (
@@ -219,7 +251,7 @@ export default function ManageCategoryDialog({ open, onOpenChange, onSaved }) {
 
         {/* --- VIEW 2: ADD/EDIT FORM --- */}
         {view === 'form' && (
-          <form onSubmit={handleSubmit} className="grid gap-4 py-2">
+          <form noValidate onSubmit={handleSubmit} className="grid gap-4 py-2">
             <div className="space-y-2">
               <Label htmlFor="name">Category Name</Label>
               <Input 
@@ -230,7 +262,8 @@ export default function ManageCategoryDialog({ open, onOpenChange, onSaved }) {
                 onChange={handleChange} 
                 required
                 autoFocus
-                className={error ? "border-red-500 focus-visible:ring-red-500" : ""}
+                className={fieldErrors.name ? "border-red-500 focus-visible:ring-red-500" : ""}
+                aria-invalid={!!fieldErrors.name}
                 maxLength={20}
               />
             </div>

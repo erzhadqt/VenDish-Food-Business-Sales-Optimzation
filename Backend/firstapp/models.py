@@ -69,6 +69,7 @@ class StoreSettings(models.Model):
     void_pin = models.CharField(max_length=128, blank=True, null=True)
     max_coupons_per_order = models.PositiveIntegerField(default=2)
     pos_cash_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    tin_number = models.CharField(max_length=15, default='123-456-789-000')
 
     def __str__(self):
         return "Global Store Settings"
@@ -145,6 +146,8 @@ class Coupon(models.Model):
 
     # Track who has CLAIMED it (Wallet)
     claimed_by = models.ManyToManyField(User, blank=True, related_name='claimed_coupons')
+    is_archived = models.BooleanField(default=False)
+    archived_at = models.DateTimeField(null=True, blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   LineChart, Line, Legend, AreaChart, Area, PieChart, Pie, Cell
@@ -16,6 +17,7 @@ import {
 
 import api from '../../api'; 
 import { Skeleton } from '../../Components/ui/skeleton';
+import { applyQueryParam, usePersistedQueryState } from '../../utils/usePersistedQueryState';
 
 const periods = ["Custom Range", "Daily", "Weekly", "Monthly", "Yearly"];
 const chartTypes = ["Bar", "Line", "Area"];
@@ -27,6 +29,29 @@ const PERIOD_QUERY_MAP = {
   "Weekly": "weekly",
   "Monthly": "monthly",
   "Yearly": "yearly",
+};
+
+const QUERY_TO_PERIOD_MAP = {
+  custom: "Custom Range",
+  daily: "Daily",
+  weekly: "Weekly",
+  monthly: "Monthly",
+  yearly: "Yearly",
+};
+
+const VALID_SORT_KEYS = new Set([
+  "report_date",
+  "total_revenue",
+  "total_orders",
+  "top_selling_product",
+  "least_selling_product",
+  "voided_orders",
+]);
+
+const parseDateValue = (value) => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
 const getRangeForPeriod = (selectedPeriod, selectedRange) => {
@@ -148,6 +173,8 @@ const StaffLoadingSkeleton = () => (
 );
 
 export default function SalesAndReports() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
   // --- STATE ---
   const [reports, setReports] = useState([]); 
   const [chartReports, setChartReports] = useState([]);
@@ -155,20 +182,100 @@ export default function SalesAndReports() {
   const [loading, setLoading] = useState(true);
 
   const [cashierOptions, setCashierOptions] = useState([]); 
-  const [filterCashier, setFilterCashier] = useState("ALL"); 
-  
-  const [viewMode, setViewMode] = useState('timeline'); 
+  const [filterCashier, setFilterCashier] = usePersistedQueryState({
+    searchParams,
+    queryKey: "cashier",
+    storageKey: "salesReports_cashier",
+    defaultValue: "ALL",
+    parse: (rawValue, fallback) => rawValue || fallback,
+  });
+
+  const [viewMode, setViewMode] = usePersistedQueryState({
+    searchParams,
+    queryKey: "view",
+    storageKey: "salesReports_view",
+    defaultValue: "timeline",
+    parse: (rawValue) => (rawValue === "staff" ? "staff" : "timeline"),
+  });
   const [isAdmin, setIsAdmin] = useState(false);
 
   // Date & Time state defaults to start and end of current day
-  const [dateRange, setDateRange] = useState([startOfDay(new Date()), endOfDay(new Date())]);
-  const [period, setPeriod] = useState("Custom Range");
-  const [chartType, setChartType] = useState("Bar");
+  const [dateRange, setDateRange] = useState(() => {
+    const urlStart = parseDateValue(searchParams.get("start"));
+    const urlEnd = parseDateValue(searchParams.get("end"));
+
+    const storedStart = parseDateValue(localStorage.getItem("salesReports_start"));
+    const storedEnd = parseDateValue(localStorage.getItem("salesReports_end"));
+
+    const start = urlStart || storedStart || startOfDay(new Date());
+    const end = urlEnd || storedEnd || endOfDay(new Date());
+    return [start, end];
+  });
+  const [period, setPeriod] = usePersistedQueryState({
+    searchParams,
+    queryKey: "period",
+    storageKey: "salesReports_period",
+    defaultValue: "Custom Range",
+    parse: (rawValue) => {
+      const normalizedValue = QUERY_TO_PERIOD_MAP[rawValue] || rawValue;
+      return periods.includes(normalizedValue) ? normalizedValue : "Custom Range";
+    },
+  });
+  const [chartType, setChartType] = usePersistedQueryState({
+    searchParams,
+    queryKey: "chart",
+    storageKey: "salesReports_chart",
+    defaultValue: "Bar",
+    parse: (rawValue) => (chartTypes.includes(rawValue) ? rawValue : "Bar"),
+  });
   const [showCalendar, setShowCalendar] = useState(false);
-  const [sortConfig, setSortConfig] = useState({ key: 'report_date', direction: 'desc' });
+  const [sortConfig, setSortConfig] = useState(() => {
+    const keyCandidate = searchParams.get("sortKey") ?? localStorage.getItem("salesReports_sortKey") ?? "report_date";
+    const dirCandidate = searchParams.get("sortDir") ?? localStorage.getItem("salesReports_sortDir") ?? "desc";
+
+    return {
+      key: VALID_SORT_KEYS.has(keyCandidate) ? keyCandidate : "report_date",
+      direction: dirCandidate === "asc" ? "asc" : "desc",
+    };
+  });
 
   // Refs for click outside
   const calendarRef = useRef(null);
+
+  useEffect(() => {
+    localStorage.setItem("salesReports_sortKey", sortConfig.key);
+    localStorage.setItem("salesReports_sortDir", sortConfig.direction);
+
+    const [rangeStart, rangeEnd] = dateRange || [];
+    const safeStart = rangeStart instanceof Date && !Number.isNaN(rangeStart.getTime()) ? rangeStart : null;
+    const safeEnd = rangeEnd instanceof Date && !Number.isNaN(rangeEnd.getTime()) ? rangeEnd : null;
+
+    localStorage.setItem("salesReports_start", safeStart ? safeStart.toISOString() : "");
+    localStorage.setItem("salesReports_end", safeEnd ? safeEnd.toISOString() : "");
+
+    const params = new URLSearchParams();
+    applyQueryParam(params, "cashier", filterCashier, (value) => value === "ALL");
+    applyQueryParam(params, "view", viewMode, (value) => value === "timeline");
+    applyQueryParam(params, "period", PERIOD_QUERY_MAP[period] || "custom", (value) => value === "custom");
+    applyQueryParam(params, "chart", chartType, (value) => value === "Bar");
+    applyQueryParam(params, "sortKey", sortConfig.key, (value) => value === "report_date");
+    applyQueryParam(params, "sortDir", sortConfig.direction, (value) => value === "desc");
+    applyQueryParam(params, "start", safeStart ? safeStart.toISOString() : "");
+    applyQueryParam(params, "end", safeEnd ? safeEnd.toISOString() : "");
+
+    if (params.toString() !== searchParams.toString()) {
+      setSearchParams(params, { replace: true });
+    }
+  }, [
+    filterCashier,
+    viewMode,
+    period,
+    chartType,
+    sortConfig,
+    dateRange,
+    searchParams,
+    setSearchParams,
+  ]);
 
   // 1. CHECK ADMIN STATUS ON LOAD
   useEffect(() => {

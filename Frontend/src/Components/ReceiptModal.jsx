@@ -1,7 +1,44 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { X, Printer } from 'lucide-react';
+import { useReactToPrint } from 'react-to-print';
+import ReceiptPrintContent from './ReceiptPrintContent';
+import api from '../api';
+import { DEFAULT_TIN_NUMBER, normalizeTinNumber } from '../utils/tinNumber';
 
 const ReceiptModal = ({ open, onClose, receiptDetails }) => {
+    const contentRef = useRef(null);
+    const [tinNumber, setTinNumber] = useState(DEFAULT_TIN_NUMBER);
+
+    useEffect(() => {
+        let isActive = true;
+
+        const fetchTinNumber = async () => {
+            try {
+                const res = await api.get(`/settings/?t=${Date.now()}`);
+                if (!isActive) return;
+                setTinNumber(normalizeTinNumber(res.data?.tin_number, DEFAULT_TIN_NUMBER));
+            } catch {
+                if (!isActive) return;
+                setTinNumber(DEFAULT_TIN_NUMBER);
+            }
+        };
+
+        if (open) {
+            fetchTinNumber();
+        } else {
+            setTinNumber(DEFAULT_TIN_NUMBER);
+        }
+
+        return () => {
+            isActive = false;
+        };
+    }, [open]);
+
+    const handlePrint = useReactToPrint({
+        contentRef,
+        documentTitle: `Receipt-${receiptDetails?.id || '000'}`,
+    });
+
     if (!open || !receiptDetails) return null;
 
     const cashierName =
@@ -10,12 +47,22 @@ const ReceiptModal = ({ open, onClose, receiptDetails }) => {
         receiptDetails.cashier ||
         "Unknown";
 
-    const handlePrint = () => {
-        window.print();
-    };
+    const customerName =
+        `${receiptDetails.customer_first_name || ""} ${receiptDetails.customer_last_name || ""}`.trim() ||
+        receiptDetails.customer_name ||
+        "Walk-in";
 
     return (
         <div className="relative z-50">
+            {/* Hidden print layout (thermal-receipt friendly) */}
+            <div className="hidden">
+                <ReceiptPrintContent
+                    ref={contentRef}
+                    transactionData={receiptDetails}
+                    tinNumber={tinNumber}
+                />
+            </div>
+
             {/* --- THE BLUR EFFECT LAYER --- */}
             <div 
                 className="fixed inset-0 bg-black/30 backdrop-blur-sm transition-opacity" 
@@ -66,6 +113,16 @@ const ReceiptModal = ({ open, onClose, receiptDetails }) => {
                         <div className="mb-4 text-sm text-gray-700">
                             <span className="text-gray-500">Cashier:</span>{" "}
                             <span className="font-semibold">{cashierName}</span>
+                        </div>
+
+                        <div className="mb-4 text-sm text-gray-700">
+                            <span className="text-gray-500">Customer:</span>{" "}
+                            <span className="font-semibold">{customerName}</span>
+                        </div>
+
+                        <div className="mb-4 text-sm text-gray-700">
+                            <span className="text-gray-500">TIN:</span>{" "}
+                            <span className="font-semibold font-mono">{tinNumber}</span>
                         </div>
 
                         {/* Items List */}

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import api from "../../api";
 import { 
   UserCogIcon, 
@@ -20,8 +21,19 @@ import AdminAccountDialog from "../../Components/AdminAccountDialog";
 import SuccessAlert from "../../Components/SuccessAlert";
 import UserDetailsModal from "../../Components/UserDetailsModal";
 import { Skeleton } from "../../Components/ui/skeleton";
+import { applyQueryParam, usePersistedQueryState } from "../../utils/usePersistedQueryState";
+
+const USER_ROLE_FILTERS = new Set(["All", "Staff", "User"]);
+const USER_STATUS_FILTERS = new Set(["All", "Active", "Pending", "Deactivated"]);
+
+const parsePositivePage = (value, fallback = 1) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
 
 export default function UserManagement() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [viewDetailsUser, setViewDetailsUser] = useState(null); 
@@ -30,29 +42,56 @@ export default function UserManagement() {
   const [successMessage, setSuccessMessage] = useState("");
 
   // 🔴 NEW: Lazy load state from localStorage (or default if null)
-  const [filterRole, setFilterRole] = useState(() => {
-    return localStorage.getItem("userMgmt_role") || "All";
+  const [filterRole, setFilterRole] = usePersistedQueryState({
+    searchParams,
+    queryKey: "role",
+    storageKey: "userMgmt_role",
+    defaultValue: "All",
+    parse: (rawValue, fallback) => (USER_ROLE_FILTERS.has(rawValue) ? rawValue : fallback),
   });
-  const [filterStatus, setFilterStatus] = useState(() => {
-    return localStorage.getItem("userMgmt_status") || "All";
+  const [filterStatus, setFilterStatus] = usePersistedQueryState({
+    searchParams,
+    queryKey: "status",
+    storageKey: "userMgmt_status",
+    defaultValue: "All",
+    parse: (rawValue, fallback) => (USER_STATUS_FILTERS.has(rawValue) ? rawValue : fallback),
   });
-  const [searchQuery, setSearchQuery] = useState(() => {
-    return localStorage.getItem("userMgmt_search") || "";
+  const [searchQuery, setSearchQuery] = usePersistedQueryState({
+    searchParams,
+    queryKey: "search",
+    storageKey: "userMgmt_search",
+    defaultValue: "",
   });
-  const [currentPage, setCurrentPage] = useState(() => {
-    const savedPage = localStorage.getItem("userMgmt_page");
-    return savedPage ? parseInt(savedPage, 10) : 1;
+  const [currentPage, setCurrentPage] = usePersistedQueryState({
+    searchParams,
+    queryKey: "page",
+    storageKey: "userMgmt_page",
+    defaultValue: 1,
+    parse: (rawValue, fallback) => parsePositivePage(rawValue, fallback),
+    serialize: (value) => String(value),
   });
 
   const rowsPerPage = 5;
 
   // 🔴 NEW: Save state to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem("userMgmt_role", filterRole);
-    localStorage.setItem("userMgmt_status", filterStatus);
-    localStorage.setItem("userMgmt_search", searchQuery);
-    localStorage.setItem("userMgmt_page", currentPage.toString());
-  }, [filterRole, filterStatus, searchQuery, currentPage]);
+    const params = new URLSearchParams();
+    applyQueryParam(params, "search", searchQuery.trim());
+    applyQueryParam(params, "role", filterRole, (value) => value === "All");
+    applyQueryParam(params, "status", filterStatus, (value) => value === "All");
+    applyQueryParam(params, "page", currentPage, (value) => Number(value) <= 1);
+
+    if (params.toString() !== searchParams.toString()) {
+      setSearchParams(params, { replace: true });
+    }
+  }, [
+    filterRole,
+    filterStatus,
+    searchQuery,
+    currentPage,
+    searchParams,
+    setSearchParams,
+  ]);
 
   const fetchUsers = async () => {
     setLoading(true);

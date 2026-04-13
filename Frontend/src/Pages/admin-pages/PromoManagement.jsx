@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Button } from "../../Components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../Components/ui/table";
-import { Plus, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, TimerReset, Edit, EllipsisVertical, Search, Filter } from "lucide-react"; 
+import { Plus, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, TimerReset, Edit, EllipsisVertical, Search, Filter, ArchiveIcon } from "lucide-react"; 
 import api from "../../api";
 import AddDiscountDialog from "../../Components/AddDiscountDialog"; 
-import DeleteConfirmDialog from "../../Components/DeleteConfirmDialog";
 import { Skeleton } from "../../Components/ui/skeleton";
 import { Input } from "../../Components/ui/input";
 
@@ -12,13 +12,35 @@ import ManagePosLimitDialog from "../../Components/ManagePosLimitDialog";
 import SuccessAlert from "../../Components/SuccessAlert";
 import EditCouponDialog from "../../Components/EditCouponDialog"; 
 import PromoDetailsModal from "../../Components/PromoDetailsModal";
+import ManageArchivedCouponsDialog from "../../Components/ManageArchivedCouponsDialog";
+import { applyQueryParam, usePersistedQueryState } from "../../utils/usePersistedQueryState";
+
+const PROMO_STATUS_OPTIONS = new Set(["ALL", "Active", "Expired"]);
+
+const parsePositivePage = (value, fallback = 1) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const parseBooleanFlag = (value) => {
+  if (typeof value !== "string") return false;
+  return ["1", "true", "yes", "on"].includes(value.toLowerCase());
+};
 
 const PromoManagement = () => {
   const [coupons, setCoupons] = useState([]);
   const [products, setProducts] = useState([]); 
+  const [searchParams, setSearchParams] = useSearchParams();
   
   // Pagination State
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = usePersistedQueryState({
+    searchParams,
+    queryKey: "page",
+    storageKey: "promoMgmt_page",
+    defaultValue: 1,
+    parse: (rawValue, fallback) => parsePositivePage(rawValue, fallback),
+    serialize: (value) => String(value),
+  });
   const itemsPerPage = 5; 
   
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -31,14 +53,52 @@ const PromoManagement = () => {
 
   // --- LIMIT MODAL STATES ---
   const [isManageLimitOpen, setIsManageLimitOpen] = useState(false);
+  const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
   const [maxCouponsLimit, setMaxCouponsLimit] = useState(2);
   const [loading, setLoading] = useState(true);
 
   // +++ SUCCESS MESSAGE STATE +++
   const [successMessage, setSuccessMessage] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showExpiringSoonOnly, setShowExpiringSoonOnly] = useState(false);
+  const [statusFilter, setStatusFilter] = usePersistedQueryState({
+    searchParams,
+    queryKey: "status",
+    storageKey: "promoMgmt_status",
+    defaultValue: "ALL",
+    parse: (rawValue, fallback) => (PROMO_STATUS_OPTIONS.has(rawValue) ? rawValue : fallback),
+  });
+  const [searchQuery, setSearchQuery] = usePersistedQueryState({
+    searchParams,
+    queryKey: "search",
+    storageKey: "promoMgmt_search",
+    defaultValue: "",
+  });
+  const [showExpiringSoonOnly, setShowExpiringSoonOnly] = usePersistedQueryState({
+    searchParams,
+    queryKey: "expiringSoon",
+    storageKey: "promoMgmt_expiringSoon",
+    defaultValue: false,
+    parse: (rawValue) => parseBooleanFlag(rawValue),
+    serialize: (value) => (value ? "1" : "0"),
+  });
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    applyQueryParam(params, "search", searchQuery.trim());
+    applyQueryParam(params, "status", statusFilter, (value) => value === "ALL");
+    applyQueryParam(params, "expiringSoon", showExpiringSoonOnly ? "1" : null);
+    applyQueryParam(params, "page", currentPage, (value) => Number(value) <= 1);
+
+    if (params.toString() !== searchParams.toString()) {
+      setSearchParams(params, { replace: true });
+    }
+  }, [
+    currentPage,
+    searchQuery,
+    statusFilter,
+    showExpiringSoonOnly,
+    searchParams,
+    setSearchParams,
+  ]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -71,17 +131,6 @@ const PromoManagement = () => {
     }, 3000); 
   };
 
-  const handleDelete = async (id) => {
-    try {
-        await api.delete(`/firstapp/coupons/${id}/`);
-        setCoupons((prev) => prev.filter((coupon) => coupon.id !== id));
-        showSuccess("Coupon deleted successfully!"); 
-    } catch (error) {
-        console.error("Failed to delete coupon:", error);
-        alert("Failed to delete coupon. It may have dependencies.");
-    }
-  };
-
   const handleEditClick = (coupon) => {
     setSelectedCoupon(coupon);
     setIsEditOpen(true);
@@ -102,21 +151,22 @@ const PromoManagement = () => {
     });
   };
 
-  const getStatusBadge = (status, limit, used) => {
-    const isSoldOut = limit !== null && used >= limit;
-    const effectiveStatus = (isSoldOut && status === 'Active') ? 'Redeemed' : status;
-
+  const getStatusBadge = (effectiveStatus) => {
     switch (effectiveStatus) {
         case 'Active': return 'bg-green-100 text-green-700 border-green-200';
-        case 'Redeemed': return 'bg-gray-200 text-gray-700 border-gray-300';
         case 'Expired': return 'bg-red-100 text-red-700 border-red-200';
-        default: return 'bg-gray-100 text-gray-600 border-gray-200';
+        default: return 'bg-green-100 text-green-700 border-green-200';
     }
   };
 
-  const getEffectiveStatus = (status, limit, used) => {
-    const isSoldOut = limit !== null && used >= limit;
-    return (isSoldOut && status === "Active") ? "Redeemed" : status;
+  const getEffectiveStatus = (status) => {
+    const safeStatus = typeof status === 'string' ? status.toLowerCase() : "";
+
+    // Standardize text cases to match your Dropdown Filter perfectly
+    if (safeStatus === "expired") return "Expired";
+
+    // Display all non-expired coupons as Active in this table.
+    return "Active";
   };
 
   const isExpiringSoon = (dateString) => {
@@ -134,7 +184,7 @@ const PromoManagement = () => {
   };
 
   const filteredCoupons = coupons.filter((coupon) => {
-    const effectiveStatus = getEffectiveStatus(coupon.status, coupon.usage_limit, coupon.times_used);
+    const effectiveStatus = getEffectiveStatus(coupon.status);
 
     if (statusFilter !== "ALL" && effectiveStatus !== statusFilter) {
       return false;
@@ -156,13 +206,15 @@ const PromoManagement = () => {
     return true;
   });
 
-  const indexOfLastItem = currentPage * itemsPerPage;
+  const totalPages = Math.ceil(filteredCoupons.length / itemsPerPage);
+  const validCurrentPage = currentPage > totalPages && totalPages > 0 ? totalPages : currentPage;
+
+  const indexOfLastItem = validCurrentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentCoupons = filteredCoupons.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredCoupons.length / itemsPerPage);
 
   const handlePageChange = (page) => {
-    setCurrentPage(page);
+    setCurrentPage(Math.max(1, page));
   };
 
   useEffect(() => {
@@ -181,6 +233,10 @@ const PromoManagement = () => {
         <div className="flex gap-2">
             <Button onClick={() => setIsManageLimitOpen(true)} className="bg-blue-600 hover:bg-blue-700">
                 <TimerReset className="w-4 h-4 mr-1"/> Manage usable Coupons for POS
+            </Button>
+
+            <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setIsArchiveModalOpen(true)}>
+                <ArchiveIcon className="w-4 h-4 mr-1"/>Archive Coupons
             </Button>
             
             <Button onClick={() => setIsCreateOpen(true)} className="bg-blue-600 hover:bg-blue-700">
@@ -215,7 +271,6 @@ const PromoManagement = () => {
               >
                 <option value="ALL">All Status</option>
                 <option value="Active">Active</option>
-                <option value="Redeemed">Redeemed</option>
                 <option value="Expired">Expired</option>
               </select>
             </div>
@@ -270,7 +325,8 @@ const PromoManagement = () => {
           </TableHeader>
           <TableBody>
             {currentCoupons.map((coupon) => {
-                const isSoldOut = coupon.usage_limit !== null && coupon.times_used >= coupon.usage_limit;
+                const effectiveStatus = getEffectiveStatus(coupon.status);
+                const isSoldOut = coupon.usage_limit !== null && Number(coupon.times_used) >= Number(coupon.usage_limit);
 
                 return (
                   <TableRow key={coupon.id}>
@@ -292,8 +348,8 @@ const PromoManagement = () => {
                     </TableCell>
 
                     <TableCell>
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusBadge(coupon.status, coupon.usage_limit, coupon.times_used)}`}>
-                        {isSoldOut ? "Redeemed" : coupon.status}
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusBadge(effectiveStatus)}`}>
+                        {effectiveStatus}
                       </span>
                     </TableCell>
 
@@ -305,11 +361,11 @@ const PromoManagement = () => {
                             <div className="text-xs">
                                 <span className="font-semibold text-gray-800">POS Uses:</span> {coupon.times_used || 0} / {coupon.usage_limit !== null ? coupon.usage_limit : "∞"}
                             </div>
-                            {coupon.usage_limit !== null && (
-                                <span className={`text-[10px] font-bold mt-1 ${isSoldOut ? 'text-red-600' : 'text-green-600'}`}>
-                                    {Math.max(0, coupon.usage_limit - coupon.times_used)} POS Uses Left
-                                </span>
-                            )}
+                            {coupon.usage_limit !== null && effectiveStatus !== 'Expired' && (
+                              <span className={`text-[10px] font-bold mt-1 ${isSoldOut ? 'text-red-600' : 'text-green-600'}`}>
+                                  {Math.max(0, coupon.usage_limit - coupon.times_used)} POS Uses Left
+                              </span>
+                          )}
                         </div>
                     </TableCell>
 
@@ -328,12 +384,6 @@ const PromoManagement = () => {
                              <Button variant="ghost" size="icon" className="h-9 w-9 text-blue-600 hover:text-blue-800 hover:bg-blue-50" onClick={() => handleEditClick(coupon)}>
                                 <Edit className="w-5 h-5"/>
                              </Button>
-
-                             <DeleteConfirmDialog 
-                                title="Delete Coupon"
-                                description={`Are you sure you want to delete coupon "${coupon.code}"? This cannot be undone.`}
-                                onConfirm={() => handleDelete(coupon.id)} 
-                             />
                         </div>
                     </TableCell>
                   </TableRow>
@@ -356,16 +406,16 @@ const PromoManagement = () => {
                 <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => handlePageChange(1)} disabled={currentPage === 1}>
                     <ChevronsLeft className="h-4 w-4" />
                 </Button>
-                <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => handlePageChange(Math.max(1, currentPage - 1))} disabled={currentPage === 1}>
+                <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => handlePageChange(Math.max(1, validCurrentPage - 1))} disabled={validCurrentPage === 1}>
                     <ChevronLeft className="h-4 w-4" />
                 </Button>
                 
-                <span className="text-sm text-gray-600 px-2">Page {currentPage} of {totalPages}</span>
+                <span className="text-sm text-gray-600 px-2">Page {validCurrentPage} of {totalPages || 1}</span>
 
-                <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages}>
+                <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => handlePageChange(Math.min(totalPages, validCurrentPage + 1))} disabled={validCurrentPage === totalPages}>
                     <ChevronRight className="h-4 w-4" />
                 </Button>
-                <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => handlePageChange(totalPages)} disabled={currentPage === totalPages}>
+                <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => handlePageChange(totalPages)} disabled={validCurrentPage === totalPages}>
                     <ChevronsRight className="h-4 w-4" />
                 </Button>
             </div>
@@ -397,6 +447,16 @@ const PromoManagement = () => {
             fetchData();
             showSuccess("Coupon updated successfully!");
         }}
+        onArchived={(couponCode) => {
+            fetchData();
+            showSuccess(`Coupon ${couponCode} archived successfully.`);
+        }}
+      />
+
+      <ManageArchivedCouponsDialog
+        open={isArchiveModalOpen}
+        onOpenChange={setIsArchiveModalOpen}
+        onSaved={fetchData}
       />
 
       <PromoDetailsModal

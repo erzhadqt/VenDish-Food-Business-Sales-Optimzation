@@ -13,12 +13,14 @@ export default function ChangeVoidPinDialog({ open, onOpenChange }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const resetForm = () => {
     setNewPin("");
     setConfirmPin("");
     setError("");
     setSuccess("");
+    setFieldErrors({});
   };
 
   const handleClose = () => {
@@ -30,25 +32,59 @@ export default function ChangeVoidPinDialog({ open, onOpenChange }) {
   const handleNewPinChange = (e) => {
     let val = e.target.value.replace(/[^0-9]/g, '');
     setNewPin(val);
+    setFieldErrors((prev) => {
+      if (!prev.newPin) return prev;
+      const next = { ...prev };
+      delete next.newPin;
+      return next;
+    });
   };
 
   // 🔴 Strict sanitization for Confirm PIN (Numbers only)
   const handleConfirmPinChange = (e) => {
     let val = e.target.value.replace(/[^0-9]/g, '');
     setConfirmPin(val);
+    setFieldErrors((prev) => {
+      if (!prev.confirmPin) return prev;
+      const next = { ...prev };
+      delete next.confirmPin;
+      return next;
+    });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setSuccess("");
+    const nextFieldErrors = {};
+
+    if (!newPin) {
+      nextFieldErrors.newPin = "New PIN must not be blank.";
+    }
+
+    if (!confirmPin) {
+      nextFieldErrors.confirmPin = "Confirm PIN must not be blank.";
+    }
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors);
+      setError(`Please review the highlighted fields. ${Object.keys(nextFieldErrors).length} validation issue${Object.keys(nextFieldErrors).length > 1 ? "s" : ""} found.`);
+      return;
+    }
+
+    setFieldErrors({});
 
     if (newPin !== confirmPin) {
+      setFieldErrors({
+        newPin: "New PIN and Confirm PIN must match.",
+        confirmPin: "New PIN and Confirm PIN must match.",
+      });
       setError("New PIN and Confirm PIN do not match.");
       return;
     }
 
     if (newPin.length < 4) {
+      setFieldErrors({ newPin: "New PIN must be at least 4 digits long." });
       setError("New PIN must be at least 4 digits long.");
       return;
     }
@@ -73,6 +109,8 @@ export default function ChangeVoidPinDialog({ open, onOpenChange }) {
     }
   };
 
+  const topErrorItems = Object.values(fieldErrors);
+
   return (
     <Dialog open={open} onOpenChange={(val) => { if (!val) handleClose(); }}>
       <DialogContent className="sm:max-w-md z-50">
@@ -86,7 +124,16 @@ export default function ChangeVoidPinDialog({ open, onOpenChange }) {
         {error && (
           <div className="bg-red-50 text-red-600 p-3 rounded-md flex items-center gap-2 border border-red-200 text-sm mt-2">
             <AlertCircle size={16} className="shrink-0" />
-            <p>{error}</p>
+            <div className="space-y-1">
+              <p>{error}</p>
+              {topErrorItems.length > 0 && (
+                <ul className="list-disc pl-4">
+                  {topErrorItems.slice(0, 3).map((item, index) => (
+                    <li key={`${item}-${index}`}>{item}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         )}
         {success && (
@@ -96,7 +143,7 @@ export default function ChangeVoidPinDialog({ open, onOpenChange }) {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="grid gap-4 py-2">
+        <form noValidate onSubmit={handleSubmit} className="grid gap-4 py-2">
           
           <div className="space-y-2">
             <Label htmlFor="newPin">New PIN</Label>
@@ -111,6 +158,8 @@ export default function ChangeVoidPinDialog({ open, onOpenChange }) {
               required
               maxLength={6}
               autoFocus
+              className={fieldErrors.newPin ? "border-red-500 focus-visible:ring-red-500" : ""}
+              aria-invalid={!!fieldErrors.newPin}
             />
           </div>
 
@@ -126,6 +175,8 @@ export default function ChangeVoidPinDialog({ open, onOpenChange }) {
               onChange={handleConfirmPinChange} 
               required
               maxLength={6}
+              className={fieldErrors.confirmPin ? "border-red-500 focus-visible:ring-red-500" : ""}
+              aria-invalid={!!fieldErrors.confirmPin}
             />
           </div>
 

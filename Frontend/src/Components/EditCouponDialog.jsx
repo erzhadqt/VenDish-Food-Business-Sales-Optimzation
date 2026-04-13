@@ -4,11 +4,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { AlertCircle } from "lucide-react";
 import api from "../api";
+import { requestWithMethodFallback } from "../utils/requestWithMethodFallback";
 
-export default function EditCouponDialog({ open, onOpenChange, coupon, onSaved }) {
+export default function EditCouponDialog({ open, onOpenChange, coupon, onSaved, onArchived }) {
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({ valid_to: "", claim_limit: "", usage_limit: "" });
+  const [archiving, setArchiving] = useState(false);
+  const [error, setError] = useState("");
+  // Merged claim_limit and usage_limit into a single 'limit' property
+  const [formData, setFormData] = useState({ valid_to: "", limit: "" });
+  const isProcessing = loading || archiving;
 
   // Helper to get current local time in YYYY-MM-DDThh:mm format
   const getCurrentLocalISOString = () => {
@@ -30,103 +36,167 @@ export default function EditCouponDialog({ open, onOpenChange, coupon, onSaved }
 
       setFormData({
         valid_to: formattedDate,
-        claim_limit: coupon.claim_limit ?? "",
-        usage_limit: coupon.usage_limit ?? ""
+        // Fallback to whichever limit is available, since they are now synced
+        limit: coupon.usage_limit || coupon.claim_limit || ""
       });
+      setError(""); // Reset error when coupon changes
     }
-  }, [coupon]);
+  }, [coupon, open]);
+
+  const handleOpenChange = (isOpen) => {
+    if (!isOpen) {
+      setError("");
+    }
+    onOpenChange(isOpen);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError(""); // Clear previous errors
+
+    // 🔴 Strict validation: Ensure the date is not empty
+    if (!formData.valid_to) {
+      setError("Please specify an Expiration Date. It cannot be left blank.");
+      return;
+    }
+
+    // 🔴 Strict validation: Ensure the limit is not empty or zero
+    if (!formData.limit || parseInt(formData.limit) <= 0) {
+      setError("Please specify a valid Claim & Usage Limit. It cannot be left blank or zero.");
+      return;
+    }
+
     setLoading(true);
 
+    const parsedLimit = parseInt(formData.limit, 10);
+
     const payload = {
-      valid_to: formData.valid_to || null,
-      claim_limit: formData.claim_limit !== "" ? parseInt(formData.claim_limit) : null,
-      usage_limit: formData.usage_limit !== "" ? parseInt(formData.usage_limit) : null,
+      valid_to: formData.valid_to, // Now strictly required
+      // Pass the single limit to both backend fields to keep them in sync
+      claim_limit: parsedLimit,
+      usage_limit: parsedLimit,
     };
 
     try {
       await api.patch(`/firstapp/coupons/${coupon.id}/`, payload);
       onSaved();
-      onOpenChange(false);
-    } catch (error) {
-      console.error("Failed to update coupon:", error);
-      alert("Failed to update coupon details.");
+      handleOpenChange(false);
+    } catch (err) {
+      console.error("Failed to update coupon:", err);
+      setError(err.response?.data?.error || err.response?.data?.detail || "Failed to update coupon details.");
     } finally {
       setLoading(false);
     }
   };
 
-  // 🔴 Strict sanitization for Claim Limit (Whole numbers only)
-  const handleClaimLimitChange = (e) => {
-    let val = e.target.value.replace(/[^0-9]/g, '');
-    setFormData({ ...formData, claim_limit: val });
+  const handleArchiveCoupon = async () => {
+    if (!coupon) return;
+
+    const isSoldOut = coupon.usage_limit !== null && coupon.times_used >= coupon.usage_limit;
+    const canArchive = coupon.status === "Active" && !isSoldOut && !coupon.is_archived;
+
+    if (!canArchive) {
+      setError("Only active coupons can be archived from this dialog.");
+      return;
+    }
+
+    setError("");
+    setArchiving(true);
+
+    try {
+      await requestWithMethodFallback({
+        url: "/firstapp/coupons/archive/",
+        data: {
+          coupon_ids: [coupon.id],
+        },
+      });
+
+      if (onArchived) onArchived(coupon.code);
+      handleOpenChange(false);
+    } catch (err) {
+      console.error("Failed to archive coupon:", err);
+      setError(err.response?.data?.detail || "Failed to archive coupon. Please try again.");
+    } finally {
+      setArchiving(false);
+    }
   };
 
-  // 🔴 Strict sanitization for Usage Limit (Whole numbers only)
-  const handleUsageLimitChange = (e) => {
+  // 🔴 Strict sanitization for the merged Limit (Whole numbers only, no leading zeros)
+  const handleLimitChange = (e) => {
     let val = e.target.value.replace(/[^0-9]/g, '');
-    setFormData({ ...formData, usage_limit: val });
+    val = val.replace(/^0+/, ''); // Remove leading zeros
+    setFormData({ ...formData, limit: val });
   };
+
+  const isSoldOut = coupon?.usage_limit !== null && coupon?.times_used >= coupon?.usage_limit;
+  const canArchive = Boolean(coupon) && coupon.status === "Active" && !isSoldOut && !coupon.is_archived;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-lg z-50">
         <DialogHeader>
           <DialogTitle className="text-xl">Edit Coupon Limits & Expiration</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="grid gap-6 py-5">
+        {error && (
+          <div className="bg-red-50 text-red-600 text-sm p-3 rounded-md flex items-center gap-2 border border-red-200 mt-2">
+            <AlertCircle size={16} className="shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <form noValidate onSubmit={handleSubmit} className="grid gap-6 py-5">
           <div className="grid gap-3">
-            <Label htmlFor="valid_to" className="text-base">Expiration Date (Leave blank for no expiry)</Label>
+            {/* 🔴 Added required indicator to Label */}
+            <Label htmlFor="valid_to" className="text-base flex items-center gap-1">
+              Expiration Date <span className="text-red-500">*</span>
+            </Label>
             <Input 
               id="valid_to" 
               type="datetime-local" 
               value={formData.valid_to}
-              min={minDateTime} // 🔴 Restricts input to current date/time or future
+              min={minDateTime} // Restricts input to current date/time or future
               onChange={(e) => setFormData({...formData, valid_to: e.target.value})}
-              className="text-base h-12"
+              className={`text-base h-12 ${error.includes("Expiration") ? "border-red-500 focus-visible:ring-red-500" : ""}`}
             />
           </div>
 
+          {/* Merged Limit Input with required validation indicator */}
           <div className="grid gap-3">
-            <Label htmlFor="claim_limit" className="text-base">Max App Claims (Leave blank for unlimited)</Label>
-            {/* 🔴 Updated Claim Limit Input */}
+            <Label htmlFor="limit" className="text-base flex items-center gap-1">
+              Total Claim & Usage Limit <span className="text-red-500">*</span>
+            </Label>
             <Input 
-              id="claim_limit" 
+              id="limit" 
               type="text" 
               inputMode="numeric"
-              value={formData.claim_limit}
-              onChange={handleClaimLimitChange}
+              value={formData.limit}
+              onChange={handleLimitChange}
               placeholder="e.g. 100"
               maxLength={10}
-              className="text-base h-12"
+              className={`text-base h-12 ${error.includes("Limit") ? "border-red-500 focus-visible:ring-red-500" : ""}`}
             />
-          </div>
-
-          <div className="grid gap-3">
-            <Label htmlFor="usage_limit" className="text-base">Max POS Uses (Leave blank for unlimited)</Label>
-            {/* 🔴 Updated Usage Limit Input */}
-            <Input 
-              id="usage_limit" 
-              type="text" 
-              inputMode="numeric"
-              value={formData.usage_limit}
-              onChange={handleUsageLimitChange}
-              placeholder="e.g. 50"
-              maxLength={10}
-              className="text-base h-12"
-            />
+            <p className="text-sm text-gray-500">Limits how many total users can claim and use this code.</p>
           </div>
 
           <DialogFooter className="mt-4 gap-3 sm:gap-0">
             <DialogClose asChild>
-              <Button variant="outline" type="button" disabled={loading} className="text-base h-11 px-5">
+              <Button variant="outline" type="button" disabled={isProcessing} className="text-base h-11 px-5">
                 Cancel
               </Button>
             </DialogClose>
-            <Button type="submit" disabled={loading} className="text-base h-11 px-5">
+            {canArchive && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isProcessing}
+                onClick={handleArchiveCoupon}
+                className="text-base h-11 px-5 mx-2 border-amber-300 text-amber-700 hover:bg-amber-50"
+              >
+                {archiving ? "Archiving..." : "Archive Coupon"}
+              </Button>
+            )}
+            <Button type="submit" disabled={isProcessing} className="text-base h-11 px-5">
               {loading ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>

@@ -1,12 +1,23 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Star, MessageSquare, TrendingUp, Eye, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import api from '../../api';
 import { Skeleton } from '../../Components/ui/skeleton';
 import { requestWithMethodFallback } from '../../utils/requestWithMethodFallback';
+import { applyQueryParam, usePersistedQueryState } from '../../utils/usePersistedQueryState';
 
 // Import the single unified modal
 import ReviewDetailsModal from '../../Components/ReviewDetailsModal';
 import ReviewReplyDialog from '../../Components/ReviewReplyDialog';
+
+const FEEDBACK_TAB_OPTIONS = new Set(['customer', 'food']);
+const FEEDBACK_RATING_OPTIONS = new Set(['all', '1', '2', '3', '4', '5']);
+const FEEDBACK_CATEGORY_DEFAULT = 'all';
+
+const parsePositivePage = (value, fallback = 1) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
 
 const resolveMediaUrl = (path) => {
   if (!path) return null;
@@ -21,33 +32,68 @@ const resolveMediaUrl = (path) => {
 };
 
 const CustomerFeedback = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+
   // Lazy load states from localStorage
-  const [activeTab, setActiveTab] = useState(() => {
-    return localStorage.getItem('feedback_activeTab') || 'customer';
+  const [activeTab, setActiveTab] = usePersistedQueryState({
+    searchParams,
+    queryKey: 'tab',
+    storageKey: 'feedback_activeTab',
+    defaultValue: 'customer',
+    parse: (rawValue, fallback) => (FEEDBACK_TAB_OPTIONS.has(rawValue) ? rawValue : fallback),
   }); 
 
-  const [searchTerm, setSearchTerm] = useState(() => {
-    return localStorage.getItem('feedback_searchTerm') || '';
+  const [searchTerm, setSearchTerm] = usePersistedQueryState({
+    searchParams,
+    queryKey: 'shopSearch',
+    storageKey: 'feedback_searchTerm',
+    defaultValue: '',
   });
-  const [ratingFilter, setRatingFilter] = useState(() => {
-    return localStorage.getItem('feedback_ratingFilter') || 'all';
+  const [ratingFilter, setRatingFilter] = usePersistedQueryState({
+    searchParams,
+    queryKey: 'shopRating',
+    storageKey: 'feedback_ratingFilter',
+    defaultValue: 'all',
+    parse: (rawValue, fallback) => (FEEDBACK_RATING_OPTIONS.has(rawValue) ? rawValue : fallback),
   });
   
-  const [searchFoodTerm, setSearchFoodTerm] = useState(() => {
-    return localStorage.getItem('feedback_searchFoodTerm') || '';
+  const [searchFoodTerm, setSearchFoodTerm] = usePersistedQueryState({
+    searchParams,
+    queryKey: 'foodSearch',
+    storageKey: 'feedback_searchFoodTerm',
+    defaultValue: '',
   });
-  const [foodRatingFilter, setFoodRatingFilter] = useState(() => {
-    return localStorage.getItem('feedback_foodRatingFilter') || 'all';
+  const [foodRatingFilter, setFoodRatingFilter] = usePersistedQueryState({
+    searchParams,
+    queryKey: 'foodRating',
+    storageKey: 'feedback_foodRatingFilter',
+    defaultValue: 'all',
+    parse: (rawValue, fallback) => (FEEDBACK_RATING_OPTIONS.has(rawValue) ? rawValue : fallback),
+  });
+  const [foodCategoryFilter, setFoodCategoryFilter] = usePersistedQueryState({
+    searchParams,
+    queryKey: 'foodCategory',
+    storageKey: 'feedback_foodCategory',
+    defaultValue: FEEDBACK_CATEGORY_DEFAULT,
+    parse: (rawValue, fallback) => rawValue || fallback,
   });
 
-  // 🔴 NEW: Pagination states
-  const [currentShopPage, setCurrentShopPage] = useState(() => {
-    const saved = localStorage.getItem('feedback_currentShopPage');
-    return saved ? parseInt(saved, 10) : 1;
+  // Pagination states
+  const [currentShopPage, setCurrentShopPage] = usePersistedQueryState({
+    searchParams,
+    queryKey: 'shopPage',
+    storageKey: 'feedback_currentShopPage',
+    defaultValue: 1,
+    parse: (rawValue, fallback) => parsePositivePage(rawValue, fallback),
+    serialize: (value) => String(value),
   });
-  const [currentFoodPage, setCurrentFoodPage] = useState(() => {
-    const saved = localStorage.getItem('feedback_currentFoodPage');
-    return saved ? parseInt(saved, 10) : 1;
+  const [currentFoodPage, setCurrentFoodPage] = usePersistedQueryState({
+    searchParams,
+    queryKey: 'foodPage',
+    storageKey: 'feedback_currentFoodPage',
+    defaultValue: 1,
+    parse: (rawValue, fallback) => parsePositivePage(rawValue, fallback),
+    serialize: (value) => String(value),
   });
   const ITEMS_PER_PAGE = 5;
 
@@ -55,6 +101,7 @@ const CustomerFeedback = () => {
   const [filteredFeedbacks, setFilteredFeedbacks] = useState([]);
   const [foodFeedbacks, setFoodFeedbacks] = useState([]);
   const [filteredFoodFeedbacks, setFilteredFoodFeedbacks] = useState([]);
+  const [foodCategories, setFoodCategories] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // --- UNIFIED MODAL STATE ---
@@ -66,16 +113,36 @@ const CustomerFeedback = () => {
   const [replyError, setReplyError] = useState('');
   const [isReplySubmitting, setIsReplySubmitting] = useState(false);
 
+  const hasInitializedShopFilterReset = useRef(false);
+  const hasInitializedFoodFilterReset = useRef(false);
+
   // Save state to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem('feedback_activeTab', activeTab);
-    localStorage.setItem('feedback_searchTerm', searchTerm);
-    localStorage.setItem('feedback_ratingFilter', ratingFilter);
-    localStorage.setItem('feedback_searchFoodTerm', searchFoodTerm);
-    localStorage.setItem('feedback_foodRatingFilter', foodRatingFilter);
-    localStorage.setItem('feedback_currentShopPage', currentShopPage.toString());
-    localStorage.setItem('feedback_currentFoodPage', currentFoodPage.toString());
-  }, [activeTab, searchTerm, ratingFilter, searchFoodTerm, foodRatingFilter, currentShopPage, currentFoodPage]);
+    const params = new URLSearchParams();
+    applyQueryParam(params, 'tab', activeTab, (value) => value === 'customer');
+    applyQueryParam(params, 'shopSearch', searchTerm.trim());
+    applyQueryParam(params, 'shopRating', ratingFilter, (value) => value === 'all');
+    applyQueryParam(params, 'foodSearch', searchFoodTerm.trim());
+    applyQueryParam(params, 'foodRating', foodRatingFilter, (value) => value === 'all');
+    applyQueryParam(params, 'foodCategory', foodCategoryFilter, (value) => value === FEEDBACK_CATEGORY_DEFAULT);
+    applyQueryParam(params, 'shopPage', currentShopPage, (value) => Number(value) <= 1);
+    applyQueryParam(params, 'foodPage', currentFoodPage, (value) => Number(value) <= 1);
+
+    if (params.toString() !== searchParams.toString()) {
+      setSearchParams(params, { replace: true });
+    }
+  }, [
+    activeTab,
+    searchTerm,
+    ratingFilter,
+    searchFoodTerm,
+    foodRatingFilter,
+    foodCategoryFilter,
+    currentShopPage,
+    currentFoodPage,
+    searchParams,
+    setSearchParams,
+  ]);
 
   useEffect(() => {
     const loadFeedbacks = async () => {
@@ -84,6 +151,18 @@ const CustomerFeedback = () => {
 
         const response = await api.get('/firstapp/reviews/');
         const allReviews = response.data;
+
+        try {
+          const categoryResponse = await api.get('/firstapp/categories/');
+          const nextCategories = (Array.isArray(categoryResponse.data) ? categoryResponse.data : [])
+            .map((category) => String(category?.name || '').trim())
+            .filter(Boolean)
+            .sort((left, right) => left.localeCompare(right));
+          setFoodCategories(nextCategories);
+        } catch (categoryError) {
+          console.error('Error loading categories:', categoryError);
+          setFoodCategories([]);
+        }
 
         const shopReviews = allReviews.filter(r => r.review_type === 'shop').map(r => ({
            id: r.id,
@@ -105,6 +184,7 @@ const CustomerFeedback = () => {
         const productReviews = allReviews.filter(r => r.review_type === 'food').map(r => ({
            id: r.id,
            food_name: r.product_name || 'Unknown Item', 
+            food_category: r.product_category || 'Uncategorized',
            customer_name: r.username || 'Anonymous',
            email: r.email,
           first_name: r.first_name,
@@ -142,32 +222,74 @@ const CustomerFeedback = () => {
       f.comment.toLowerCase().includes(searchTerm.toLowerCase())
     );
     setFilteredFeedbacks(filtered);
-    setCurrentShopPage(1); // 🔴 Reset to page 1 on filter change
   }, [searchTerm, ratingFilter, feedbacks]);
+
+  useEffect(() => {
+    if (!hasInitializedShopFilterReset.current) {
+      hasInitializedShopFilterReset.current = true;
+      return;
+    }
+    setCurrentShopPage(1);
+  }, [searchTerm, ratingFilter]);
 
   // Filter food feedback
   useEffect(() => {
     let filtered = foodFeedbacks;
     if (foodRatingFilter !== 'all') filtered = filtered.filter(f => f.rating === parseInt(foodRatingFilter));
+    if (foodCategoryFilter !== FEEDBACK_CATEGORY_DEFAULT) {
+      filtered = filtered.filter((f) => (f.food_category || 'Uncategorized') === foodCategoryFilter);
+    }
     if (searchFoodTerm !== '') filtered = filtered.filter(f =>
       f.food_name.toLowerCase().includes(searchFoodTerm.toLowerCase()) ||
       f.comment.toLowerCase().includes(searchFoodTerm.toLowerCase())
     );
     setFilteredFoodFeedbacks(filtered);
-    setCurrentFoodPage(1); // 🔴 Reset to page 1 on filter change
-  }, [searchFoodTerm, foodRatingFilter, foodFeedbacks]);
+  }, [searchFoodTerm, foodRatingFilter, foodCategoryFilter, foodFeedbacks]);
 
+  useEffect(() => {
+    if (!hasInitializedFoodFilterReset.current) {
+      hasInitializedFoodFilterReset.current = true;
+      return;
+    }
+    setCurrentFoodPage(1);
+  }, [searchFoodTerm, foodRatingFilter, foodCategoryFilter]);
+
+  const selectedCategoryMissing =
+    foodCategoryFilter !== FEEDBACK_CATEGORY_DEFAULT &&
+    !foodCategories.includes(foodCategoryFilter);
+
+  // Shop Feedback Calculations
   const totalFeedbacks = feedbacks.length;
   const averageRating = feedbacks.length > 0 ? (feedbacks.reduce((sum, f) => sum + f.rating, 0) / feedbacks.length).toFixed(1) : 0;
   const fiveStarCount = feedbacks.filter(f => f.rating === 5).length;
   const fiveStarPercentage = feedbacks.length > 0 ? ((fiveStarCount / feedbacks.length) * 100).toFixed(0) : 0;
 
-  // 🔴 NEW: Pagination Calculations for Shop
+  // 🔴 NEW: Food Feedback Calculations (Per-Food Rating Logic)
+  const totalFoodFeedbacks = foodFeedbacks.length;
+  const uniqueFoodsCount = new Set(foodFeedbacks.map(f => f.food_name)).size;
+  const fiveStarFoodCount = foodFeedbacks.filter(f => f.rating === 5).length;
+  const fiveStarFoodPercentage = foodFeedbacks.length > 0 ? ((fiveStarFoodCount / foodFeedbacks.length) * 100).toFixed(0) : 0;
+
+  const foodAverageRatings = useMemo(() => {
+      const stats = {};
+      foodFeedbacks.forEach(f => {
+          if (!stats[f.food_name]) stats[f.food_name] = { total: 0, count: 0 };
+          stats[f.food_name].total += f.rating;
+          stats[f.food_name].count += 1;
+      });
+      const averages = {};
+      for (const [name, data] of Object.entries(stats)) {
+          averages[name] = (data.total / data.count).toFixed(1);
+      }
+      return averages;
+  }, [foodFeedbacks]);
+
+  // Pagination Calculations for Shop
   const totalShopPages = Math.ceil(filteredFeedbacks.length / ITEMS_PER_PAGE);
   const validShopPage = currentShopPage > totalShopPages && totalShopPages > 0 ? totalShopPages : currentShopPage;
   const paginatedShopFeedbacks = filteredFeedbacks.slice((validShopPage - 1) * ITEMS_PER_PAGE, validShopPage * ITEMS_PER_PAGE);
 
-  // 🔴 NEW: Pagination Calculations for Food
+  // Pagination Calculations for Food
   const totalFoodPages = Math.ceil(filteredFoodFeedbacks.length / ITEMS_PER_PAGE);
   const validFoodPage = currentFoodPage > totalFoodPages && totalFoodPages > 0 ? totalFoodPages : currentFoodPage;
   const paginatedFoodFeedbacks = filteredFoodFeedbacks.slice((validFoodPage - 1) * ITEMS_PER_PAGE, validFoodPage * ITEMS_PER_PAGE);
@@ -428,7 +550,6 @@ const CustomerFeedback = () => {
                   </div>
                 ))}
                 
-                {/* 🔴 NEW: Pagination Controls for Shop */}
                 <div className="flex justify-between sm:justify-end items-center gap-2 mt-4 pt-4 border-t border-gray-100">  
                     <button 
                         onClick={() => setCurrentShopPage(prev => Math.max(prev - 1, 1))} 
@@ -459,6 +580,47 @@ const CustomerFeedback = () => {
 
         {activeTab === 'food' && (
           <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">Total Feedbacks</p>
+                    <p className="text-3xl font-bold text-gray-900">{totalFoodFeedbacks}</p>
+                  </div>
+                  <div className="bg-blue-100 p-3 rounded-full">
+                    <MessageSquare className="text-blue-600" size={24} />
+                  </div>
+                </div>
+              </div>
+              
+              {/* 🔴 NEW: Updated Middle Card to show Unique Items instead of Overall Average */}
+              <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">Unique Foods Reviewed</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-3xl font-bold text-blue-600">{uniqueFoodsCount}</p>
+                    </div>
+                  </div>
+                  <div className="bg-blue-100 p-3 rounded-full">
+                    <TrendingUp className="text-blue-600" size={24} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">5-Star Reviews</p>
+                    <p className="text-3xl font-bold text-green-600">{fiveStarFoodPercentage}%</p>
+                  </div>
+                  <div className="bg-green-100 p-3 rounded-full">
+                    <Star className="text-green-600 fill-green-600" size={24} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="mb-6 flex flex-col md:flex-row gap-4">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -469,6 +631,21 @@ const CustomerFeedback = () => {
                   onChange={(e)=>setSearchFoodTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                 />
+              </div>
+              <div className="w-full md:w-64">
+                <select
+                  value={foodCategoryFilter}
+                  onChange={(e) => setFoodCategoryFilter(e.target.value)}
+                  className="w-full px-3 py-3 border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value={FEEDBACK_CATEGORY_DEFAULT}>All Categories</option>
+                  {foodCategories.map((categoryName) => (
+                    <option key={categoryName} value={categoryName}>{categoryName}</option>
+                  ))}
+                  {selectedCategoryMissing && (
+                    <option value={foodCategoryFilter}>{foodCategoryFilter}</option>
+                  )}
+                </select>
               </div>
               <div className="flex gap-2">
                 <button onClick={()=>setFoodRatingFilter('all')} className={`px-4 py-2 rounded-lg font-medium transition-colors ${foodRatingFilter==='all'?'bg-blue-500 text-white':'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}>All</button>
@@ -484,12 +661,21 @@ const CustomerFeedback = () => {
                   <div key={f.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex-1">
-                        <div className="flex flex-col  gap-3 mb-2">
+                        <div className="flex flex-col gap-3 mb-2">
                           <div className='flex items-center gap-3'>
                             <h4 className="text-lg font-bold text-gray-900">{f.customer_name}</h4>
-                            {renderStars(f.rating)}
+                            
+                            {/* 🔴 NEW: Stars & Per-Food Average Badge */}
+                            <div className="flex items-center gap-2">
+                                {renderStars(f.rating)}
+                                <span className="text-xs font-semibold text-gray-600 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                                    Avg: {foodAverageRatings[f.food_name]} <Star size={10} className="fill-yellow-500 text-yellow-500" />
+                                </span>
+                            </div>
+
                           </div>
                           <h3 className="text-lg font-semibold text-gray-900">{f.food_name}</h3>
+                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{f.food_category || 'Uncategorized'}</p>
                           <p className="text-sm text-gray-500">{new Date(f.created_at).toLocaleString()}</p>
                         </div>
                       </div>
@@ -535,7 +721,6 @@ const CustomerFeedback = () => {
                   </div>
                 ))}
 
-                {/* 🔴 NEW: Pagination Controls for Food */}
                 <div className="flex justify-between sm:justify-end items-center gap-2 mt-4 pt-4 border-t border-gray-100">  
                     <button 
                         onClick={() => setCurrentFoodPage(prev => Math.max(prev - 1, 1))} 
@@ -558,7 +743,7 @@ const CustomerFeedback = () => {
               <div className="text-center py-16 bg-white rounded-lg border border-gray-200">
                 <div className="text-gray-400 mb-4"><MessageSquare size={64} className="mx-auto" /></div>
                 <p className="text-gray-600 text-lg mb-2 font-medium">No food feedback found</p>
-                <p className="text-sm text-gray-500">{searchFoodTerm || foodRatingFilter!=='all'?'Try adjusting your filters':'Food feedback will appear here'}</p>
+                <p className="text-sm text-gray-500">{searchFoodTerm || foodRatingFilter!=='all' || foodCategoryFilter !== FEEDBACK_CATEGORY_DEFAULT ?'Try adjusting your filters':'Food feedback will appear here'}</p>
               </div>
             )}
           </>

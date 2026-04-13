@@ -13,12 +13,14 @@ export default function ManagePosBalanceDialog({ open, onOpenChange }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const resetForm = () => {
     setAmount("");
     setError("");
     setSuccess("");
     setAction("set");
+    setFieldErrors({});
   };
 
   const handleClose = () => {
@@ -52,6 +54,7 @@ export default function ManagePosBalanceDialog({ open, onOpenChange }) {
   const handleActionChange = (newAction) => {
     setAction(newAction);
     setError("");
+    setFieldErrors({});
     // If switching back to set, pre-fill current. Otherwise, clear input to prevent accidental huge adds
     if (newAction === "set") {
       setAmount(currentBalance.toString());
@@ -68,6 +71,12 @@ export default function ManagePosBalanceDialog({ open, onOpenChange }) {
       val = parts[0] + '.' + parts.slice(1).join('');
     }
     setAmount(val);
+    setFieldErrors((prev) => {
+      if (!prev.amount) return prev;
+      const next = { ...prev };
+      delete next.amount;
+      return next;
+    });
   };
 
   // Dynamically calculate what the final balance will be
@@ -83,8 +92,10 @@ export default function ManagePosBalanceDialog({ open, onOpenChange }) {
     e.preventDefault();
     setError("");
     setSuccess("");
+    setFieldErrors({});
 
     if (amount === "" || isNaN(amount)) {
+      setFieldErrors({ amount: "Amount must not be blank and must be a valid number." });
       setError("Please enter a valid amount.");
       return;
     }
@@ -92,6 +103,7 @@ export default function ManagePosBalanceDialog({ open, onOpenChange }) {
     const finalBalance = getCalculatedBalance();
 
     if (finalBalance < 0) {
+      setFieldErrors({ amount: "This deduction would make the drawer balance negative." });
       setError("Cannot deduct this amount. Drawer balance cannot be negative.");
       return;
     }
@@ -131,6 +143,8 @@ export default function ManagePosBalanceDialog({ open, onOpenChange }) {
     }
   };
 
+  const topErrorItems = Object.values(fieldErrors);
+
   const calculatedBalance = getCalculatedBalance();
 
   return (
@@ -159,7 +173,16 @@ export default function ManagePosBalanceDialog({ open, onOpenChange }) {
         {error && (
           <div className="bg-red-50 text-red-600 p-3 rounded-md flex items-center gap-2 border border-red-200 text-sm mt-2">
             <AlertCircle size={16} className="shrink-0" />
-            <p>{error}</p>
+            <div className="space-y-1">
+              <p>{error}</p>
+              {topErrorItems.length > 0 && (
+                <ul className="list-disc pl-4">
+                  {topErrorItems.slice(0, 3).map((item, index) => (
+                    <li key={`${item}-${index}`}>{item}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         )}
         {success && (
@@ -169,7 +192,7 @@ export default function ManagePosBalanceDialog({ open, onOpenChange }) {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="grid gap-4 py-2">
+        <form noValidate onSubmit={handleSubmit} className="grid gap-4 py-2">
           
           {/* Action Segmented Control */}
           <div className="flex bg-gray-100 p-1 rounded-lg">
@@ -213,10 +236,13 @@ export default function ManagePosBalanceDialog({ open, onOpenChange }) {
                 onChange={handleAmountChange} 
                 required
                 className={`pl-8 font-semibold text-gray-800 ${
+                  fieldErrors.amount ? 'border-red-500 focus-visible:ring-red-500' :
                   action === 'add' ? 'border-green-300 focus-visible:ring-green-400' : 
                   action === 'deduct' ? 'border-red-300 focus-visible:ring-red-400' : ''
                 }`}
                 autoFocus
+                aria-invalid={!!fieldErrors.amount}
+                maxLength={13}
               />
             </div>
 

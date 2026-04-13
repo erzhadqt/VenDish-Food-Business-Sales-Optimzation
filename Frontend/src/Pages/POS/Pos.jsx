@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Tag, Trash2, ShoppingBag, User, X, Search } from "lucide-react"; 
 import { FaExclamationCircle } from "react-icons/fa"; 
-import { useLocation } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 
 import api from "../../api";
 import ReceiptModal2 from "../../Components/ReceiptModal2";
@@ -12,18 +12,41 @@ import ManageGcashInfoDialog from "../../Components/ManageGcashInfoDialog";
 import { SelectDiscount } from "../../Components/SelectDiscount";
 import AlertModal from "../../Components/AlertModal";
 import { Skeleton } from "../../Components/ui/skeleton";
+import { applyQueryParam, usePersistedQueryState } from "../../utils/usePersistedQueryState";
 
 const POS_STORAGE_KEYS = {
   cart: "pos_cartItems",
   promoCode: "pos_promoCode",
   appliedCoupons: "pos_appliedCoupons",
   gcashPending: "pos_gcash_pending",
+  menuSearch: "pos_menuSearch",
+  menuCategory: "pos_menuCategory",
+};
+
+const POS_QUERY_KEYS = {
+  search: "posSearch",
+  category: "posCategory",
 };
 
 const Pos = () => {
   const location = useLocation();
-  const [selectedCategory, setSelectedCategory] = useState("All");
-  const [menuSearchQuery, setMenuSearchQuery] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const [selectedCategory, setSelectedCategory] = usePersistedQueryState({
+    searchParams,
+    queryKey: POS_QUERY_KEYS.category,
+    storageKey: POS_STORAGE_KEYS.menuCategory,
+    defaultValue: "All",
+    parse: (rawValue, fallback) => rawValue || fallback,
+  });
+
+  const [menuSearchQuery, setMenuSearchQuery] = usePersistedQueryState({
+    searchParams,
+    queryKey: POS_QUERY_KEYS.search,
+    storageKey: POS_STORAGE_KEYS.menuSearch,
+    defaultValue: "",
+    parse: (rawValue, fallback) => rawValue ?? fallback,
+  });
   const [selectedDiscount, setSelectedDiscount] = useState(null); 
   const [cartItems, setCartItems] = useState(() => {
     try {
@@ -143,6 +166,19 @@ const Pos = () => {
   useEffect(() => {
     localStorage.setItem(POS_STORAGE_KEYS.appliedCoupons, JSON.stringify(appliedCoupons));
   }, [appliedCoupons]);
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams(location.search);
+    const normalizedSearch = menuSearchQuery.trim();
+
+    applyQueryParam(nextParams, POS_QUERY_KEYS.search, normalizedSearch);
+    applyQueryParam(nextParams, POS_QUERY_KEYS.category, selectedCategory, (value) => !value || value === "All");
+
+    const currentQuery = location.search.startsWith("?") ? location.search.slice(1) : location.search;
+    if (nextParams.toString() !== currentQuery) {
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [menuSearchQuery, selectedCategory, location.search, setSearchParams]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -471,6 +507,12 @@ const Pos = () => {
       }
 
       const coupon = couponData;
+
+      if (coupon.is_archived) {
+        setCouponError("This coupon is archived and cannot be used on POS.");
+        setCouponLoading(false);
+        return;
+      }
 
       const ownedCoupon = customerCoupons.find(c => c.id === coupon.id);
       if (!ownedCoupon) {

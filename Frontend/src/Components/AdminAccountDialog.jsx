@@ -37,6 +37,15 @@ const EMPTY_FORM = {
   address: "",
 };
 
+const FIELD_LABELS = {
+  username: "Username",
+  email: "Email",
+  first_name: "First name",
+  middle_name: "Middle name",
+  last_name: "Last name",
+  address: "Address",
+};
+
 const normalizeProfile = (data = {}) => ({
   username: data.username || "",
   email: data.email || "",
@@ -87,7 +96,7 @@ const sanitizeValue = (field, rawValue) => {
   }
 };
 
-const validateForm = (form) => {
+const validateFormFields = (form) => {
   const username = (form.username || "").trim();
   const email = (form.email || "").trim();
   const firstName = (form.first_name || "").trim();
@@ -95,41 +104,49 @@ const validateForm = (form) => {
   const lastName = (form.last_name || "").trim();
   const address = (form.address || "").trim();
 
+  const errors = {};
+
+  if (!username) {
+    errors.username = "Username must not be blank.";
+  }
+
   if (
     username.length < FIELD_LIMITS.usernameMin ||
     username.length > FIELD_LIMITS.usernameMax
   ) {
-    return `Username must be ${FIELD_LIMITS.usernameMin}-${FIELD_LIMITS.usernameMax} characters long.`;
+    errors.username = `Username must be ${FIELD_LIMITS.usernameMin}-${FIELD_LIMITS.usernameMax} characters long.`;
   }
 
-  if (!USERNAME_REGEX.test(username)) {
-    return "Username may contain only letters, numbers, and underscores.";
+  if (username && !USERNAME_REGEX.test(username)) {
+    errors.username = "Username may contain only letters, numbers, and underscores.";
   }
 
-  if (!EMAIL_REGEX.test(email)) {
-    return "Please enter a valid email address.";
+  if (!email) {
+    errors.email = "Email must not be blank.";
+  } else if (!EMAIL_REGEX.test(email)) {
+    errors.email = "Please enter a valid email address.";
   }
 
   const names = [
-    { label: "First name", value: firstName },
-    { label: "Middle name", value: middleName },
-    { label: "Last name", value: lastName },
+    { key: "first_name", label: "First name", value: firstName },
+    { key: "middle_name", label: "Middle name", value: middleName },
+    { key: "last_name", label: "Last name", value: lastName },
   ];
 
   for (const item of names) {
     if (item.value.length > FIELD_LIMITS.nameMax) {
-      return `${item.label} must be ${FIELD_LIMITS.nameMax} characters or fewer.`;
+      errors[item.key] = `${item.label} must be ${FIELD_LIMITS.nameMax} characters or fewer.`;
     }
     if (!NAME_REGEX.test(item.value)) {
-      return `${item.label} may contain only letters, spaces, apostrophes, and hyphens.`;
+      errors[item.key] = `${item.label} may contain only letters, spaces, apostrophes, and hyphens.`;
     }
   }
 
   if (address.length > FIELD_LIMITS.addressMax) {
-    return `Address must be ${FIELD_LIMITS.addressMax} characters or fewer.`;
+    errors.address = `Address must be ${FIELD_LIMITS.addressMax} characters or fewer.`;
   }
 
-  return null;
+  return errors;
 };
 
 export default function AdminAccountDialog({ children, onSaved }) {
@@ -137,6 +154,7 @@ export default function AdminAccountDialog({ children, onSaved }) {
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
   const [form, setForm] = useState(EMPTY_FORM);
   const [initialForm, setInitialForm] = useState(EMPTY_FORM);
 
@@ -155,6 +173,7 @@ export default function AdminAccountDialog({ children, onSaved }) {
   const loadAdminProfile = async () => {
     setLoadingProfile(true);
     setError("");
+    setFieldErrors({});
 
     try {
       const response = await api.get("/firstapp/user/me/");
@@ -177,20 +196,31 @@ export default function AdminAccountDialog({ children, onSaved }) {
   const handleInputChange = (field) => (event) => {
     const sanitizedValue = sanitizeValue(field, event.target.value);
     setForm((prev) => ({ ...prev, [field]: sanitizedValue }));
+
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
   };
 
   const handleResetChanges = () => {
     setForm(initialForm);
     setError("");
+    setFieldErrors({});
   };
 
   const handleSave = async (event) => {
     event.preventDefault();
     setError("");
+    setFieldErrors({});
 
-    const validationError = validateForm(form);
-    if (validationError) {
-      setError(validationError);
+    const validationErrors = validateFormFields(form);
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors);
+      const issueCount = Object.keys(validationErrors).length;
+      setError(`Please review the highlighted fields. ${issueCount} validation issue${issueCount > 1 ? "s" : ""} found.`);
       return;
     }
 
@@ -220,6 +250,20 @@ export default function AdminAccountDialog({ children, onSaved }) {
         onSaved("Admin account updated successfully.");
       }
     } catch (err) {
+      const responseData = err?.response?.data;
+      if (responseData && typeof responseData === "object") {
+        const backendFieldErrors = {};
+        Object.entries(responseData).forEach(([field, value]) => {
+          if (FIELD_LABELS[field]) {
+            backendFieldErrors[field] = Array.isArray(value) ? value.join(" ") : String(value);
+          }
+        });
+
+        if (Object.keys(backendFieldErrors).length > 0) {
+          setFieldErrors(backendFieldErrors);
+        }
+      }
+
       setError(parseApiError(err));
     } finally {
       setSaving(false);
@@ -231,7 +275,16 @@ export default function AdminAccountDialog({ children, onSaved }) {
     if (!nextOpen) {
       setSaving(false);
       setError("");
+      setFieldErrors({});
     }
+  };
+
+  const topErrorItems = Object.values(fieldErrors);
+
+  const getInputClassName = (fieldName, baseClass) => {
+    return fieldErrors[fieldName]
+      ? `${baseClass} border-red-500 focus:ring-red-500`
+      : baseClass;
   };
 
   return (
@@ -250,7 +303,16 @@ export default function AdminAccountDialog({ children, onSaved }) {
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Update Failed</AlertTitle>
-            <AlertDescription className="break-words">{error}</AlertDescription>
+            <AlertDescription className="break-words space-y-1">
+              <p>{error}</p>
+              {topErrorItems.length > 0 && (
+                <ul className="list-disc pl-4">
+                  {topErrorItems.slice(0, 5).map((item, index) => (
+                    <li key={`${item}-${index}`}>{item}</li>
+                  ))}
+                </ul>
+              )}
+            </AlertDescription>
           </Alert>
         )}
 
@@ -272,7 +334,7 @@ export default function AdminAccountDialog({ children, onSaved }) {
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSave} className="grid gap-5">
+          <form noValidate onSubmit={handleSave} className="grid gap-5">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <div className="grid gap-2">
@@ -286,7 +348,8 @@ export default function AdminAccountDialog({ children, onSaved }) {
                     pattern="^[A-Za-z0-9_]+$"
                     value={form.username}
                     onChange={handleInputChange("username")}
-                    className="h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm"
+                    className={getInputClassName("username", "h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm")}
+                    aria-invalid={!!fieldErrors.username}
                   />
                   <p className="text-xs text-gray-500">
                     Use {FIELD_LIMITS.usernameMin}-{FIELD_LIMITS.usernameMax} characters: letters, numbers, underscore.
@@ -302,7 +365,8 @@ export default function AdminAccountDialog({ children, onSaved }) {
                     maxLength={FIELD_LIMITS.emailMax}
                     value={form.email}
                     onChange={handleInputChange("email")}
-                    className="h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm"
+                    className={getInputClassName("email", "h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm")}
+                    aria-invalid={!!fieldErrors.email}
                   />
                 </div>
 
@@ -315,7 +379,8 @@ export default function AdminAccountDialog({ children, onSaved }) {
                       maxLength={FIELD_LIMITS.nameMax}
                       value={form.first_name}
                       onChange={handleInputChange("first_name")}
-                      className="h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm"
+                      className={getInputClassName("first_name", "h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm")}
+                      aria-invalid={!!fieldErrors.first_name}
                     />
                   </div>
 
@@ -327,7 +392,8 @@ export default function AdminAccountDialog({ children, onSaved }) {
                       maxLength={FIELD_LIMITS.nameMax}
                       value={form.middle_name}
                       onChange={handleInputChange("middle_name")}
-                      className="h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm"
+                      className={getInputClassName("middle_name", "h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm")}
+                      aria-invalid={!!fieldErrors.middle_name}
                     />
                   </div>
 
@@ -339,7 +405,8 @@ export default function AdminAccountDialog({ children, onSaved }) {
                       maxLength={FIELD_LIMITS.nameMax}
                       value={form.last_name}
                       onChange={handleInputChange("last_name")}
-                      className="h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm"
+                      className={getInputClassName("last_name", "h-10 px-3 w-full rounded-md border border-gray-300 bg-white text-sm")}
+                      aria-invalid={!!fieldErrors.last_name}
                     />
                   </div>
                 </div>
@@ -352,8 +419,9 @@ export default function AdminAccountDialog({ children, onSaved }) {
                     maxLength={FIELD_LIMITS.addressMax}
                     value={form.address}
                     onChange={handleInputChange("address")}
-                    className="w-full rounded-md border border-gray-300 bg-white text-sm p-3 resize-none"
+                    className={getInputClassName("address", "w-full rounded-md border border-gray-300 bg-white text-sm p-3 resize-none")}
                     placeholder="Business address or mailing address"
+                    aria-invalid={!!fieldErrors.address}
                   />
                   <p className="text-xs text-gray-500">
                     Max {FIELD_LIMITS.addressMax} characters.

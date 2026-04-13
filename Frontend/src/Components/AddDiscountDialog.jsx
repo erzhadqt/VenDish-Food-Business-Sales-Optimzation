@@ -43,7 +43,6 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
     setClaimLimit(val);
   };
 
-  // 🔴 Strict sanitization for Discount Value with 100% cap
   const handleDiscountValueChange = (e) => {
     let val = e.target.value.replace(/[^0-9.]/g, '');
     const parts = val.split('.');
@@ -57,7 +56,6 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
       val = val.replace(/^0+/, '');
     }
     
-    // 🔴 Logic: If percentage mode, cap the maximum input strictly to 100
     if (discountType === 'percentage' && val !== '') {
       if (parseFloat(val) > 100) {
         val = '100';
@@ -67,7 +65,6 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
     setDiscountValue(val);
   };
 
-  // 🔴 Pro-move: Handle Type changes so large fixed amounts get capped when switching to percentage
   const handleDiscountTypeChange = (newType) => {
     setDiscountType(newType);
     if (newType === 'percentage' && discountValue !== "") {
@@ -75,7 +72,7 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
         setDiscountValue("100");
       }
     } else if (newType === 'free_item') {
-      setDiscountValue(""); // clear value when switching to free item
+      setDiscountValue(""); 
     }
   };
 
@@ -98,10 +95,23 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
   const handleSave = async () => {
     setError(null);
 
-    if(!code || !ruleName) { setError("Please fill in required fields"); return; }
-    if(discountType !== 'free_item' && !discountValue) { setError("Enter discount value"); return; }
+    // 🔴 1. Basic validation for text inputs
+    if(!code || !ruleName) { setError("Please fill in all required fields (Code, Promotion Name)."); return; }
+    if(discountType !== 'free_item' && !discountValue) { setError("Please enter a discount value."); return; }
 
-    if (validTo && new Date(validTo) < new Date()) {
+    // 🔴 2. Strict validation for claim and usage limit
+    if(!claimLimit || parseInt(claimLimit) <= 0) {
+      setError("Please specify a valid Claim & Usage Limit. It cannot be left blank or zero.");
+      return;
+    }
+
+    // 🔴 3. NEW: Strict Date validation (cannot be blank)
+    if (!validTo) {
+      setError("Please specify a 'Valid Until' date. It cannot be left blank.");
+      return;
+    }
+
+    if (new Date(validTo) < new Date()) {
       setError("The validity period cannot be set in the past.");
       return;
     }
@@ -128,17 +138,21 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
       const criteriaRes = await api.post("/firstapp/coupons-criteria/", criteriaPayload);
       const newCriteriaId = criteriaRes.data.id;
 
+      // Ensure parseInt is safely applied, we already verified it's present above
+      const parsedLimit = parseInt(claimLimit, 10);
+
       await api.post("/firstapp/coupons/", {
         code: code.toUpperCase(),
         criteria_id: newCriteriaId,
         status: "Active",
-        usage_limit: claimLimit ? parseInt(claimLimit) : null,
-        claim_limit: claimLimit ? parseInt(claimLimit) : null
+        usage_limit: parsedLimit,
+        claim_limit: parsedLimit
       });
 
       onSaved(); 
       onOpenChange(false);
       
+      // Reset State
       setCode(""); setClaimLimit(""); setRuleName("");
       setMinSpend(""); setSelectedFreeProduct(""); setTargetProductId("all");
       setValidTo(""); setError(null);
@@ -163,7 +177,6 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
         {error && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Error</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
@@ -178,7 +191,7 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                    </div>
                    <div className="grid gap-4">
                       <div className="space-y-1">
-                          <Label>Code</Label>
+                          <Label>Code <span className="text-red-500">*</span></Label>
                           <div className="flex gap-2">
                               <Input placeholder="CODE123" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className="uppercase font-mono tracking-widest"/>
                               <Button variant="outline" size="icon" onClick={generateRandomCode}><Wand2 className="h-4 w-4" /></Button>
@@ -187,7 +200,9 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                       
                       <div className="grid gap-2">
                         <div className="space-y-1">
-                            <Label className="flex items-center gap-1">Total Claim & Usage Limit <Hash size={12}/></Label>
+                            <Label className="flex items-center gap-1">
+                                Total Claim & Usage Limit <span className="text-red-500">*</span> <Hash size={12}/>
+                            </Label>
                             <Input 
                               type="text" 
                               inputMode="numeric"
@@ -196,7 +211,7 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                               onChange={handleClaimLimitChange}
                               maxLength={10} 
                             />
-                            <p className="text-[10px] text-gray-500">Leave blank for unlimited. This limits how many total users can claim and use this code.</p>
+                            <p className="text-[10px] text-gray-500 pt-1">Limits how many total users can claim and use this code.</p>
                         </div>
                     </div>
                    </div>
@@ -209,7 +224,8 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                       <h3 className="font-semibold text-sm text-gray-700">3. Validity Period</h3>
                   </div>
                   <div className="grid gap-2">
-                      <Label>Valid Until</Label>
+                      {/* 🔴 NEW: Added the red required asterisk */}
+                      <Label>Valid Until <span className="text-red-500">*</span></Label>
                       <Input 
                           type="datetime-local" 
                           value={validTo} 
@@ -227,7 +243,7 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                     <h3 className="font-semibold text-sm text-gray-700">2. Discount Rules</h3>
                 </div>
                 <div className="grid gap-2">
-                    <Label>Promotion Name</Label>
+                    <Label>Promotion Name <span className="text-red-500">*</span></Label>
                     <Input placeholder="e.g., Summer Sale" value={ruleName} onChange={(e) => setRuleName(e.target.value)}/>
                 </div>
                 <div className="grid gap-2">
@@ -243,7 +259,6 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                 <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                         <Label>Discount Type</Label>
-                        {/* 🔴 Attached the new smart Type Change Handler */}
                         <Select value={discountType} onValueChange={handleDiscountTypeChange}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
@@ -254,7 +269,7 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                         </Select>
                     </div>
                     <div className="grid gap-2">
-                        <Label>{discountType === 'percentage' ? 'Percentage %' : discountType === 'free_item' ? 'Select Item' : 'Value'}</Label>
+                        <Label>{discountType === 'percentage' ? 'Percentage %' : discountType === 'free_item' ? 'Select Item' : 'Value'} <span className="text-red-500">*</span></Label>
                         {discountType === 'free_item' ? (
                             <Select value={selectedFreeProduct} onValueChange={setSelectedFreeProduct}>
                                 <SelectTrigger><SelectValue placeholder="Pick Item" /></SelectTrigger>
@@ -267,7 +282,7 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                               placeholder={discountType === 'percentage' ? "e.g. 15" : "e.g. 100.00"}
                               value={discountValue} 
                               onChange={handleDiscountValueChange}
-                              maxLength={discountType === 'percentage' ? 5 : 10} // 100.0 is max 5 chars
+                              maxLength={discountType === 'percentage' ? 5 : 10} 
                             />
                         )}
                     </div>

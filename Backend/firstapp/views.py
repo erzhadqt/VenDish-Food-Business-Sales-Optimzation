@@ -176,6 +176,9 @@ def _process_coupon_usage(receipt, target_customer):
     for coupon_ref in receipt.coupons.all():
         coupon = Coupon.objects.select_for_update().get(id=coupon_ref.id)
 
+        if coupon.is_archived:
+            raise Exception(f"Coupon {coupon.code} is archived.")
+
         if coupon.criteria and coupon.criteria.valid_to and coupon.criteria.valid_to < timezone.now():
             raise Exception(f"Coupon {coupon.code} has expired.")
 
@@ -765,7 +768,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
         customer = get_object_or_404(User, id=pk)
 
-        claimed_coupons = Coupon.objects.filter(claimed_by=customer).annotate(
+        claimed_coupons = Coupon.objects.filter(claimed_by=customer, is_archived=False).annotate(
             is_used_by_user=Exists(
                 Receipt.objects.filter(
                     coupons=OuterRef('pk'),
@@ -1604,40 +1607,131 @@ class CouponViewSet(viewsets.ModelViewSet):
 
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['code']
+
+    @staticmethod
+    def _is_truthy(value):
+        return str(value).strip().lower() in {'1', 'true', 'yes', 'on'}
     
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
             permission_classes = [AllowAny]
-        else:
+        elif self.action in ['claim', 'my_coupons']:
             permission_classes = [IsAuthenticated]
+        else:
+            permission_classes = [IsAdminUser]
         return [permission() for permission in permission_classes]
 
     def get_queryset(self):
         user = self.request.user
-        
+
+        include_archived = self._is_truthy(self.request.query_params.get('include_archived'))
+        archived_only = self._is_truthy(self.request.query_params.get('archived_only'))
+
         # Base query for public coupons
-        public_coupons = Coupon.objects.filter(status='Active')
+        public_coupons = Coupon.objects.filter(status='Active', is_archived=False)
 
         if user.is_authenticated:
-            # FIX: Allow STAFF (Cashiers) to see ALL coupons
+            # Allow STAFF (Cashiers/Admin) to optionally include archived coupons for management.
             if user.is_superuser or user.is_staff:
-                return Coupon.objects.all().order_by('-id')
+                staff_queryset = Coupon.objects.all().order_by('-id')
+
+                if archived_only:
+                    return staff_queryset.filter(is_archived=True)
+
+                if include_archived:
+                    return staff_queryset
+
+                return staff_queryset.filter(is_archived=False)
             
             # For Users: Show Active Public + Coupons they own
             return Coupon.objects.filter(
-                Q(status='Active') | 
+                Q(status='Active') |
                 Q(claimed_by=user)
-            ).distinct().order_by('-id')
+            ).filter(is_archived=False).distinct().order_by('-id')
         
         return public_coupons.order_by('-id')
     
     def destroy(self, request, *args, **kwargs):
-        coupon = self.get_object()
-        # Optional: You can prevent deletion if it's already used
-        if coupon.times_used > 0:
-            return Response({"error": "Cannot delete a coupon that has been used."}, status=status.HTTP_400_BAD_REQUEST)
-        
-        return super().destroy(request, *args, **kwargs)
+        return Response(
+            {'detail': 'Deleting coupons is disabled. Archive coupons instead.'},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    @action(detail=False, methods=['post', 'patch'], url_path='archive')
+    def archive(self, request):
+        coupon_ids = request.data.get('coupon_ids', [])
+
+        if not isinstance(coupon_ids, list) or not coupon_ids:
+            return Response(
+                {'detail': 'Provide a non-empty coupon_ids array.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        normalized_ids = []
+        for coupon_id in coupon_ids:
+            try:
+                normalized_ids.append(int(coupon_id))
+            except (TypeError, ValueError):
+                continue
+
+        if not normalized_ids:
+            return Response(
+                {'detail': 'No valid coupon IDs were provided.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        updated_count = Coupon.objects.filter(id__in=normalized_ids, is_archived=False).update(
+            is_archived=True,
+            archived_at=timezone.now(),
+        )
+
+        return Response(
+            {'archived_count': updated_count},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=['post', 'patch'], url_path='unarchive')
+    def unarchive(self, request):
+        coupon_ids = request.data.get('coupon_ids', [])
+
+        if not isinstance(coupon_ids, list) or not coupon_ids:
+            return Response(
+                {'detail': 'Provide a non-empty coupon_ids array.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        normalized_ids = []
+        for coupon_id in coupon_ids:
+            try:
+                normalized_ids.append(int(coupon_id))
+            except (TypeError, ValueError):
+                continue
+
+        if not normalized_ids:
+            return Response(
+                {'detail': 'No valid coupon IDs were provided.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        target_ids = list(
+            Coupon.objects.filter(id__in=normalized_ids, is_archived=True).values_list('id', flat=True)
+        )
+
+        if not target_ids:
+            return Response(
+                {'unarchived_count': 0},
+                status=status.HTTP_200_OK,
+            )
+
+        Coupon.objects.filter(id__in=target_ids).update(
+            is_archived=False,
+            archived_at=None,
+        )
+
+        return Response(
+            {'unarchived_count': len(target_ids)},
+            status=status.HTTP_200_OK,
+        )
 
     @action(detail=True, methods=['post'], url_path='claim')
     def claim(self, request, pk=None):
@@ -1646,6 +1740,9 @@ class CouponViewSet(viewsets.ModelViewSet):
         try:
             with transaction.atomic():
                 coupon = Coupon.objects.select_for_update().get(id=pk)
+
+                if coupon.is_archived:
+                    return Response({"error": "This coupon is archived."}, status=status.HTTP_400_BAD_REQUEST)
 
                 if coupon.criteria and coupon.criteria.valid_to and coupon.criteria.valid_to < timezone.now():
                     return Response({"error": "This coupon has expired."}, status=status.HTTP_400_BAD_REQUEST)
@@ -1656,13 +1753,23 @@ class CouponViewSet(viewsets.ModelViewSet):
                 if coupon.claimed_by.filter(id=user.id).exists():
                     return Response({"message": "You already have this coupon in your wallet."}, status=status.HTTP_200_OK)
 
-                current_claims = coupon.claimed_by.count()
+                # Defensive count: protect against stale counter drift by taking the higher value.
+                current_claims = max(coupon.times_claimed, coupon.claimed_by.count())
                 if coupon.claim_limit is not None and current_claims >= coupon.claim_limit:
                     return Response({"error": "This coupon is fully claimed (Sold Out in App)."}, status=status.HTTP_400_BAD_REQUEST)
 
                 coupon.claimed_by.add(user)
-                coupon.times_claimed = coupon.claimed_by.count()
-                coupon.save()
+
+                # Re-check after insertion to hard-stop over-claiming in edge/race cases.
+                updated_claims = coupon.claimed_by.count()
+                if coupon.claim_limit is not None and updated_claims > coupon.claim_limit:
+                    coupon.claimed_by.remove(user)
+                    coupon.times_claimed = coupon.claimed_by.count()
+                    coupon.save(update_fields=['times_claimed'])
+                    return Response({"error": "This coupon is fully claimed (Sold Out in App)."}, status=status.HTTP_400_BAD_REQUEST)
+
+                coupon.times_claimed = updated_claims
+                coupon.save(update_fields=['times_claimed'])
 
             serializer = self.get_serializer(coupon)
             return Response(serializer.data, status=status.HTTP_200_OK)
@@ -1677,7 +1784,7 @@ class CouponViewSet(viewsets.ModelViewSet):
             return Response({"error": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
 
         # Check if a COMPLETED receipt exists for this specific user & coupon
-        my_coupons = Coupon.objects.filter(claimed_by=user).annotate(
+        my_coupons = Coupon.objects.filter(claimed_by=user, is_archived=False).annotate(
             is_used_by_user=Exists(
                 Receipt.objects.filter(
                     coupons=OuterRef('pk'),
@@ -2317,6 +2424,8 @@ class VerifyVoidPinView(APIView):
                 return Response({"error": "Invalid Manager PIN"}, status=status.HTTP_400_BAD_REQUEST)
 
 from decimal import Decimal
+
+TIN_NUMBER_REGEX = re.compile(r'^\d{3}-\d{3}-\d{3}-\d{3}$')
             
 class StoreSettingsView(APIView):
     permission_classes = [IsAuthenticated]
@@ -2325,7 +2434,8 @@ class StoreSettingsView(APIView):
         settings, _ = StoreSettings.objects.get_or_create(id=1)
         return Response({
             "max_coupons_per_order": settings.max_coupons_per_order,
-            "pos_cash_balance": settings.pos_cash_balance # [NEW] Return balance
+            "pos_cash_balance": settings.pos_cash_balance, # [NEW] Return balance
+            "tin_number": settings.tin_number,
         }, status=status.HTTP_200_OK)
 
     def post(self, request):
@@ -2344,10 +2454,26 @@ class StoreSettingsView(APIView):
         if pos_cash_balance is not None:
             settings.pos_cash_balance = Decimal(str(pos_cash_balance))
 
+        tin_number = request.data.get('tin_number')
+        if tin_number is not None:
+            normalized_tin = str(tin_number).strip()
+            if not TIN_NUMBER_REGEX.fullmatch(normalized_tin):
+                return Response(
+                    {
+                        "error": "TIN number must follow the format 000-000-000-000.",
+                        "field_errors": {
+                            "tin_number": "TIN must contain 12 digits formatted as 000-000-000-000.",
+                        },
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            settings.tin_number = normalized_tin
+
         settings.save()
 
         return Response({
             "message": "Settings updated successfully.",
             "max_coupons_per_order": settings.max_coupons_per_order,
-            "pos_cash_balance": settings.pos_cash_balance # [NEW] Return updated balance
+            "pos_cash_balance": settings.pos_cash_balance, # [NEW] Return updated balance
+            "tin_number": settings.tin_number,
         }, status=status.HTTP_200_OK)

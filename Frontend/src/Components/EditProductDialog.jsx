@@ -19,6 +19,7 @@ import { Skeleton } from "../Components/ui/skeleton";
 export default function EditProductDialog({ product, onClose, onSaved, categories = [] }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [fieldErrors, setFieldErrors] = useState({});
 
   // Controlled states for inputs
   const [productName, setProductName] = useState(product?.product_name || "");
@@ -27,11 +28,28 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
   const [servings, setServings] = useState(String(product?.stock_quantity ?? 0));
   const [image, setImage] = useState(null);
 
+  const clearFieldError = (fieldName) => {
+    setFieldErrors((prev) => {
+      if (!prev[fieldName]) return prev;
+      const next = { ...prev };
+      delete next[fieldName];
+      return next;
+    });
+  };
+
+  const getInputClassName = (fieldName, baseClass = "") => {
+    const mergedClass = [baseClass, fieldErrors[fieldName] ? "border-red-500 focus-visible:ring-red-500" : ""]
+      .filter(Boolean)
+      .join(" ");
+    return mergedClass;
+  };
+
   // 🔴 Strict sanitization for Product Name
   const handleProductNameChange = (e) => {
     // Only allows Letters, Numbers, Spaces, Hyphens, Apostrophes, and Ampersands.
     let val = e.target.value.replace(/[^a-zA-Z0-9\s\-'&]/g, '');
     setProductName(val);
+    clearFieldError("product_name");
   };
 
   // 🔴 Strict sanitization for Price
@@ -46,6 +64,7 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
     // Optional: Limit length to prevent crazy high numbers
     if (val.length <= 15) {
       setPrice(val);
+      clearFieldError("price");
     }
   };
 
@@ -53,38 +72,50 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
   const handleServingsChange = (e) => {
     let val = e.target.value.replace(/[^0-9]/g, '');
     setServings(val);
+    clearFieldError("servings");
   };
 
   const handleSave = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setFieldErrors({});
+
+    const nextFieldErrors = {};
+    const normalizedProductName = productName.trim();
+    const numericPrice = parseFloat(price || "0");
+
+    if (!normalizedProductName) {
+      nextFieldErrors.product_name = "Product name must not be blank.";
+    }
+
+    if (normalizedProductName && !/[a-zA-Z]/.test(normalizedProductName)) {
+      nextFieldErrors.product_name = "Product name must contain letters.";
+    }
+
+    if (!category) {
+      nextFieldErrors.category = "Category must not be blank.";
+    }
+
+    if (price === "" || Number.isNaN(numericPrice) || numericPrice <= 0) {
+      nextFieldErrors.price = "Price must be greater than 0.";
+    }
+
+    if (servings === "") {
+      nextFieldErrors.servings = "Servings must not be blank.";
+    }
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors);
+      setError(`Please review the highlighted fields. ${Object.keys(nextFieldErrors).length} validation issue${Object.keys(nextFieldErrors).length > 1 ? "s" : ""} found.`);
+      setLoading(false);
+      return;
+    }
 
     // 🔴 Validation: Check for empty spaces
-    if (!productName.trim()) {
-      setError("Product name cannot be empty.");
-      setLoading(false);
-      return;
-    }
-
-    // 🔴 Validation: Ensure product name contains at least one letter
-    if (!/[a-zA-Z]/.test(productName)) {
-      setError("Product name must contain of letters.");
-      setLoading(false);
-      return;
-    }
-
-    // 🔴 Validation: Prevent zero or empty prices
-    const numericPrice = parseFloat(price || "0");
-    if (numericPrice <= 0) {
-      setError("Price must be greater than 0.");
-      setLoading(false);
-      return;
-    }
-
     const formData = new FormData();
     
-    formData.append("product_name", productName.trim());
+    formData.append("product_name", normalizedProductName);
     formData.append("price", numericPrice);
     formData.append("category", category);
     const parsedServings = parseInt(servings || "0", 10);
@@ -113,8 +144,11 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
   // Wrapper for closing to clear errors
   const handleClose = () => {
     setError(null);
+    setFieldErrors({});
     onClose();
   };
+
+  const topErrorItems = Object.values(fieldErrors);
 
   return (
     <Dialog open={true} onOpenChange={handleClose}>
@@ -157,11 +191,20 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Error</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription className="space-y-1">
+              <p>{error}</p>
+              {topErrorItems.length > 0 && (
+                <ul className="list-disc pl-4">
+                  {topErrorItems.slice(0, 4).map((item, index) => (
+                    <li key={`${item}-${index}`}>{item}</li>
+                  ))}
+                </ul>
+              )}
+            </AlertDescription>
           </Alert>
         )}
 
-        <form onSubmit={handleSave} className="grid gap-4">
+        <form onSubmit={handleSave} className="grid gap-4" noValidate>
           <div className="grid gap-2">
             <Label>Product Name</Label>
             <Input 
@@ -170,6 +213,8 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
               onChange={handleProductNameChange} // 🔴 Added handler
               required 
               maxLength={50}
+              className={getInputClassName("product_name")}
+              aria-invalid={!!fieldErrors.product_name}
             />
           </div>
 
@@ -179,9 +224,13 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
               name="category"
               id="category"
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              onChange={(e) => {
+                setCategory(e.target.value);
+                clearFieldError("category");
+              }}
               required
-              className="px-3 py-2 border rounded-md"
+              className={`px-3 py-2 border rounded-md ${fieldErrors.category ? "border-red-500 focus:ring-red-500" : ""}`}
+              aria-invalid={!!fieldErrors.category}
             >
               <option value="" disabled>
                 Select category
@@ -208,6 +257,8 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
               onChange={handlePriceChange} 
               required
               maxLength={10}
+              className={getInputClassName("price")}
+              aria-invalid={!!fieldErrors.price}
             />
           </div>
 
@@ -221,6 +272,8 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
               onChange={handleServingsChange} // 🔴 Added handler
               required
               maxLength={10}
+              className={getInputClassName("servings")}
+              aria-invalid={!!fieldErrors.servings}
             />
           </div>
 

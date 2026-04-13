@@ -7,7 +7,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from .models import OTP, PasswordResetToken, EmailVerificationToken, Review, Category, Product
+from .models import OTP, PasswordResetToken, EmailVerificationToken, Review, Category, Product, Coupon, CouponCriteria
 
 
 @override_settings(
@@ -547,3 +547,218 @@ class ProductArchiveTests(APITestCase):
 		self.assertIn(self.product_uncategorized.id, returned_ids)
 		self.assertNotIn(self.product_a.id, returned_ids)
 		self.assertNotIn(self.product_b.id, returned_ids)
+
+
+class CouponArchiveTests(APITestCase):
+	def setUp(self):
+		user_model = get_user_model()
+		self.admin = user_model.objects.create_user(
+			username='coupon_archive_admin',
+			email='coupon_archive_admin@example.com',
+			password='AdminPass123!',
+			is_staff=True,
+		)
+		self.customer = user_model.objects.create_user(
+			username='coupon_archive_customer',
+			email='coupon_archive_customer@example.com',
+			password='CustomerPass123!',
+		)
+
+		self.criteria = CouponCriteria.objects.create(
+			name='Archive Test Rule',
+			discount_type='fixed',
+			discount_value='20.00',
+		)
+		self.coupon_a = Coupon.objects.create(
+			code='ARCHIVEA',
+			criteria=self.criteria,
+			status='Active',
+		)
+		self.coupon_b = Coupon.objects.create(
+			code='ARCHIVEB',
+			criteria=self.criteria,
+			status='Active',
+		)
+
+	def test_admin_can_archive_multiple_coupons(self):
+		self.client.force_authenticate(user=self.admin)
+
+		response = self.client.post(
+			'/firstapp/coupons/archive/',
+			{'coupon_ids': [self.coupon_a.id, self.coupon_b.id]},
+			format='json',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data.get('archived_count'), 2)
+
+		self.coupon_a.refresh_from_db()
+		self.coupon_b.refresh_from_db()
+
+		self.assertTrue(self.coupon_a.is_archived)
+		self.assertTrue(self.coupon_b.is_archived)
+		self.assertIsNotNone(self.coupon_a.archived_at)
+		self.assertIsNotNone(self.coupon_b.archived_at)
+
+	def test_admin_can_unarchive_multiple_coupons(self):
+		self.client.force_authenticate(user=self.admin)
+		self.client.post(
+			'/firstapp/coupons/archive/',
+			{'coupon_ids': [self.coupon_a.id, self.coupon_b.id]},
+			format='json',
+		)
+
+		response = self.client.post(
+			'/firstapp/coupons/unarchive/',
+			{'coupon_ids': [self.coupon_a.id, self.coupon_b.id]},
+			format='json',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data.get('unarchived_count'), 2)
+
+		self.coupon_a.refresh_from_db()
+		self.coupon_b.refresh_from_db()
+
+		self.assertFalse(self.coupon_a.is_archived)
+		self.assertFalse(self.coupon_b.is_archived)
+		self.assertIsNone(self.coupon_a.archived_at)
+		self.assertIsNone(self.coupon_b.archived_at)
+
+	def test_non_admin_cannot_archive_coupons(self):
+		self.client.force_authenticate(user=self.customer)
+
+		response = self.client.post(
+			'/firstapp/coupons/archive/',
+			{'coupon_ids': [self.coupon_a.id]},
+			format='json',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+	def test_archived_coupons_hidden_from_default_list_for_staff(self):
+		self.client.force_authenticate(user=self.admin)
+		self.client.post(
+			'/firstapp/coupons/archive/',
+			{'coupon_ids': [self.coupon_a.id]},
+			format='json',
+		)
+
+		response = self.client.get('/firstapp/coupons/')
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		returned_ids = {item['id'] for item in response.data}
+		self.assertNotIn(self.coupon_a.id, returned_ids)
+		self.assertIn(self.coupon_b.id, returned_ids)
+
+	def test_admin_can_include_archived_coupons_in_list(self):
+		self.client.force_authenticate(user=self.admin)
+		self.client.post(
+			'/firstapp/coupons/archive/',
+			{'coupon_ids': [self.coupon_a.id]},
+			format='json',
+		)
+
+		response = self.client.get('/firstapp/coupons/?include_archived=true')
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		returned_ids = {item['id'] for item in response.data}
+		self.assertIn(self.coupon_a.id, returned_ids)
+		self.assertIn(self.coupon_b.id, returned_ids)
+
+	def test_delete_coupon_is_disabled(self):
+		self.client.force_authenticate(user=self.admin)
+
+		response = self.client.delete(f'/firstapp/coupons/{self.coupon_a.id}/')
+
+		self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+		self.coupon_a.refresh_from_db()
+		self.assertFalse(self.coupon_a.is_archived)
+
+	def test_archived_coupon_cannot_be_claimed(self):
+		self.client.force_authenticate(user=self.admin)
+		self.client.post(
+			'/firstapp/coupons/archive/',
+			{'coupon_ids': [self.coupon_a.id]},
+			format='json',
+		)
+
+		self.client.force_authenticate(user=self.customer)
+		response = self.client.post(f'/firstapp/coupons/{self.coupon_a.id}/claim/', format='json')
+
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		self.assertIn('archived', str(response.data.get('error', '')).lower())
+
+	def test_archived_active_coupon_hidden_from_pos_code_lookup(self):
+		self.client.force_authenticate(user=self.admin)
+		self.client.post(
+			'/firstapp/coupons/archive/',
+			{'coupon_ids': [self.coupon_a.id]},
+			format='json',
+		)
+
+		response = self.client.get('/firstapp/coupons/?code=ARCHIVEA')
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data), 0)
+
+	def test_unarchived_active_coupon_visible_again_for_pos_lookup(self):
+		self.client.force_authenticate(user=self.admin)
+		self.client.post(
+			'/firstapp/coupons/archive/',
+			{'coupon_ids': [self.coupon_a.id]},
+			format='json',
+		)
+		self.client.post(
+			'/firstapp/coupons/unarchive/',
+			{'coupon_ids': [self.coupon_a.id]},
+			format='json',
+		)
+
+		response = self.client.get('/firstapp/coupons/?code=ARCHIVEA')
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data), 1)
+		self.assertEqual(response.data[0].get('id'), self.coupon_a.id)
+
+	def test_claim_limit_blocks_third_unique_user(self):
+		user_model = get_user_model()
+		claimer_one = user_model.objects.create_user(
+			username='claimer_one',
+			email='claimer_one@example.com',
+			password='CustomerPass123!',
+		)
+		claimer_two = user_model.objects.create_user(
+			username='claimer_two',
+			email='claimer_two@example.com',
+			password='CustomerPass123!',
+		)
+		claimer_three = user_model.objects.create_user(
+			username='claimer_three',
+			email='claimer_three@example.com',
+			password='CustomerPass123!',
+		)
+
+		limited_coupon = Coupon.objects.create(
+			code='LIMITTWO',
+			criteria=self.criteria,
+			status='Active',
+			claim_limit=2,
+		)
+
+		self.client.force_authenticate(user=claimer_one)
+		first = self.client.post(f'/firstapp/coupons/{limited_coupon.id}/claim/', format='json')
+		self.assertEqual(first.status_code, status.HTTP_200_OK)
+
+		self.client.force_authenticate(user=claimer_two)
+		second = self.client.post(f'/firstapp/coupons/{limited_coupon.id}/claim/', format='json')
+		self.assertEqual(second.status_code, status.HTTP_200_OK)
+
+		self.client.force_authenticate(user=claimer_three)
+		third = self.client.post(f'/firstapp/coupons/{limited_coupon.id}/claim/', format='json')
+		self.assertEqual(third.status_code, status.HTTP_400_BAD_REQUEST)
+		self.assertIn('fully claimed', str(third.data.get('error', '')).lower())
+
+		limited_coupon.refresh_from_db()
+		self.assertEqual(limited_coupon.claimed_by.count(), 2)
+		self.assertEqual(limited_coupon.times_claimed, 2)

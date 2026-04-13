@@ -20,15 +20,35 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
   const [productName, setProductName] = useState("");
   const [category, setCategory] = useState("");
   const [price, setPrice] = useState("");
-  const [servings, setServings] = useState("0");
+  const [servings, setServings] = useState("");
   
   const [loading, setLoading] = useState(false);
   const [image, setImage] = useState(null);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
+
+  const clearFieldError = (fieldName) => {
+    setFieldErrors((prev) => {
+      if (!prev[fieldName]) return prev;
+      const next = { ...prev };
+      delete next[fieldName];
+      return next;
+    });
+  };
+
+  const getInputClassName = (fieldName, baseClass = "") => {
+    const mergedClass = [baseClass, fieldErrors[fieldName] ? "border-red-500 focus-visible:ring-red-500" : ""]
+      .filter(Boolean)
+      .join(" ");
+    return mergedClass;
+  };
 
   const handleOpenChange = (val) => {
     setOpen(val);
-    if (!val) setError("");
+    if (!val) {
+      setError("");
+      setFieldErrors({});
+    }
   };
 
   // Strict sanitization for Product Name
@@ -36,6 +56,7 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
     // Only allows Letters, Numbers, Spaces, Hyphens, Apostrophes, and Ampersands.
     let val = e.target.value.replace(/[^a-zA-Z0-9\s\-'&]/g, '');
     setProductName(val);
+    clearFieldError("productName");
   };
 
   // Strict sanitization for Price
@@ -48,48 +69,52 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
     }
     
     setPrice(val);
+    clearFieldError("price");
   };
 
   // Strict sanitization for Servings
   const handleServingsChange = (e) => {
     let val = e.target.value.replace(/[^0-9]/g, '');
     setServings(val);
+    clearFieldError("servings");
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setFieldErrors({});
     setLoading(true);
 
-    // Validate that the product name isn't just empty spaces
-    if (!productName.trim()) {
-      setError("Product name cannot be empty.");
-      setLoading(false);
-      return;
-    }
-
-    // 🔴 NEW: Validate that the product name is not entirely numbers/symbols
-    // This checks if the input is made up ONLY of numbers, spaces, hyphens, or ampersands.
-    // If it is, it means they didn't include a single letter.
-    if (!/[a-zA-Z]/.test(productName)) {
-      setError("Product name must contain of letters.");
-      setLoading(false);
-      return;
-    }
-
-    // Prevent saving if price is 0, empty, or exactly 0.00
+    const nextFieldErrors = {};
+    const normalizedProductName = productName.trim();
     const numericPrice = parseFloat(price || "0");
-    if (numericPrice <= 0) {
-      setError("Price must be greater than 0.");
+
+    if (!normalizedProductName) {
+      nextFieldErrors.productName = "Product name must not be blank.";
+    }
+
+    if (normalizedProductName && !/[a-zA-Z]/.test(normalizedProductName)) {
+      nextFieldErrors.productName = "Product name must contain letters.";
+    }
+
+    if (price === "" || Number.isNaN(numericPrice) || numericPrice <= 0) {
+      nextFieldErrors.price = "Price must be greater than 0.";
+    }
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors);
+      setError(`Please review the highlighted fields. ${Object.keys(nextFieldErrors).length} validation issue${Object.keys(nextFieldErrors).length > 1 ? "s" : ""} found.`);
       setLoading(false);
       return;
     }
 
+    // Validate that the product name isn't just empty spaces
     const isDuplicate = existingProducts.some(
-      (p) => p.product_name.toLowerCase() === productName.trim().toLowerCase()
+      (p) => p.product_name.toLowerCase() === normalizedProductName.toLowerCase()
     );
 
     if (isDuplicate) {
+      setFieldErrors({ productName: "A product with this name already exists." });
       setError("A product with this name already exists.");
       setLoading(false); 
       return; 
@@ -97,11 +122,16 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
 
     try {
       const formData = new FormData();
-      formData.append("product_name", productName.trim());
+      formData.append("product_name", normalizedProductName);
       
-      formData.append("category", category); 
+      // Only append category if it's not blank. This allows the backend to handle it as null/uncategorized.
+      if (category) {
+        formData.append("category", category); 
+      }
+      
       formData.append("price", numericPrice);
 
+      // Parses input. Falls back to "0" if left blank by the user.
       const parsedServings = parseInt(servings || "0", 10);
       const servingCount = Number.isFinite(parsedServings) ? Math.max(0, parsedServings) : 0;
 
@@ -123,15 +153,18 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
       setProductName("");
       setCategory("");
       setPrice("");
-      setServings("0");
+      setServings("");
       setImage(null);
       setError("");
+      setFieldErrors({});
     } catch (err) {
       console.error("Failed to add product:", err.response?.data || err);
       setLoading(false);
       setError(err.response?.data?.message || "Failed to add product. Please try again.");
     }
   };
+
+  const topErrorItems = Object.values(fieldErrors);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -146,11 +179,20 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
         {error && (
           <div className="bg-red-50 text-red-600 text-sm p-3 rounded-md flex items-center gap-2 border border-red-200">
             <AlertCircle size={16} />
-            {error}
+            <div className="space-y-1">
+              <p>{error}</p>
+              {topErrorItems.length > 0 && (
+                <ul className="list-disc pl-4">
+                  {topErrorItems.slice(0, 4).map((item, index) => (
+                    <li key={`${item}-${index}`}>{item}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         )}
 
-        <form className="grid gap-4" onSubmit={handleSubmit}>
+        <form className="grid gap-4" onSubmit={handleSubmit} noValidate>
           {/* Product Name Input */}
           <div className="grid gap-2">
             <Label htmlFor="product-name">Product Name</Label>
@@ -159,7 +201,8 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
               value={productName}
               onChange={handleProductNameChange}
               required
-              className={error.includes("name") ? "border-red-500 focus-visible:ring-red-500" : ""}
+              className={getInputClassName("productName")}
+              aria-invalid={!!fieldErrors.productName}
               maxLength={20}
             />
           </div>
@@ -170,11 +213,16 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
             <select
               id="category"
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              required
-              className="px-3 py-2 border rounded-md"
+              onChange={(e) => {
+                setCategory(e.target.value);
+                clearFieldError("category");
+              }}
+              // Removed the 'required' attribute here
+              className={`px-3 py-2 border rounded-md ${fieldErrors.category ? "border-red-500 focus:ring-red-500" : ""}`}
+              aria-invalid={!!fieldErrors.category}
             >
-              <option value="" disabled>Select category</option>
+              {/* Changed from disabled to selectable default */}
+              <option value="">Select Category</option>
               {categories.length > 0 ? (
                 categories.map((c) => (
                   <option key={c.value} value={c.value}>{c.label}</option>
@@ -196,6 +244,9 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
                 onChange={handlePriceChange}
                 placeholder="0.00"
                 required
+                className={getInputClassName("price")}
+                aria-invalid={!!fieldErrors.price}
+                maxLength={13}
               />
           </div>
 
@@ -208,7 +259,11 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
               inputMode="numeric"   
               value={servings}
               onChange={handleServingsChange}
-              required
+              placeholder="0"
+              // Removed the 'required' attribute here
+              className={getInputClassName("servings")}
+              aria-invalid={!!fieldErrors.servings}
+              maxLength={11}
             />
           </div>
 
