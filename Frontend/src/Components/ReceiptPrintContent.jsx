@@ -43,7 +43,7 @@ const ReceiptPrintContent = forwardRef(({ transactionData, tinNumber, receiptPho
     DEFAULT_RECEIPT_PHONE
   );
 
-  // ✅ FIX: Added getCouponDisplay specifically formatted for narrow thermal paper
+  // Formatted for narrow thermal paper
   const getCouponDisplay = (coupon) => {
     if (!coupon.criteria_details) return `-${coupon.rate}`;
     
@@ -208,13 +208,15 @@ const ReceiptPrintContent = forwardRef(({ transactionData, tinNumber, receiptPho
             <span>{vat.toFixed(2)}</span>
           </div>
 
-          {/* ✅ FIX: REPLACED NaN CAUSING CODE WITH getCouponDisplay */}
+          {/* ✅ FIX: Applied wordBreak: 'break-all' and flex: 1 to ensure the code wraps naturally */}
           {coupons.length > 0 && coupons.map((coupon, idx) => (
-            <div key={idx} className="receipt-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1px' }}>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '40%' }}>
+            <div key={idx} className="receipt-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1px' }}>
+              <span style={{ flex: 1, wordBreak: 'break-all', paddingRight: '4px', lineHeight: '1.2' }}>
                 Disc({coupon.code}):
               </span>
-              <span style={{ textAlign: 'right' }}>{getCouponDisplay(coupon)}</span>
+              <span style={{ textAlign: 'right', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                {getCouponDisplay(coupon)}
+              </span>
             </div>
           ))}
 

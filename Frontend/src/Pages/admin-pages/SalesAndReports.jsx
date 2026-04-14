@@ -1020,7 +1020,7 @@ export default function SalesAndReports() {
                   </div>
                   <p className="text-xs text-gray-400 mt-2 font-medium">
                     {filterCashier === 'ALL' 
-                      ? (showNetRevenue ? 'Raw revenue minus VAT' : 'Overall revenue collected') 
+                      ? (showNetRevenue ? 'Raw revenue without VAT' : 'Overall revenue collected') 
                       : `Revenue by ${filterCashier}`}
                   </p>
                 </div>

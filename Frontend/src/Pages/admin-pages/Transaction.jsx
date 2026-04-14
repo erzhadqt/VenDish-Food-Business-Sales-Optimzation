@@ -174,8 +174,9 @@ const Transaction = () => {
 
     const paginatedTransactions = filteredTransactions.slice((validCurrentPage - 1) * rowsPerPage, validCurrentPage * rowsPerPage);  
 
-    const handlePrevPage = () => setCurrentPage((prev) => Math.max(prev - 1, 1));  
-    const handleNextPage = () => setCurrentPage((prev) => Math.min(prev + 1, totalPages));  
+    // Dynamic jump functions for pagination
+    const jumpPrev = (amount) => setCurrentPage((prev) => Math.max(prev - amount, 1));  
+    const jumpNext = (amount) => setCurrentPage((prev) => Math.min(prev + amount, totalPages));  
 
     return (  
         <div className="w-full p-4 md:p-6">  
@@ -187,7 +188,6 @@ const Transaction = () => {
                     </h1>  
                 </nav>  
 
-                {/* Updated Grid for exact 6 columns and consistent spacing */}
                 <div className={`grid grid-cols-1 sm:grid-cols-2 ${canUseCashierFilter ? 'lg:grid-cols-6' : 'lg:grid-cols-5'} gap-4 mb-6`}>  
                     <div className="flex flex-col">
                         <label className="text-sm font-medium text-gray-700 mb-1">Date</label>
@@ -357,14 +357,35 @@ const Transaction = () => {
                                 </table>  
                             </div>  
 
-                            <div className="flex justify-between sm:justify-end items-center gap-2 mt-4 p-4 border-t border-gray-100">  
-                                <button onClick={handlePrevPage} disabled={validCurrentPage === 1} className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-50">  
-                                    <ChevronLeft size={20} />  
-                                </button>  
-                                <span className="text-sm text-gray-600">Page {validCurrentPage} of {totalPages || 1}</span>  
-                                <button onClick={handleNextPage} disabled={validCurrentPage === totalPages || totalPages === 0} className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-50">  
-                                    <ChevronRight size={20} />  
-                                </button>  
+                            {/* Enhanced Pagination Controls */}
+                            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 p-4 border-t border-gray-100 bg-gray-50/50">  
+                                <div className="flex items-center gap-1.5">
+                                    <button onClick={() => jumpPrev(10)} disabled={validCurrentPage === 1} className="px-2.5 py-1.5 rounded-md hover:bg-gray-200 text-gray-600 disabled:opacity-40 text-xs font-bold transition-colors border border-transparent hover:border-gray-300" title="Jump 10 pages back">  
+                                        -10  
+                                    </button>  
+                                    <button onClick={() => jumpPrev(5)} disabled={validCurrentPage === 1} className="px-2.5 py-1.5 rounded-md hover:bg-gray-200 text-gray-600 disabled:opacity-40 text-xs font-bold transition-colors border border-transparent hover:border-gray-300" title="Jump 5 pages back">  
+                                        -5  
+                                    </button>  
+                                    <button onClick={() => jumpPrev(1)} disabled={validCurrentPage === 1} className="p-1.5 rounded-full hover:bg-gray-200 text-gray-700 disabled:opacity-40 transition-colors border border-gray-200 bg-white shadow-sm ml-1" title="Previous page">  
+                                        <ChevronLeft size={20} />  
+                                    </button>  
+                                </div>
+
+                                <span className="text-sm font-semibold text-gray-700 bg-white px-4 py-1.5 rounded-full border border-gray-200 shadow-sm">
+                                    Page {validCurrentPage} of {totalPages || 1}
+                                </span>  
+
+                                <div className="flex items-center gap-1.5">
+                                    <button onClick={() => jumpNext(1)} disabled={validCurrentPage === totalPages || totalPages === 0} className="p-1.5 rounded-full hover:bg-gray-200 text-gray-700 disabled:opacity-40 transition-colors border border-gray-200 bg-white shadow-sm mr-1" title="Next page">  
+                                        <ChevronRight size={20} />  
+                                    </button>  
+                                    <button onClick={() => jumpNext(5)} disabled={validCurrentPage === totalPages || totalPages === 0} className="px-2.5 py-1.5 rounded-md hover:bg-gray-200 text-gray-600 disabled:opacity-40 text-xs font-bold transition-colors border border-transparent hover:border-gray-300" title="Jump 5 pages forward">  
+                                        +5  
+                                    </button>  
+                                    <button onClick={() => jumpNext(10)} disabled={validCurrentPage === totalPages || totalPages === 0} className="px-2.5 py-1.5 rounded-md hover:bg-gray-200 text-gray-600 disabled:opacity-40 text-xs font-bold transition-colors border border-transparent hover:border-gray-300" title="Jump 10 pages forward">  
+                                        +10  
+                                    </button>  
+                                </div>
                             </div>
                         </>  
                     )}  
