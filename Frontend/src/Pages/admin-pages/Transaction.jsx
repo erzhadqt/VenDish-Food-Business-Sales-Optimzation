@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { HistoryIcon, AlertCircle, Tag, EllipsisVertical, ChevronLeft, ChevronRight, Ban, User, X } from 'lucide-react';
+import { HistoryIcon, AlertCircle, Tag, EllipsisVertical, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Ban, User, X } from 'lucide-react';
 import api from '../../api';
 import ReceiptModal from '../../Components/ReceiptModal.jsx';
 import { Skeleton } from '../../Components/ui/skeleton';
+import { Button } from '../../Components/ui/button';
 import { applyQueryParam, usePersistedQueryState } from '../../utils/usePersistedQueryState';
 import { useAuth } from '../../context/AuthContext';
 
@@ -174,9 +175,14 @@ const Transaction = () => {
 
     const paginatedTransactions = filteredTransactions.slice((validCurrentPage - 1) * rowsPerPage, validCurrentPage * rowsPerPage);  
 
-    // Dynamic jump functions for pagination
-    const jumpPrev = (amount) => setCurrentPage((prev) => Math.max(prev - amount, 1));  
-    const jumpNext = (amount) => setCurrentPage((prev) => Math.min(prev + amount, totalPages));  
+    const handlePageChange = (page) => {
+        if (totalPages === 0) {
+            setCurrentPage(1);
+            return;
+        }
+
+        setCurrentPage(Math.min(totalPages, Math.max(1, page)));
+    };
 
     return (  
         <div className="w-full p-4 md:p-6">  
@@ -357,35 +363,46 @@ const Transaction = () => {
                                 </table>  
                             </div>  
 
-                            {/* Enhanced Pagination Controls */}
-                            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 p-4 border-t border-gray-100 bg-gray-50/50">  
-                                <div className="flex items-center gap-1.5">
-                                    <button onClick={() => jumpPrev(10)} disabled={validCurrentPage === 1} className="px-2.5 py-1.5 rounded-md hover:bg-gray-200 text-gray-600 disabled:opacity-40 text-xs font-bold transition-colors border border-transparent hover:border-gray-300" title="Jump 10 pages back">  
-                                        -10  
-                                    </button>  
-                                    <button onClick={() => jumpPrev(5)} disabled={validCurrentPage === 1} className="px-2.5 py-1.5 rounded-md hover:bg-gray-200 text-gray-600 disabled:opacity-40 text-xs font-bold transition-colors border border-transparent hover:border-gray-300" title="Jump 5 pages back">  
-                                        -5  
-                                    </button>  
-                                    <button onClick={() => jumpPrev(1)} disabled={validCurrentPage === 1} className="p-1.5 rounded-full hover:bg-gray-200 text-gray-700 disabled:opacity-40 transition-colors border border-gray-200 bg-white shadow-sm ml-1" title="Previous page">  
-                                        <ChevronLeft size={20} />  
-                                    </button>  
-                                </div>
+                            <div className="flex items-center justify-end space-x-2 py-4 mt-2 border-t border-gray-100">  
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 w-8 p-0"
+                                    onClick={() => handlePageChange(1)}
+                                    disabled={validCurrentPage === 1}
+                                >
+                                    <ChevronsLeft className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 w-8 p-0"
+                                    onClick={() => handlePageChange(validCurrentPage - 1)}
+                                    disabled={validCurrentPage === 1}
+                                >
+                                    <ChevronLeft className="h-4 w-4" />
+                                </Button>
 
-                                <span className="text-sm font-semibold text-gray-700 bg-white px-4 py-1.5 rounded-full border border-gray-200 shadow-sm">
-                                    Page {validCurrentPage} of {totalPages || 1}
-                                </span>  
+                                <span className="text-sm text-gray-600 px-2">Page {validCurrentPage} of {totalPages || 1}</span>
 
-                                <div className="flex items-center gap-1.5">
-                                    <button onClick={() => jumpNext(1)} disabled={validCurrentPage === totalPages || totalPages === 0} className="p-1.5 rounded-full hover:bg-gray-200 text-gray-700 disabled:opacity-40 transition-colors border border-gray-200 bg-white shadow-sm mr-1" title="Next page">  
-                                        <ChevronRight size={20} />  
-                                    </button>  
-                                    <button onClick={() => jumpNext(5)} disabled={validCurrentPage === totalPages || totalPages === 0} className="px-2.5 py-1.5 rounded-md hover:bg-gray-200 text-gray-600 disabled:opacity-40 text-xs font-bold transition-colors border border-transparent hover:border-gray-300" title="Jump 5 pages forward">  
-                                        +5  
-                                    </button>  
-                                    <button onClick={() => jumpNext(10)} disabled={validCurrentPage === totalPages || totalPages === 0} className="px-2.5 py-1.5 rounded-md hover:bg-gray-200 text-gray-600 disabled:opacity-40 text-xs font-bold transition-colors border border-transparent hover:border-gray-300" title="Jump 10 pages forward">  
-                                        +10  
-                                    </button>  
-                                </div>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 w-8 p-0"
+                                    onClick={() => handlePageChange(validCurrentPage + 1)}
+                                    disabled={validCurrentPage === totalPages}
+                                >
+                                    <ChevronRight className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 w-8 p-0"
+                                    onClick={() => handlePageChange(totalPages)}
+                                    disabled={validCurrentPage === totalPages}
+                                >
+                                    <ChevronsRight className="h-4 w-4" />
+                                </Button>
                             </div>
                         </>  
                     )}  
