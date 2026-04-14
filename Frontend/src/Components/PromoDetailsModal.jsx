@@ -39,6 +39,10 @@ const getDiscountDetails = (criteria) => {
   if (!criteria) return "No discount rule attached";
 
   if (criteria.discount_type === "percentage") {
+    const parsedCap = parseFloat(criteria.max_discount_amount);
+    if (Number.isFinite(parsedCap) && parsedCap > 0) {
+      return `${criteria.discount_value}% OFF (capped at PHP ${parsedCap.toFixed(2)})`;
+    }
     return `${criteria.discount_value}% OFF`;
   }
 

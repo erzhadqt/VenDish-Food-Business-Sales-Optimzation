@@ -73,8 +73,6 @@ CLOUDINARY_STORAGE = {
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
-
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', cast=Csv())
 
 
@@ -89,7 +87,9 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     'cloudinary_storage',
+
     'firstapp',
+
     'cloudinary',
 
     'anymail',

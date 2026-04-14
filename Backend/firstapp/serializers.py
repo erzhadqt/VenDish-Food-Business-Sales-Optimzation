@@ -6,6 +6,7 @@ from django.db.models import F
 from django.utils import timezone
 from django.conf import settings
 from datetime import timedelta
+from decimal import Decimal, ROUND_HALF_UP
 import re
 
 from .models import Product, Category, Receipt, ReceiptItem, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, Review, UserProfile, OTP, Notification, StaffInvitationToken, EmailVerificationToken
@@ -15,6 +16,19 @@ def _normalize_gcash_reference(value):
     if value is None:
         return ''
     return re.sub(r'[^A-Za-z0-9]', '', str(value)).upper()
+
+
+PH_VAT_INCLUSIVE_DIVISOR = Decimal('1.12')
+MONEY_PRECISION = Decimal('0.01')
+
+
+def _compute_ph_vat_from_vat_inclusive_total(vat_inclusive_total):
+    total = Decimal(str(vat_inclusive_total or '0'))
+    if total <= 0:
+        return Decimal('0.00')
+
+    vat_amount = total - (total / PH_VAT_INCLUSIVE_DIVISOR)
+    return vat_amount.quantize(MONEY_PRECISION, rounding=ROUND_HALF_UP)
 
 class UserSerializer(serializers.ModelSerializer):
     # [NEW] Map fields from the Profile relationship
@@ -220,6 +234,22 @@ class CouponCriteriaSerializer(serializers.ModelSerializer):
         model = CouponCriteria
         fields = '__all__'
 
+    def validate(self, attrs):
+        instance = getattr(self, 'instance', None)
+        discount_type = attrs.get('discount_type', getattr(instance, 'discount_type', None))
+        max_discount_amount = attrs.get('max_discount_amount', getattr(instance, 'max_discount_amount', None))
+
+        if max_discount_amount is not None and Decimal(str(max_discount_amount)) <= 0:
+            raise serializers.ValidationError({
+                'max_discount_amount': 'Maximum discount amount must be greater than 0.'
+            })
+
+        # Caps only apply to percentage-based discounts.
+        if discount_type != 'percentage':
+            attrs['max_discount_amount'] = None
+
+        return attrs
+
 class CouponSerializer(serializers.ModelSerializer):
     # Nesting
     criteria_details = CouponCriteriaSerializer(source='criteria', read_only=True)
@@ -292,7 +322,10 @@ class CouponSerializer(serializers.ModelSerializer):
         free = c.free_product.product_name if c.free_product else None
 
         if c.discount_type == 'percentage':
-            val = f"{c.discount_value:g}%"
+            cap_suffix = ""
+            if c.max_discount_amount and c.max_discount_amount > 0:
+                cap_suffix = f" (up to ₱{c.max_discount_amount:g})"
+            val = f"{c.discount_value:g}%{cap_suffix}"
             if target and min_spend > 0:
                 return f"Spend at least ₱{min_spend:g} and get {val} OFF on {target}."
             elif target:
@@ -432,6 +465,19 @@ class ReceiptSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         items_data = validated_data.pop("items") 
         coupons_data = validated_data.pop("coupons", []) # Extract list
+
+        computed_subtotal = sum(
+            (Decimal(str(item_data.get("price", 0))) * Decimal(str(item_data.get("quantity", 0))))
+            for item_data in items_data
+        )
+        computed_subtotal = computed_subtotal.quantize(MONEY_PRECISION, rounding=ROUND_HALF_UP)
+
+        raw_discount_type = str(self.initial_data.get("discount_type", "")).strip().lower()
+        is_vat_exempt_sale = raw_discount_type in {"senior", "pwd"}
+
+        sale_total = Decimal(str(validated_data.get("total") or "0"))
+        validated_data["subtotal"] = computed_subtotal
+        validated_data["vat"] = Decimal("0.00") if is_vat_exempt_sale else _compute_ph_vat_from_vat_inclusive_total(sale_total)
 
         requested_per_product = {}
         for item_data in items_data:

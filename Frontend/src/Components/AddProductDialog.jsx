@@ -15,6 +15,8 @@ import { Label } from "../Components/ui/label";
 import { AlertCircle } from "lucide-react"; 
 import api from "../api";
 
+const DEFAULT_LOW_SERVING_THRESHOLD = 10;
+
 const normalizeProductNameForComparison = (value = "") => {
   return String(value).toLowerCase().replace(/[^a-z0-9]/g, "");
 };
@@ -25,6 +27,7 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
   const [category, setCategory] = useState("");
   const [price, setPrice] = useState("");
   const [servings, setServings] = useState("");
+  const [lowServingThreshold, setLowServingThreshold] = useState(String(DEFAULT_LOW_SERVING_THRESHOLD));
   
   const [loading, setLoading] = useState(false);
   const [image, setImage] = useState(null);
@@ -83,6 +86,12 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
     clearFieldError("servings");
   };
 
+  const handleLowServingThresholdChange = (e) => {
+    const val = e.target.value.replace(/[^0-9]/g, '');
+    setLowServingThreshold(val);
+    clearFieldError("lowServingThreshold");
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -92,6 +101,7 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
     const nextFieldErrors = {};
     const normalizedProductName = productName.trim();
     const numericPrice = parseFloat(price || "0");
+    const parsedLowServingThreshold = Number.parseInt(lowServingThreshold, 10);
 
     if (!normalizedProductName) {
       nextFieldErrors.productName = "Product name must not be blank.";
@@ -103,6 +113,14 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
 
     if (price === "" || Number.isNaN(numericPrice) || numericPrice <= 0) {
       nextFieldErrors.price = "Price must be greater than 0.";
+    }
+
+    if (
+      lowServingThreshold === "" ||
+      !Number.isInteger(parsedLowServingThreshold) ||
+      parsedLowServingThreshold < 0
+    ) {
+      nextFieldErrors.lowServingThreshold = "Low serving threshold must be 0 or greater.";
     }
 
     if (Object.keys(nextFieldErrors).length > 0) {
@@ -140,10 +158,12 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
       // Parses input. Falls back to "0" if left blank by the user.
       const parsedServings = parseInt(servings || "0", 10);
       const servingCount = Number.isFinite(parsedServings) ? Math.max(0, parsedServings) : 0;
+      const thresholdCount = Number.isFinite(parsedLowServingThreshold) ? Math.max(0, parsedLowServingThreshold) : DEFAULT_LOW_SERVING_THRESHOLD;
 
       formData.append("is_available", String(servingCount > 0));
       formData.append("track_stock", "true");
       formData.append("stock_quantity", servingCount);
+      formData.append("low_serving_threshold", thresholdCount);
       
       if (image) formData.append("image", image);
 
@@ -160,6 +180,7 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
       setCategory("");
       setPrice("");
       setServings("");
+      setLowServingThreshold(String(DEFAULT_LOW_SERVING_THRESHOLD));
       setImage(null);
       setError("");
       setFieldErrors({});
@@ -271,6 +292,22 @@ export default function AddProductDialog({ onSaved, children, existingProducts =
               aria-invalid={!!fieldErrors.servings}
               maxLength={11}
             />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="low-serving-threshold">Low Serving Threshold</Label>
+            <Input
+              id="low-serving-threshold"
+              type="text"
+              inputMode="numeric"
+              value={lowServingThreshold}
+              onChange={handleLowServingThresholdChange}
+              placeholder={String(DEFAULT_LOW_SERVING_THRESHOLD)}
+              className={getInputClassName("lowServingThreshold")}
+              aria-invalid={!!fieldErrors.lowServingThreshold}
+              maxLength={11}
+            />
+            <p className="text-xs text-muted-foreground">POS marks this product as low serving when remaining servings are at or below this number.</p>
           </div>
 
           {/* Image Input */}

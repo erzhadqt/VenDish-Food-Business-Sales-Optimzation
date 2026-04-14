@@ -7,7 +7,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from .models import OTP, PasswordResetToken, EmailVerificationToken, Review, Category, Product, Coupon, CouponCriteria
+from .models import OTP, PasswordResetToken, EmailVerificationToken, Review, Category, Product, Coupon, CouponCriteria, StoreSettings, Receipt
 
 
 @override_settings(
@@ -261,6 +261,94 @@ class EmailVerificationSignupFlowTests(APITestCase):
 		verification.refresh_from_db()
 		self.assertFalse(user.is_active)
 		self.assertFalse(verification.is_valid)
+
+
+class StoreOpenCloseLoginGuardTests(APITestCase):
+	def setUp(self):
+		user_model = get_user_model()
+		self.staff_user = user_model.objects.create_user(
+			username='store_guard_staff',
+			email='store_guard_staff@example.com',
+			password='StaffPass123!',
+			is_staff=True,
+		)
+		self.admin_user = user_model.objects.create_user(
+			username='store_guard_admin',
+			email='store_guard_admin@example.com',
+			password='AdminPass123!',
+			is_staff=True,
+			is_superuser=True,
+		)
+
+	def test_staff_web_login_blocked_when_store_closed(self):
+		StoreSettings.objects.update_or_create(
+			id=1,
+			defaults={'store_is_open': False},
+		)
+
+		response = self.client.post(
+			'/firstapp/token/',
+			{
+				'username': self.staff_user.username,
+				'password': 'StaffPass123!',
+				'platform': 'web',
+			},
+			format='json',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+		self.assertIn('store is currently closed', str(response.data.get('detail', '')).lower())
+
+	def test_superuser_web_login_allowed_when_store_closed(self):
+		StoreSettings.objects.update_or_create(
+			id=1,
+			defaults={'store_is_open': False},
+		)
+
+		response = self.client.post(
+			'/firstapp/token/',
+			{
+				'username': self.admin_user.username,
+				'password': 'AdminPass123!',
+				'platform': 'web',
+			},
+			format='json',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertIn('access', response.data)
+
+	def test_admin_can_toggle_store_open_status_via_settings(self):
+		self.client.force_authenticate(user=self.admin_user)
+
+		initial_response = self.client.get('/settings/')
+		self.assertEqual(initial_response.status_code, status.HTTP_200_OK)
+		self.assertIn('store_is_open', initial_response.data)
+
+		update_response = self.client.post(
+			'/settings/',
+			{'store_is_open': False},
+			format='json',
+		)
+
+		self.assertEqual(update_response.status_code, status.HTTP_200_OK)
+		self.assertFalse(update_response.data.get('store_is_open'))
+
+		settings = StoreSettings.objects.get(id=1)
+		self.assertFalse(settings.store_is_open)
+
+	def test_public_store_status_endpoint_reflects_current_state(self):
+		StoreSettings.objects.update_or_create(
+			id=1,
+			defaults={'store_is_open': False},
+		)
+
+		self.client.force_authenticate(user=None)
+		response = self.client.get('/store-status/')
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertIn('store_is_open', response.data)
+		self.assertFalse(response.data.get('store_is_open'))
 
 
 class ReviewAdminReplyTests(APITestCase):
@@ -762,3 +850,180 @@ class CouponArchiveTests(APITestCase):
 		limited_coupon.refresh_from_db()
 		self.assertEqual(limited_coupon.claimed_by.count(), 2)
 		self.assertEqual(limited_coupon.times_claimed, 2)
+
+
+class CouponCriteriaDiscountCapTests(APITestCase):
+	def setUp(self):
+		user_model = get_user_model()
+		self.admin = user_model.objects.create_user(
+			username='criteria_cap_admin',
+			email='criteria_cap_admin@example.com',
+			password='AdminPass123!',
+			is_staff=True,
+		)
+		self.client.force_authenticate(user=self.admin)
+
+	def test_percentage_coupon_criteria_accepts_positive_cap(self):
+		response = self.client.post(
+			'/firstapp/coupons-criteria/',
+			{
+				'name': 'Capable Percentage Promo',
+				'discount_type': 'percentage',
+				'discount_value': '20.00',
+				'max_discount_amount': '120.00',
+			},
+			format='json',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+		self.assertEqual(response.data.get('max_discount_amount'), '120.00')
+
+	def test_percentage_coupon_criteria_rejects_non_positive_cap(self):
+		response = self.client.post(
+			'/firstapp/coupons-criteria/',
+			{
+				'name': 'Invalid Cap Promo',
+				'discount_type': 'percentage',
+				'discount_value': '15.00',
+				'max_discount_amount': '0',
+			},
+			format='json',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		self.assertIn('max_discount_amount', response.data)
+
+	def test_non_percentage_coupon_criteria_clears_cap(self):
+		response = self.client.post(
+			'/firstapp/coupons-criteria/',
+			{
+				'name': 'Fixed Promo No Cap',
+				'discount_type': 'fixed',
+				'discount_value': '75.00',
+				'max_discount_amount': '200.00',
+			},
+			format='json',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+		self.assertIsNone(response.data.get('max_discount_amount'))
+
+		created_criteria = CouponCriteria.objects.get(id=response.data['id'])
+		self.assertIsNone(created_criteria.max_discount_amount)
+
+
+class SalesByStaffFilteringTests(APITestCase):
+	def setUp(self):
+		user_model = get_user_model()
+		self.admin = user_model.objects.create_user(
+			username='sales_admin',
+			email='sales_admin@example.com',
+			password='AdminPass123!',
+			is_staff=True,
+			is_superuser=True,
+		)
+		self.cashier_alpha = user_model.objects.create_user(
+			username='cashier_alpha',
+			email='cashier_alpha@example.com',
+			password='CashierPass123!',
+			is_staff=True,
+			first_name='Alpha',
+			last_name='Cashier',
+		)
+		self.cashier_beta = user_model.objects.create_user(
+			username='cashier_beta',
+			email='cashier_beta@example.com',
+			password='CashierPass123!',
+			is_staff=True,
+			first_name='Beta',
+			last_name='Cashier',
+		)
+		self.client.force_authenticate(user=self.admin)
+
+	def _create_completed_receipt(self, *, cashier, total, created_at):
+		return Receipt.objects.create(
+			subtotal=str(total),
+			vat='0.00',
+			total=str(total),
+			cash_given=str(total),
+			change='0.00',
+			created_at=created_at,
+			status=Receipt.Status.COMPLETED,
+			cashier=cashier,
+		)
+
+	def _to_float(self, value):
+		return float(str(value or 0))
+
+	def test_by_staff_respects_selected_date_range(self):
+		now = timezone.now()
+		in_range_start = now - timedelta(hours=2)
+		in_range_end = now + timedelta(hours=2)
+
+		self._create_completed_receipt(cashier=self.cashier_alpha, total='100.00', created_at=now)
+		self._create_completed_receipt(cashier=self.cashier_beta, total='250.00', created_at=now)
+		self._create_completed_receipt(
+			cashier=self.cashier_alpha,
+			total='999.00',
+			created_at=now - timedelta(days=10),
+		)
+
+		response = self.client.get(
+			'/firstapp/sales/by-staff/',
+			{
+				'start': in_range_start.isoformat(),
+				'end': in_range_end.isoformat(),
+			},
+			format='json',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		rows = {row['name']: row for row in response.data}
+
+		self.assertIn('Alpha Cashier', rows)
+		self.assertIn('Beta Cashier', rows)
+		self.assertEqual(self._to_float(rows['Alpha Cashier']['revenue']), 100.00)
+		self.assertEqual(rows['Alpha Cashier']['orders'], 1)
+		self.assertEqual(self._to_float(rows['Beta Cashier']['revenue']), 250.00)
+		self.assertEqual(rows['Beta Cashier']['orders'], 1)
+
+	def test_by_staff_uses_orders_as_tie_breaker_when_revenue_is_equal(self):
+		now = timezone.now()
+		start = now - timedelta(days=1)
+		end = now + timedelta(days=1)
+
+		self._create_completed_receipt(cashier=self.cashier_alpha, total='100.00', created_at=now)
+		self._create_completed_receipt(cashier=self.cashier_alpha, total='100.00', created_at=now)
+		self._create_completed_receipt(cashier=self.cashier_beta, total='200.00', created_at=now)
+
+		response = self.client.get(
+			'/firstapp/sales/by-staff/',
+			{
+				'start': start.isoformat(),
+				'end': end.isoformat(),
+			},
+			format='json',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertGreaterEqual(len(response.data), 2)
+		self.assertEqual(response.data[0]['name'], 'Alpha Cashier')
+		self.assertEqual(self._to_float(response.data[0]['revenue']), 200.00)
+		self.assertEqual(response.data[0]['orders'], 2)
+
+	def test_by_staff_accepts_cashier_filter(self):
+		now = timezone.now()
+		self._create_completed_receipt(cashier=self.cashier_alpha, total='150.00', created_at=now)
+		self._create_completed_receipt(cashier=self.cashier_beta, total='175.00', created_at=now)
+
+		response = self.client.get(
+			'/firstapp/sales/by-staff/',
+			{'cashier': self.cashier_beta.username},
+			format='json',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data), 1)
+		self.assertEqual(response.data[0]['name'], 'Beta Cashier')
+		self.assertEqual(self._to_float(response.data[0]['revenue']), 175.00)
+		self.assertEqual(response.data[0]['orders'], 1)

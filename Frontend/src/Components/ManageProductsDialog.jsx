@@ -79,6 +79,7 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
         category: product.category || "",
         price: formatPrice(product.price),
         stock_quantity: String(product.stock_quantity ?? 0),
+        low_serving_threshold: String(product.low_serving_threshold ?? 10),
       };
     });
     return nextDrafts;
@@ -174,7 +175,13 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
         const currentServings = Number(product.stock_quantity ?? 0);
         const servingsChanged = Number.isInteger(draftServings) ? draftServings !== currentServings : false;
 
-        return nameChanged || categoryChanged || priceChanged || servingsChanged ? product.id : null;
+        const draftLowServingThreshold = Number.parseInt(draft.low_serving_threshold, 10);
+        const currentLowServingThreshold = Number(product.low_serving_threshold ?? 10);
+        const thresholdChanged = Number.isInteger(draftLowServingThreshold)
+          ? draftLowServingThreshold !== currentLowServingThreshold
+          : false;
+
+        return nameChanged || categoryChanged || priceChanged || servingsChanged || thresholdChanged ? product.id : null;
       })
       .filter(Boolean);
   }, [products, drafts, isResetMode]);
@@ -225,6 +232,11 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
   const handleServingsInput = (productId, rawValue) => {
     const sanitized = String(rawValue || "").replace(/\D/g, "");
     updateDraft(productId, "stock_quantity", sanitized);
+  };
+
+  const handleLowServingThresholdInput = (productId, rawValue) => {
+    const sanitized = String(rawValue || "").replace(/\D/g, "");
+    updateDraft(productId, "low_serving_threshold", sanitized);
   };
 
   const handleSaveInlineUpdates = async () => {
@@ -289,6 +301,14 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
 
         const nextServings = Number.parseInt(draft.stock_quantity, 10);
         if (nextServings !== Number(product.stock_quantity ?? 0)) payload.stock_quantity = nextServings;
+
+        const nextThreshold = Number.parseInt(draft.low_serving_threshold, 10);
+        if (
+          Number.isInteger(nextThreshold) &&
+          nextThreshold !== Number(product.low_serving_threshold ?? 10)
+        ) {
+          payload.low_serving_threshold = Math.max(0, nextThreshold);
+        }
 
         return { productId, payload };
       });
@@ -396,7 +416,7 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
           <DialogDescription className="text-gray-500 mt-1">
             {isResetMode
               ? "Select products to instantly reset their available servings to zero."
-              : "Quickly update product names, pricing, and servings. Save all changes at once."}
+              : "Quickly update product names, pricing, servings, and low-serving threshold. Save all changes at once."}
           </DialogDescription>
         </DialogHeader>
 
@@ -481,6 +501,7 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
                       <th className="px-4 py-3 font-semibold w-48">Category</th>
                       <th className="px-4 py-3 font-semibold w-32 text-right">Price</th>
                       <th className="px-4 py-3 font-semibold w-32 text-right">Servings</th>
+                      <th className="px-4 py-3 font-semibold w-36 text-right">Low Serving At</th>
                       <th className="px-4 py-3 font-semibold w-28 text-center">Status</th>
                     </tr>
                   </thead>
@@ -491,6 +512,7 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
                         category: product.category || "",
                         price: formatPrice(product.price),
                         stock_quantity: String(product.stock_quantity ?? 0),
+                        low_serving_threshold: String(product.low_serving_threshold ?? 10),
                       };
 
                       const isEdited = changedProductIds.includes(product.id);
@@ -572,6 +594,20 @@ export default function ManageProductsDialog({ open, onOpenChange, onSaved, cate
                               <Input
                                 value={draft.stock_quantity}
                                 onChange={(e) => handleServingsInput(product.id, e.target.value)}
+                                inputMode="numeric"
+                                className={`w-full text-right ${isEdited ? 'border-blue-300 bg-white' : 'bg-transparent border-transparent hover:border-gray-200 focus:bg-white'}`}
+                                disabled={isProcessing}
+                              />
+                            )}
+                          </td>
+
+                          <td className="px-4 py-3">
+                            {isResetMode ? (
+                              <div className="text-right text-gray-900 font-medium">{product.low_serving_threshold ?? 10}</div>
+                            ) : (
+                              <Input
+                                value={draft.low_serving_threshold}
+                                onChange={(e) => handleLowServingThresholdInput(product.id, e.target.value)}
                                 inputMode="numeric"
                                 className={`w-full text-right ${isEdited ? 'border-blue-300 bg-white' : 'bg-transparent border-transparent hover:border-gray-200 focus:bg-white'}`}
                                 disabled={isProcessing}

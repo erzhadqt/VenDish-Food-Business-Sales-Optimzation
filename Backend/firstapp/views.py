@@ -22,7 +22,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from django.utils.dateparse import parse_datetime
 
-from django.db.models import Sum, Count, Q, Exists, OuterRef
+from django.db.models import Sum, Count, Q, Exists, OuterRef, Avg
 
 from django.contrib.auth.hashers import make_password, check_password
 import logging
@@ -114,6 +114,123 @@ STAFF_INVITATION_EXPIRY_MINUTES = max(1, int(getattr(settings, 'STAFF_INVITATION
 EMAIL_VERIFICATION_EXPIRY_MINUTES = max(1, int(getattr(settings, 'EMAIL_VERIFICATION_EXPIRY_MINUTES', 30)))
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_human_error_message(detail):
+    if detail is None:
+        return ""
+
+    if isinstance(detail, dict):
+        for preferred_key in ("error", "detail", "non_field_errors"):
+            if preferred_key in detail:
+                message = _extract_human_error_message(detail.get(preferred_key))
+                if message:
+                    return message
+
+        for value in detail.values():
+            message = _extract_human_error_message(value)
+            if message:
+                return message
+        return ""
+
+    if isinstance(detail, (list, tuple, set)):
+        messages = [
+            _extract_human_error_message(item)
+            for item in detail
+        ]
+        messages = [message for message in messages if message]
+        return "; ".join(messages)
+
+    raw_text = str(detail).strip()
+    if not raw_text:
+        return ""
+
+    # Fallback parser for raw stringified DRF ErrorDetail objects.
+    match = re.search(r"ErrorDetail\(string=(['\"])(.+?)\1,\s*code=", raw_text)
+    if match:
+        return match.group(2)
+
+    return raw_text
+
+
+def _to_user_friendly_transaction_error(detail, fallback_message=None):
+    fallback = fallback_message or "Unable to complete the transaction. Please try again."
+    message = _extract_human_error_message(detail)
+    if not message:
+        return fallback
+
+    stock_match = re.match(
+        r"Not enough servings for\s+(.+?)\.\s*Only\s+(\d+)\s+left\.?$",
+        message,
+        flags=re.IGNORECASE,
+    )
+
+    if stock_match:
+        product_name = stock_match.group(1).strip()
+        remaining_count = int(stock_match.group(2))
+
+        if remaining_count <= 0:
+            return f"Cannot complete this order. {product_name} is out of stock."
+
+        serving_label = "serving" if remaining_count == 1 else "servings"
+        return f"Cannot complete this order. Only {remaining_count} {serving_label} of {product_name} are left."
+
+    coupon_archived_match = re.match(r"Coupon\s+(.+?)\s+is archived\.?$", message, flags=re.IGNORECASE)
+    if coupon_archived_match:
+        coupon_code = coupon_archived_match.group(1).strip()
+        return f"Cannot complete this order because coupon {coupon_code} is no longer available."
+
+    coupon_expired_match = re.match(r"Coupon\s+(.+?)\s+has expired\.?$", message, flags=re.IGNORECASE)
+    if coupon_expired_match:
+        coupon_code = coupon_expired_match.group(1).strip()
+        return f"Cannot complete this order because coupon {coupon_code} has expired."
+
+    coupon_min_spend_match = re.match(
+        r"Coupon\s+(.+?)\s+requires a minimum spend of\s+(.+?)\.?$",
+        message,
+        flags=re.IGNORECASE,
+    )
+    if coupon_min_spend_match:
+        coupon_code = coupon_min_spend_match.group(1).strip()
+        required_amount = coupon_min_spend_match.group(2).strip()
+        return f"Cannot complete this order. Spend at least {required_amount} to use coupon {coupon_code}."
+
+    if re.search(r"Coupons are tied to user accounts", message, flags=re.IGNORECASE):
+        return "Please select a customer before using coupons on this order."
+
+    coupon_not_claimed_match = re.match(
+        r"Coupon\s+(.+?)\s+is not claimed by user\s+(.+?)\.?$",
+        message,
+        flags=re.IGNORECASE,
+    )
+    if coupon_not_claimed_match:
+        coupon_code = coupon_not_claimed_match.group(1).strip()
+        return f"Cannot use coupon {coupon_code} for the selected customer account."
+
+    coupon_used_match = re.match(
+        r"User\s+(.+?)\s+has already used coupon\s+(.+?)\.?$",
+        message,
+        flags=re.IGNORECASE,
+    )
+    if coupon_used_match:
+        coupon_code = coupon_used_match.group(2).strip()
+        return f"Coupon {coupon_code} has already been used by this customer."
+
+    coupon_sold_out_match = re.match(r"Coupon\s+(.+?)\s+is sold out\.?$", message, flags=re.IGNORECASE)
+    if coupon_sold_out_match:
+        coupon_code = coupon_sold_out_match.group(1).strip()
+        return f"Coupon {coupon_code} is sold out and can no longer be used."
+
+    if re.match(r"Product\s+\d+\s+not found\.?$", message, flags=re.IGNORECASE):
+        return "One of the items in this order is no longer available. Please refresh the menu and try again."
+
+    if re.match(r"GCash reference number must be at least 8 alphanumeric characters\.?$", message, flags=re.IGNORECASE):
+        return "Please enter a valid GCash reference number with at least 8 letters or numbers."
+
+    if re.match(r"This GCash reference number has already been used in a previous transaction\.?$", message, flags=re.IGNORECASE):
+        return "This GCash reference number has already been used. Please enter a different reference number."
+
+    return message
 
 
 @api_view(['GET', 'POST'])
@@ -865,6 +982,11 @@ class PlatformTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         platform = self.context.get("request").data.get("platform", "web")
 
+        if platform == "web" and user.is_staff and not user.is_superuser:
+            store_settings, _ = StoreSettings.objects.get_or_create(id=1)
+            if not store_settings.store_is_open:
+                raise AuthenticationFailed("Store is currently closed. Staff login is temporarily disabled.")
+
         if platform == "web" and user.is_staff and not user.is_active:
             raise AuthenticationFailed("This staff account is blocked from web login")
 
@@ -938,11 +1060,157 @@ class ProductViewSet(viewsets.ModelViewSet):
         return queryset
 
     def get_permissions(self):
-        if self.action in ['list', 'retrieve']:
+        if self.action in ['list', 'retrieve', 'best_sellers', 'top_rated']:
             permission_classes = [AllowAny]
         else:
             permission_classes = [IsAdminUser]
         return [permission() for permission in permission_classes]
+
+    @staticmethod
+    def _parse_limit(raw_limit, default=2, max_limit=20):
+        try:
+            limit = int(raw_limit)
+        except (TypeError, ValueError):
+            return default
+
+        if limit < 1:
+            return default
+
+        return min(limit, max_limit)
+
+    @staticmethod
+    def _start_of_day(reference_dt):
+        return reference_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    @staticmethod
+    def _start_of_week(reference_dt):
+        day_start = ProductViewSet._start_of_day(reference_dt)
+        return day_start - timedelta(days=day_start.weekday())
+
+    def _serialize_products_with_stats(self, request, ordered_product_ids, stats_by_product):
+        if not ordered_product_ids:
+            return []
+
+        products = Product.objects.filter(id__in=ordered_product_ids, is_archived=False)
+        product_map = {product.id: product for product in products}
+        ordered_products = [product_map[product_id] for product_id in ordered_product_ids if product_id in product_map]
+
+        serialized = self.get_serializer(ordered_products, many=True, context={'request': request}).data
+        for item in serialized:
+            stats = stats_by_product.get(item['id'], {})
+            item['units_sold_weekly'] = int(stats.get('units_sold_weekly', 0) or 0)
+            item['average_rating'] = float(stats.get('average_rating', 0) or 0)
+            item['review_count'] = int(stats.get('review_count', 0) or 0)
+        return serialized
+
+    @action(detail=False, methods=['get'], url_path='best-sellers')
+    def best_sellers(self, request):
+        period = str(request.query_params.get('period', 'weekly')).strip().lower()
+        limit = self._parse_limit(request.query_params.get('limit'), default=2)
+
+        now = timezone.now()
+        period_start = None
+        if period == 'daily':
+            period_start = self._start_of_day(now)
+        elif period == 'monthly':
+            period_start = self._start_of_day(now).replace(day=1)
+        else:
+            period = 'weekly'
+            period_start = self._start_of_week(now)
+
+        sales_queryset = ReceiptItem.objects.filter(
+            receipt__status=Receipt.Status.COMPLETED,
+            product__isnull=False,
+            product__is_archived=False,
+            receipt__created_at__gte=period_start,
+        )
+
+        sales_rows = list(
+            sales_queryset
+            .values('product')
+            .annotate(units_sold=Sum('quantity'))
+            .order_by('-units_sold', 'product')[:limit]
+        )
+
+        product_ids = [row['product'] for row in sales_rows if row.get('product')]
+        if not product_ids:
+            return Response([])
+
+        rating_rows = Review.objects.filter(
+            review_type='food',
+            product_id__in=product_ids,
+        ).values('product').annotate(
+            average_rating=Avg('rating'),
+            review_count=Count('id'),
+        )
+
+        rating_map = {
+            row['product']: {
+                'average_rating': float(row.get('average_rating') or 0),
+                'review_count': int(row.get('review_count') or 0),
+            }
+            for row in rating_rows
+        }
+
+        stats_by_product = {}
+        for row in sales_rows:
+            product_id = row['product']
+            rating_data = rating_map.get(product_id, {'average_rating': 0, 'review_count': 0})
+            stats_by_product[product_id] = {
+                'units_sold_weekly': int(row.get('units_sold') or 0),
+                'average_rating': rating_data['average_rating'],
+                'review_count': rating_data['review_count'],
+                'period': period,
+            }
+
+        data = self._serialize_products_with_stats(request, product_ids, stats_by_product)
+        return Response(data)
+
+    @action(detail=False, methods=['get'], url_path='top-rated')
+    def top_rated(self, request):
+        limit = self._parse_limit(request.query_params.get('limit'), default=2)
+
+        rating_rows = list(
+            Review.objects.filter(
+                review_type='food',
+                product__isnull=False,
+                product__is_archived=False,
+            )
+            .values('product')
+            .annotate(
+                average_rating=Avg('rating'),
+                review_count=Count('id'),
+            )
+            .filter(review_count__gt=0)
+            .order_by('-average_rating', '-review_count', 'product')[:limit]
+        )
+
+        product_ids = [row['product'] for row in rating_rows if row.get('product')]
+        if not product_ids:
+            return Response([])
+
+        weekly_sales_rows = ReceiptItem.objects.filter(
+            receipt__status=Receipt.Status.COMPLETED,
+            product_id__in=product_ids,
+            receipt__created_at__gte=self._start_of_week(timezone.now()),
+        ).values('product').annotate(units_sold=Sum('quantity'))
+
+        weekly_sales_map = {
+            row['product']: int(row.get('units_sold') or 0)
+            for row in weekly_sales_rows
+        }
+
+        stats_by_product = {
+            row['product']: {
+                'units_sold_weekly': weekly_sales_map.get(row['product'], 0),
+                'average_rating': float(row.get('average_rating') or 0),
+                'review_count': int(row.get('review_count') or 0),
+            }
+            for row in rating_rows
+        }
+
+        data = self._serialize_products_with_stats(request, product_ids, stats_by_product)
+        return Response(data)
 
     @action(detail=False, methods=['post', 'patch'], url_path='archive')
     def archive(self, request):
@@ -1112,9 +1380,22 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                     )
 
             except Exception as e:
-                return Response({"error": f"Transaction failed: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+                error_message = _to_user_friendly_transaction_error(
+                    getattr(e, 'detail', e),
+                    fallback_message="Unable to complete the transaction. Please try again.",
+                )
+                return Response({"error": error_message}, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {
+                "error": _to_user_friendly_transaction_error(
+                    serializer.errors,
+                    fallback_message="Cannot complete this order. Please check the details and try again.",
+                ),
+                "field_errors": serializer.errors,
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     
     @action(detail=False, methods=['post'], url_path='log-void')
     def log_void(self, request):
@@ -1859,29 +2140,35 @@ class CouponCriteriaViewSet(viewsets.ModelViewSet):
 class DailySalesReportViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
+    @staticmethod
+    def _parse_dt(raw_value):
+        if not raw_value:
+            return None
+
+        parsed = parse_datetime(raw_value)
+        if not parsed:
+            return None
+
+        if timezone.is_naive(parsed):
+            parsed = timezone.make_aware(parsed)
+        return parsed
+
+    def _get_selected_range(self, request):
+        range_start = self._parse_dt(request.query_params.get('start'))
+        range_end = self._parse_dt(request.query_params.get('end'))
+
+        if range_start and range_end and range_start > range_end:
+            range_start, range_end = range_end, range_start
+
+        return range_start, range_end
+
     def list(self, request):
         queryset = Receipt.objects.filter(status='COMPLETED')
         user = request.user
         
         cashier_filter = request.query_params.get('cashier', None)
         period = (request.query_params.get('period') or 'daily').strip().lower()
-        start_raw = request.query_params.get('start')
-        end_raw = request.query_params.get('end')
-
-        def _parse_dt(raw_value):
-            if not raw_value:
-                return None
-            parsed = parse_datetime(raw_value)
-            if not parsed:
-                return None
-            if timezone.is_naive(parsed):
-                parsed = timezone.make_aware(parsed)
-            return parsed
-
-        range_start = _parse_dt(start_raw)
-        range_end = _parse_dt(end_raw)
-        if range_start and range_end and range_start > range_end:
-            range_start, range_end = range_end, range_start
+        range_start, range_end = self._get_selected_range(request)
 
         trunc_by_period = {
             'custom': TruncDay,
@@ -1916,6 +2203,8 @@ class DailySalesReportViewSet(viewsets.ViewSet):
             .annotate(
                 total_revenue=Sum('total'),
                 total_orders=Count('id'),
+                total_vat=Sum('vat'),
+                total_discount=Sum(F('subtotal') - F('total')),
             )
             .order_by('-report_bucket')
         )
@@ -1986,6 +2275,8 @@ class DailySalesReportViewSet(viewsets.ViewSet):
                 "net_profit": total_rev,
                 "total_cost": 0,
                 "total_orders": item['total_orders'],
+                "total_vat": item['total_vat'] or 0,
+                "total_discount": item['total_discount'] or 0,
                 "voided_orders": void_map.get(date_str, 0),
                 "top_selling_product": top_seller_map.get(date_str, "N/A"),
                 "least_selling_product": least_seller_map.get(date_str, "N/A"),
@@ -1999,14 +2290,25 @@ class DailySalesReportViewSet(viewsets.ViewSet):
         if not request.user.is_superuser:
             return Response({"error": "Unauthorized"}, status=403)
 
+        range_start, range_end = self._get_selected_range(request)
+        cashier_filter = (request.query_params.get('cashier') or '').strip()
+
+        queryset = Receipt.objects.filter(status='COMPLETED')
+        if range_start:
+            queryset = queryset.filter(created_at__gte=range_start)
+        if range_end:
+            queryset = queryset.filter(created_at__lte=range_end)
+        if cashier_filter and cashier_filter.upper() != 'ALL':
+            queryset = queryset.filter(cashier__username=cashier_filter)
+
         staff_data = (
-            Receipt.objects.filter(status='COMPLETED')
+            queryset
             .values('cashier__username', 'cashier__first_name', 'cashier__last_name')
             .annotate(
                 total_revenue=Sum('total'),
                 total_orders=Count('id')
             )
-            .order_by('-total_revenue')
+            .order_by('-total_revenue', '-total_orders', 'cashier__first_name', 'cashier__last_name', 'cashier__username')
         )
 
         response_data = []
@@ -2426,6 +2728,32 @@ class VerifyVoidPinView(APIView):
 from decimal import Decimal
 
 TIN_NUMBER_REGEX = re.compile(r'^\d{3}-\d{3}-\d{3}-\d{3}$')
+RECEIPT_PHONE_REGEX = re.compile(r'^\+?[0-9][0-9\s\-()]{5,24}$')
+
+
+def _coerce_boolean_setting(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {'1', 'true', 'yes', 'on'}:
+            return True
+        if normalized in {'0', 'false', 'no', 'off'}:
+            return False
+    raise ValueError('Expected a boolean value.')
+
+
+class StoreStatusView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        settings, _ = StoreSettings.objects.get_or_create(id=1)
+        return Response({
+            "store_is_open": settings.store_is_open,
+        }, status=status.HTTP_200_OK)
             
 class StoreSettingsView(APIView):
     permission_classes = [IsAuthenticated]
@@ -2433,9 +2761,11 @@ class StoreSettingsView(APIView):
     def get(self, request):
         settings, _ = StoreSettings.objects.get_or_create(id=1)
         return Response({
+            "store_is_open": settings.store_is_open,
             "max_coupons_per_order": settings.max_coupons_per_order,
             "pos_cash_balance": settings.pos_cash_balance, # [NEW] Return balance
             "tin_number": settings.tin_number,
+            "receipt_phone": settings.receipt_phone,
         }, status=status.HTTP_200_OK)
 
     def post(self, request):
@@ -2444,6 +2774,21 @@ class StoreSettingsView(APIView):
             return Response({"error": "Only administrators can change store settings."}, status=status.HTTP_403_FORBIDDEN)
 
         settings, _ = StoreSettings.objects.get_or_create(id=1)
+
+        store_is_open = request.data.get('store_is_open')
+        if store_is_open is not None:
+            try:
+                settings.store_is_open = _coerce_boolean_setting(store_is_open)
+            except ValueError:
+                return Response(
+                    {
+                        "error": "store_is_open must be a valid boolean value.",
+                        "field_errors": {
+                            "store_is_open": "Use true/false, yes/no, on/off, or 1/0.",
+                        },
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         
         max_coupons = request.data.get('max_coupons_per_order')
         if max_coupons is not None:
@@ -2469,11 +2814,40 @@ class StoreSettingsView(APIView):
                 )
             settings.tin_number = normalized_tin
 
+        receipt_phone = request.data.get('receipt_phone')
+        if receipt_phone is not None:
+            normalized_phone = str(receipt_phone).strip()
+            if not normalized_phone:
+                return Response(
+                    {
+                        "error": "Receipt phone number must not be blank.",
+                        "field_errors": {
+                            "receipt_phone": "Receipt phone number is required.",
+                        },
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if not RECEIPT_PHONE_REGEX.fullmatch(normalized_phone):
+                return Response(
+                    {
+                        "error": "Receipt phone must use a valid phone format.",
+                        "field_errors": {
+                            "receipt_phone": "Use digits, spaces, +, -, and parentheses only.",
+                        },
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            settings.receipt_phone = normalized_phone
+
         settings.save()
 
         return Response({
             "message": "Settings updated successfully.",
+            "store_is_open": settings.store_is_open,
             "max_coupons_per_order": settings.max_coupons_per_order,
             "pos_cash_balance": settings.pos_cash_balance, # [NEW] Return updated balance
             "tin_number": settings.tin_number,
+            "receipt_phone": settings.receipt_phone,
         }, status=status.HTTP_200_OK)

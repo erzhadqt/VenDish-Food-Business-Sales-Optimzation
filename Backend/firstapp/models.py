@@ -67,9 +67,11 @@ class UserProfile(models.Model):
 class StoreSettings(models.Model):
     # This table will only ever have one row
     void_pin = models.CharField(max_length=128, blank=True, null=True)
+    store_is_open = models.BooleanField(default=True)
     max_coupons_per_order = models.PositiveIntegerField(default=2)
     pos_cash_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     tin_number = models.CharField(max_length=15, default='123-456-789-000')
+    receipt_phone = models.CharField(max_length=25, default='+63 966 443 1581')
 
     def __str__(self):
         return "Global Store Settings"
@@ -88,6 +90,7 @@ class Product(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2)
     track_stock = models.BooleanField(default=False)
     stock_quantity = models.PositiveIntegerField(default=0)
+    low_serving_threshold = models.PositiveIntegerField(default=10)
     is_available = models.BooleanField(default=True)
     is_archived = models.BooleanField(default=False)
     archived_at = models.DateTimeField(null=True, blank=True)
@@ -107,6 +110,14 @@ class CouponCriteria(models.Model):
     name = models.CharField(max_length=100, help_text="Internal name like 'Summer Sale 20%'")
     discount_type = models.CharField(max_length=20, choices=DISCOUNT_TYPES, default='percentage')
     discount_value = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text="Percentage or Fixed Amount")
+    max_discount_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        default=None,
+        help_text="Optional cap amount for percentage discounts."
+    )
     
     min_spend = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     

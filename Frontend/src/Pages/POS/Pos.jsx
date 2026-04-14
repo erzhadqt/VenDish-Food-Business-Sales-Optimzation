@@ -13,6 +13,7 @@ import { SelectDiscount } from "../../Components/SelectDiscount";
 import AlertModal from "../../Components/AlertModal";
 import { Skeleton } from "../../Components/ui/skeleton";
 import { applyQueryParam, usePersistedQueryState } from "../../utils/usePersistedQueryState";
+import { format } from "date-fns";
 
 const POS_STORAGE_KEYS = {
   cart: "pos_cartItems",
@@ -28,6 +29,89 @@ const POS_QUERY_KEYS = {
   search: "posSearch",
   category: "posCategory",
   sort: "posSort",
+};
+
+const BEST_SELLER_LIMIT = 4;
+const DEFAULT_LOW_SERVING_THRESHOLD = 10;
+const PH_VAT_RATE = 0.12;
+const PH_VAT_INCLUSIVE_DIVISOR = 1 + PH_VAT_RATE;
+
+const normalizeProductName = (value) => String(value || "").trim().toLowerCase();
+
+const computePhilippinesVatFromVatInclusiveTotal = (vatInclusiveTotal) => {
+  const safeTotal = Number(vatInclusiveTotal || 0);
+  if (!Number.isFinite(safeTotal) || safeTotal <= 0) return 0;
+  return safeTotal - (safeTotal / PH_VAT_INCLUSIVE_DIVISOR);
+};
+
+const applyOptionalMaxDiscountCap = (discountAmount, maxDiscountAmount) => {
+  const safeDiscount = Number(discountAmount || 0);
+  if (!Number.isFinite(safeDiscount) || safeDiscount <= 0) return 0;
+
+  const safeCap = Number(maxDiscountAmount);
+  if (!Number.isFinite(safeCap) || safeCap <= 0) return safeDiscount;
+
+  return Math.min(safeDiscount, safeCap);
+};
+
+const getTodaySalesRange = () => {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+
+  return {
+    todayStartStr: format(todayStart, "yyyy-MM-dd'T'HH:mm:ssXXX"),
+    todayEndStr: format(todayEnd, "yyyy-MM-dd'T'HH:mm:ssXXX"),
+  };
+};
+
+const resolveBestSellerIdsFromSalesReport = (salesRows, products) => {
+  if (!Array.isArray(salesRows) || salesRows.length === 0 || !Array.isArray(products) || products.length === 0) {
+    return [];
+  }
+
+  const productIdByName = new Map();
+  products.forEach((product) => {
+    const normalizedName = normalizeProductName(product?.product_name);
+    const productId = Number(product?.id);
+    if (normalizedName && Number.isFinite(productId) && !productIdByName.has(normalizedName)) {
+      productIdByName.set(normalizedName, productId);
+    }
+  });
+
+  const aggregatedSalesByName = {};
+  salesRows.forEach((row) => {
+    const dailyProductSales = row?.daily_product_sales;
+    if (!dailyProductSales || typeof dailyProductSales !== "object") return;
+
+    Object.entries(dailyProductSales).forEach(([productName, quantity]) => {
+      const safeName = String(productName || "").trim();
+      const safeQuantity = Number(quantity || 0);
+
+      if (!safeName || !Number.isFinite(safeQuantity) || safeQuantity <= 0) return;
+      aggregatedSalesByName[safeName] = (aggregatedSalesByName[safeName] || 0) + safeQuantity;
+    });
+  });
+
+  const seen = new Set();
+  const rankedIds = Object.entries(aggregatedSalesByName)
+    .sort((a, b) => {
+      const qtyDiff = Number(b[1]) - Number(a[1]);
+      if (qtyDiff !== 0) return qtyDiff;
+      return String(a[0]).localeCompare(String(b[0]), undefined, { sensitivity: "base" });
+    })
+    .map(([productName]) => productIdByName.get(normalizeProductName(productName)))
+    .filter((productId) => {
+      if (!Number.isFinite(productId) || seen.has(productId)) return false;
+      seen.add(productId);
+      return true;
+    })
+    .slice(0, BEST_SELLER_LIMIT);
+
+  // Required POS order: 4th -> 1st (still pinned at the top).
+  return rankedIds.reverse();
 };
 
 const Pos = () => {
@@ -73,6 +157,7 @@ const Pos = () => {
   const [cash, setCash] = useState("");
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState(["All"]);
+  const [bestSellerProductIds, setBestSellerProductIds] = useState([]);
 
   const [maxCoupons, setMaxCoupons] = useState(2);
   
@@ -144,6 +229,46 @@ const Pos = () => {
     });
   };
 
+  const fetchDailyBestSellerProductIds = useCallback(async (productsSnapshot = []) => {
+    try {
+      const bestSellerResponse = await api.get(
+        `/firstapp/products/best-sellers/?period=daily&limit=${BEST_SELLER_LIMIT}`
+      );
+
+      const seen = new Set();
+      const bestSellerIds = (Array.isArray(bestSellerResponse.data) ? bestSellerResponse.data : [])
+        .map((item) => Number(item?.id))
+        .filter((productId) => {
+          if (!Number.isFinite(productId) || seen.has(productId)) return false;
+          seen.add(productId);
+          return true;
+        })
+        .slice(0, BEST_SELLER_LIMIT);
+
+      if (bestSellerIds.length > 0) {
+        // Required POS order: 4th -> 1st (still pinned at the top).
+        return bestSellerIds.reverse();
+      }
+    } catch (error) {
+      console.warn("Primary best-seller endpoint unavailable, falling back to sales aggregation:", error);
+    }
+
+    try {
+      const { todayStartStr, todayEndStr } = getTodaySalesRange();
+      const salesResponse = await api.get(
+        `/firstapp/sales/?period=daily&start=${encodeURIComponent(todayStartStr)}&end=${encodeURIComponent(todayEndStr)}`
+      );
+
+      return resolveBestSellerIdsFromSalesReport(
+        Array.isArray(salesResponse.data) ? salesResponse.data : [],
+        Array.isArray(productsSnapshot) ? productsSnapshot : []
+      );
+    } catch (error) {
+      console.error("Failed to fetch fallback daily best sellers:", error);
+      return [];
+    }
+  }, []);
+
   const refreshMenuInventory = useCallback(async () => {
     try {
       const [prodRes, catRes] = await Promise.all([
@@ -151,16 +276,20 @@ const Pos = () => {
         api.get("/firstapp/categories/"),
       ]);
 
-      setProducts(Array.isArray(prodRes.data) ? prodRes.data : []);
+      const nextProducts = Array.isArray(prodRes.data) ? prodRes.data : [];
+      setProducts(nextProducts);
 
       if (catRes.data && Array.isArray(catRes.data)) {
         const catNames = catRes.data.map((c) => c.name).filter(Boolean);
         setCategories(["All", ...catNames]);
       }
+
+      const rankedBestSellerIds = await fetchDailyBestSellerProductIds(nextProducts);
+      setBestSellerProductIds(rankedBestSellerIds);
     } catch (error) {
       console.error("Failed to refresh POS inventory:", error);
     }
-  }, []);
+  }, [fetchDailyBestSellerProductIds]);
 
   const discountOptions = [
     { value: "senior", label: "Senior Citizen (20%)" },
@@ -202,10 +331,13 @@ const Pos = () => {
             api.get("/firstapp/products/"),
             api.get("/firstapp/users/"),
             api.get(`/settings/?t=${new Date().getTime()}`),
-            api.get("/firstapp/categories/")
+            api.get("/firstapp/categories/"),
         ]);
-        setProducts(prodRes.data);
-        setUsers(userRes.data);
+
+        const nextProducts = Array.isArray(prodRes.data) ? prodRes.data : [];
+        setProducts(nextProducts);
+        setUsers(Array.isArray(userRes.data) ? userRes.data : []);
+
         if (settingsRes.data.max_coupons_per_order !== undefined) {
              setMaxCoupons(settingsRes.data.max_coupons_per_order);
         }
@@ -216,6 +348,9 @@ const Pos = () => {
           const catNames = catRes.data.map(c => c.name).filter(Boolean);
           setCategories(["All", ...catNames]);
         }
+
+        const rankedBestSellerIds = await fetchDailyBestSellerProductIds(nextProducts);
+        setBestSellerProductIds(rankedBestSellerIds);
       } catch (error) {
         console.error("Failed to fetch data:", error);
       } finally {
@@ -223,7 +358,7 @@ const Pos = () => {
       }
     };
     fetchData();
-  }, []);
+  }, [fetchDailyBestSellerProductIds]);
 
   useEffect(() => {
     const handleInventoryUpdate = () => {
@@ -246,6 +381,12 @@ const Pos = () => {
   }, [refreshMenuInventory]);
   
   const filteredFoods = useMemo(() => {
+    const bestSellerOrderMap = new Map(
+      bestSellerProductIds
+        .map((id, index) => [Number(id), index])
+        .filter(([id]) => Number.isFinite(id))
+    );
+
     const categoryFiltered = selectedCategory === "All"
       ? products
       : products.filter((food) => food.category === selectedCategory);
@@ -268,24 +409,40 @@ const Pos = () => {
       sortedFoods.sort((a, b) =>
         (b.product_name || "").localeCompare((a.product_name || ""), undefined, { sensitivity: "base" })
       );
-      return sortedFoods;
-    }
-
-    if (menuSortOrder === "price_desc") {
+    } else if (menuSortOrder === "price_desc") {
       sortedFoods.sort((a, b) => safePrice(b.price) - safePrice(a.price));
-      return sortedFoods;
-    }
-
-    if (menuSortOrder === "price_asc") {
+    } else if (menuSortOrder === "price_asc") {
       sortedFoods.sort((a, b) => safePrice(a.price) - safePrice(b.price));
-      return sortedFoods;
+    } else {
+      sortedFoods.sort((a, b) =>
+        (a.product_name || "").localeCompare((b.product_name || ""), undefined, { sensitivity: "base" })
+      );
     }
 
-    sortedFoods.sort((a, b) =>
-      (a.product_name || "").localeCompare((b.product_name || ""), undefined, { sensitivity: "base" })
+    const bestSellers = [];
+    const others = [];
+
+    sortedFoods.forEach(food => {
+      if (bestSellerOrderMap.has(Number(food.id))) {
+        bestSellers.push(food);
+      } else {
+        others.push(food);
+      }
+    });
+
+    bestSellers.sort(
+      (a, b) =>
+        (bestSellerOrderMap.get(Number(a.id)) ?? Number.MAX_SAFE_INTEGER) -
+        (bestSellerOrderMap.get(Number(b.id)) ?? Number.MAX_SAFE_INTEGER)
     );
-    return sortedFoods;
-  }, [products, selectedCategory, menuSearchQuery, menuSortOrder]);
+
+    return [...bestSellers, ...others];
+  }, [products, selectedCategory, menuSearchQuery, menuSortOrder, bestSellerProductIds]);
+
+  const bestSellerBadgeSet = useMemo(
+    () => new Set(bestSellerProductIds.map((id) => Number(id)).filter((id) => Number.isFinite(id))),
+    [bestSellerProductIds]
+  );
 
   const selectedCustomerInfo = useMemo(
     () => users.find((user) => user.id === selectedCustomer) || null,
@@ -396,9 +553,19 @@ const Pos = () => {
     return Math.max(currentStock - inCartQty, 0);
   };
 
-  const remindIfTenRemaining = (productName, remainingServings) => {
-    if (remainingServings === 10) {
-      triggerAlert("Low Servings", `${productName} now has only 10 servings remaining.`);
+  const getLowServingThreshold = (productId, fallbackThreshold = DEFAULT_LOW_SERVING_THRESHOLD) => {
+    const liveProduct = products.find((p) => p.id === productId);
+    const thresholdValue = Number(liveProduct?.low_serving_threshold ?? fallbackThreshold);
+    if (!Number.isFinite(thresholdValue) || thresholdValue < 0) return DEFAULT_LOW_SERVING_THRESHOLD;
+    return Math.floor(thresholdValue);
+  };
+
+  const remindIfLowServingRemaining = (productName, remainingServings, threshold) => {
+    if (threshold > 0 && remainingServings === threshold) {
+      triggerAlert(
+        "Low Servings",
+        `${productName} now has only ${threshold} ${threshold === 1 ? "serving" : "servings"} remaining.`
+      );
     }
   };
 
@@ -422,7 +589,8 @@ const Pos = () => {
     }
 
     const remainingServings = baseStock - nextQty;
-    remindIfTenRemaining(food.product_name, remainingServings);
+    const lowServingThreshold = getLowServingThreshold(food.id, food.low_serving_threshold);
+    remindIfLowServingRemaining(food.product_name, remainingServings, lowServingThreshold);
   };
 
   const autoAddItemToCart = (productId) => {
@@ -435,7 +603,8 @@ const Pos = () => {
        if (product.stock_quantity > 0) {
          setCartItems(prev => [...prev, { ...product, qty: 1 }]);
          const remainingServings = Number(product.stock_quantity) - 1;
-         remindIfTenRemaining(product.product_name, remainingServings);
+         const lowServingThreshold = getLowServingThreshold(product.id, product.low_serving_threshold);
+         remindIfLowServingRemaining(product.product_name, remainingServings, lowServingThreshold);
        } else {
          setCouponError(`Cannot apply coupon: ${product.product_name} has no available servings.`);
        }
@@ -443,7 +612,6 @@ const Pos = () => {
   };
 
   const subTotal = cartItems.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const vat = subTotal - (subTotal * 0.88); 
 
   const standardDiscount = useMemo(() => {
       if (selectedDiscount === "senior" || selectedDiscount === "pwd") return subTotal * 0.20;
@@ -472,7 +640,8 @@ const Pos = () => {
                 const itemTotal = targetItem.price * targetItem.qty;
                 if (criteria.discount_type === 'percentage') {
                     const val = parseFloat(criteria.discount_value);
-                    currentDiscount = itemTotal * (val / 100);
+                  const rawDiscount = itemTotal * (val / 100);
+                  currentDiscount = applyOptionalMaxDiscountCap(rawDiscount, criteria.max_discount_amount);
                 } else if (criteria.discount_type === 'fixed') {
                     const val = parseFloat(criteria.discount_value);
                     currentDiscount = val > itemTotal ? itemTotal : val;
@@ -483,7 +652,8 @@ const Pos = () => {
             const baseAmount = subTotal - standardDiscount;
             if (criteria.discount_type === 'percentage') {
                 const val = parseFloat(criteria.discount_value);
-                currentDiscount = baseAmount * (val / 100);
+                const rawDiscount = baseAmount * (val / 100);
+                currentDiscount = applyOptionalMaxDiscountCap(rawDiscount, criteria.max_discount_amount);
             } 
             else if (criteria.discount_type === 'fixed') {
                 currentDiscount = parseFloat(criteria.discount_value);
@@ -498,6 +668,8 @@ const Pos = () => {
 
   const tempTotal = subTotal - standardDiscount - couponDiscountAmount;
   const total = tempTotal > 0 ? tempTotal : 0;
+  const isVatExemptSale = selectedDiscount === "senior" || selectedDiscount === "pwd";
+  const vat = isVatExemptSale ? 0 : computePhilippinesVatFromVatInclusiveTotal(total);
   const change = cash ? (parseFloat(cash) - total).toFixed(2) : 0;
 
   // 🔴 Strict sanitization for Cash Amount Input (Allows numbers and decimals)
@@ -761,6 +933,9 @@ const Pos = () => {
 
       await attachPaymentToReceipt(transactionId, updatedReceipt.receipt_id || updatedReceipt.id);
       localStorage.removeItem(POS_STORAGE_KEYS.gcashPending);
+
+      // Keep top daily best-seller ranking in sync after successful payment finalization.
+      await refreshMenuInventory();
       
       // Close the modal now that we are done -> triggers the Receipt modal to pop up!
       setGcashModalOpen(false); 
@@ -791,6 +966,7 @@ const Pos = () => {
       if (status === "PAID") {
           if (returnedReceiptId && options.autoFinalize) {
               await openReceiptById(returnedReceiptId, true);
+              await refreshMenuInventory();
               localStorage.removeItem(POS_STORAGE_KEYS.gcashPending);
           }
       }
@@ -860,6 +1036,7 @@ const Pos = () => {
 
         if (receiptId) {
           await openReceiptById(receiptId, false);
+          await refreshMenuInventory();
           localStorage.removeItem(POS_STORAGE_KEYS.gcashPending);
         }
       } catch (error) {
@@ -868,7 +1045,7 @@ const Pos = () => {
     };
 
     recoverByReference();
-  }, [location.search]);
+  }, [location.search, refreshMenuInventory]);
 
   useEffect(() => {
     try {
@@ -927,6 +1104,9 @@ const Pos = () => {
         const response = await api.post("/firstapp/receipt/", payload);
         setReceiptDetails(response.data);
         setIsReceiptModalOpen(true);
+
+        // Keep top daily best-seller ranking in sync after each completed cash sale.
+        await refreshMenuInventory();
 
         // [FIX]: Optimistic UI Update - Immediately add the total to the local drawer state
         setPosBalance(prev => Number(prev) + Number(total));
@@ -1035,12 +1215,27 @@ const Pos = () => {
                 </div>
                ))}
 
-               {!dataLoading && filteredFoods.map((food) => (
-                <div 
-                  key={food.id} 
+               {!dataLoading && filteredFoods.map((food) => {
+                const remainingServings = getRemainingServings(food.id, food.stock_quantity);
+                const lowServingThreshold = getLowServingThreshold(food.id, food.low_serving_threshold);
+                const isLowServing = lowServingThreshold > 0 && remainingServings > 0 && remainingServings <= lowServingThreshold;
+
+                return (
+                <div
+                  key={food.id}   
                   onClick={() => handleFoodClick(food)} 
                   className="bg-white border border-gray-100 p-3 rounded-xl shadow-sm hover:shadow-lg hover:border-red-200 transition cursor-pointer flex flex-col items-center group relative overflow-hidden h-60"
                 >
+                  {isLowServing && (
+                    <div className="absolute top-2 left-2 bg-amber-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-md z-10">
+                      Low Serving
+                    </div>
+                  )}
+                  {bestSellerBadgeSet.has(Number(food.id)) && (
+                    <div className="absolute top-2 right-2 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-md z-10">
+                      Best Seller
+                    </div>
+                  )}
                   <div className="w-full h-32 mb-2 overflow-hidden rounded-lg bg-gray-200">
                     {food.image ? (
                       <img src={food.image} alt={food.product_name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" /> 
@@ -1054,9 +1249,9 @@ const Pos = () => {
                   <div className="w-full flex justify-between items-end border-t pt-2 mt-1">
                     <span className="text-red-600 font-bold">₱{food.price}</span>
                     
-                    {getRemainingServings(food.id, food.stock_quantity) > 0 ? (
+                    {remainingServings > 0 ? (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800 border border-green-200">
-                        Servings: {getRemainingServings(food.id, food.stock_quantity)}
+                        Servings: {remainingServings}
                       </span>
                     ) : (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 border border-red-200">
@@ -1065,7 +1260,8 @@ const Pos = () => {
                     )}
                   </div>
                 </div>
-               ))}
+                );
+               })}
 
                {!dataLoading && filteredFoods.length === 0 && (
                 <div className="col-span-full text-center text-gray-500 py-10">

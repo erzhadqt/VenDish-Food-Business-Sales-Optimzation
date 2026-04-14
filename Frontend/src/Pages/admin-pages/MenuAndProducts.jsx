@@ -270,10 +270,15 @@ function ProductList() {
                     <span className="text-gray-500">Servings</span>
                     <span className={`font-bold ${
                         p.stock_quantity === 0 ? "text-red-600" : 
-                        p.stock_quantity < 10 ? "text-orange-600" : "text-gray-900"
+                        (Number(p.low_serving_threshold ?? 10) > 0 && Number(p.stock_quantity) <= Number(p.low_serving_threshold ?? 10)) ? "text-orange-600" : "text-gray-900"
                     }`}>
                         {p.stock_quantity}
                     </span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">Low Serving At</span>
+                    <span className="text-gray-700 font-medium">{Number(p.low_serving_threshold ?? 10)}</span>
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t-3 border-gray-200">
@@ -413,7 +418,7 @@ function ProductList() {
                     }}
                     className="sm:col-span-2 flex gap-2 items-center justify-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
                   >
-                    <ReceiptText size={18}/> Receipt TIN
+                    <ReceiptText size={18}/> Receipt TIN & Phone
                   </button>
                 </div>
               </section>

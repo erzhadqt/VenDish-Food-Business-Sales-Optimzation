@@ -21,7 +21,7 @@ from django.urls import path, include
 
 from rest_framework.permissions import AllowAny
 
-from firstapp.views import CreateUserView, UserViewSet, UserDetailView, HomePageViewSet, AboutPageViewSet, ContactPageViewSet, CurrentUserView, OTPViewSet, VerifyOTPViewSet, ChangePasswordViaToken, VerifyVoidPinView, UpdateVoidPinView, StoreSettingsView, SafeTokenRefreshView, PlatformTokenObtainPairView, trigger_deactivated_cleanup
+from firstapp.views import CreateUserView, UserViewSet, UserDetailView, HomePageViewSet, AboutPageViewSet, ContactPageViewSet, CurrentUserView, OTPViewSet, VerifyOTPViewSet, ChangePasswordViaToken, VerifyVoidPinView, UpdateVoidPinView, StoreSettingsView, StoreStatusView, SafeTokenRefreshView, PlatformTokenObtainPairView, trigger_deactivated_cleanup
 
 
 urlpatterns = [
@@ -48,6 +48,7 @@ urlpatterns = [
     path('update-void-pin/', UpdateVoidPinView.as_view(), name='update-void-pin'),
     path('verify-void-pin/', VerifyVoidPinView.as_view(), name='verify-void-pin'),
 
+    path('store-status/', StoreStatusView.as_view(), name='store-status'),
     path('settings/', StoreSettingsView.as_view(), name='store-settings'),
 ]
 

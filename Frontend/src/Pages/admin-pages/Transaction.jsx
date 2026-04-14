@@ -5,6 +5,7 @@ import api from '../../api';
 import ReceiptModal from '../../Components/ReceiptModal.jsx';
 import { Skeleton } from '../../Components/ui/skeleton';
 import { applyQueryParam, usePersistedQueryState } from '../../utils/usePersistedQueryState';
+import { useAuth } from '../../context/AuthContext';
 
 const parsePositivePage = (value, fallback = 1) => {
     const parsed = Number.parseInt(value, 10);
@@ -13,6 +14,12 @@ const parsePositivePage = (value, fallback = 1) => {
 
 const Transaction = () => {
     const [searchParams, setSearchParams] = useSearchParams();
+    const { user } = useAuth();
+
+    const normalizedRole = typeof user?.role === 'string' ? user.role.toLowerCase() : '';
+    const canUseCashierFilter = Boolean(
+        user?.is_superuser || normalizedRole === 'admin' || normalizedRole === 'superuser'
+    );
 
     const [transactions, setTransactions] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -69,7 +76,7 @@ const Transaction = () => {
         applyQueryParam(params, 'payment', filterPaymentMode, (value) => value === 'ALL');
         applyQueryParam(params, 'status', filterStatus, (value) => value === 'ALL');
         applyQueryParam(params, 'coupon', filterCoupon, (value) => value === 'ALL');
-        applyQueryParam(params, 'cashier', filterCashier, (value) => value === 'ALL');
+        applyQueryParam(params, 'cashier', canUseCashierFilter ? filterCashier : 'ALL', (value) => value === 'ALL');
         applyQueryParam(params, 'page', currentPage, (value) => Number(value) <= 1);
 
         if (params.toString() !== searchParams.toString()) {
@@ -82,9 +89,17 @@ const Transaction = () => {
         filterCashier,
         filterDate,
         filterPaymentMode,
+        canUseCashierFilter,
         searchParams,
         setSearchParams,
     ]);
+
+    useEffect(() => {
+        if (!canUseCashierFilter && filterCashier !== 'ALL') {
+            setFilterCashier('ALL');
+            setCurrentPage(1);
+        }
+    }, [canUseCashierFilter, filterCashier, setFilterCashier, setCurrentPage]);
 
     // Reset all filters to default
     const handleClearFilters = () => {
@@ -135,7 +150,7 @@ const Transaction = () => {
         const hasCoupons = Array.isArray(receipt.coupon_details) && receipt.coupon_details.length > 0;
         const statusMatch = filterStatus === 'ALL' || receipt.status === filterStatus;  
         const couponMatch = filterCoupon === 'ALL' || (filterCoupon === 'WITH' && hasCoupons) || (filterCoupon === 'WITHOUT' && !hasCoupons);  
-        const cashierMatch = filterCashier === 'ALL' || (receipt.cashier_name || "System") === filterCashier;
+        const cashierMatch = !canUseCashierFilter || filterCashier === 'ALL' || (receipt.cashier_name || "System") === filterCashier;
         const paymentModeMatch = filterPaymentMode === 'ALL' || receipt.payment_method === filterPaymentMode; 
         
         let dateMatch = true;
@@ -173,7 +188,7 @@ const Transaction = () => {
                 </nav>  
 
                 {/* Updated Grid for exact 6 columns and consistent spacing */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-6">  
+                <div className={`grid grid-cols-1 sm:grid-cols-2 ${canUseCashierFilter ? 'lg:grid-cols-6' : 'lg:grid-cols-5'} gap-4 mb-6`}>  
                     <div className="flex flex-col">
                         <label className="text-sm font-medium text-gray-700 mb-1">Date</label>
                         <input 
@@ -211,15 +226,17 @@ const Transaction = () => {
                         </select>  
                     </div>  
 
-                    <div className="flex flex-col">  
-                        <label className="text-sm font-medium text-gray-700 mb-1">Cashier</label>  
-                        <select value={filterCashier} onChange={(e) => { setFilterCashier(e.target.value); setCurrentPage(1); }} className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none w-full h-[38px]">  
-                            <option value="ALL">All Cashiers</option>  
-                            {uniqueCashiers.map((name) => (
-                                <option key={name} value={name}>{name}</option>
-                            ))}
-                        </select>  
-                    </div>  
+                    {canUseCashierFilter && (
+                        <div className="flex flex-col">  
+                            <label className="text-sm font-medium text-gray-700 mb-1">Cashier</label>  
+                            <select value={filterCashier} onChange={(e) => { setFilterCashier(e.target.value); setCurrentPage(1); }} className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none w-full h-[38px]">  
+                                <option value="ALL">All Cashiers</option>  
+                                {uniqueCashiers.map((name) => (
+                                    <option key={name} value={name}>{name}</option>
+                                ))}
+                            </select>  
+                        </div>
+                    )}  
 
                     <div className="flex flex-col justify-end">
                         <button 

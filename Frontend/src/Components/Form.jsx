@@ -18,6 +18,7 @@ function Form({ route, method }) {
   // UI State
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [storeStatusNotice, setStoreStatusNotice] = useState("");
   const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
   
   const navigate = useNavigate();
@@ -35,6 +36,41 @@ function Form({ route, method }) {
       else if (user.is_staff) navigate("/admin/pos");
     }
   }, [user, userLoading, navigate]);
+
+  useEffect(() => {
+    if (!isLogin) {
+      setStoreStatusNotice("");
+      return;
+    }
+
+    let isActive = true;
+
+    const fetchStoreStatus = async () => {
+      try {
+        const response = await api.get("/store-status/", {
+          skipAuthRefresh: true,
+        });
+
+        if (!isActive) return;
+
+        const isStoreOpen = response?.data?.store_is_open !== false;
+        if (!isStoreOpen) {
+          setStoreStatusNotice("Store is currently closed. Staff login is temporarily disabled.");
+        } else {
+          setStoreStatusNotice("");
+        }
+      } catch {
+        if (!isActive) return;
+        setStoreStatusNotice("");
+      }
+    };
+
+    fetchStoreStatus();
+
+    return () => {
+      isActive = false;
+    };
+  }, [isLogin]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -99,6 +135,13 @@ function Form({ route, method }) {
           <div className="p-8 pt-6">
             
             {/* Alert Message */}
+            {isLogin && storeStatusNotice && (
+              <div className="mb-4 p-3 border rounded-xl flex items-center gap-3 text-sm animate-fade-in shadow-sm bg-amber-50 border-amber-200 text-amber-700">
+                <AlertCircle size={18} className="shrink-0" />
+                <p className="font-medium">{storeStatusNotice}</p>
+              </div>
+            )}
+
             {message && (
               <div className={`mb-6 p-3 border rounded-xl flex items-center gap-3 text-sm animate-fade-in shadow-sm ${
                 message.toLowerCase().includes("success") 

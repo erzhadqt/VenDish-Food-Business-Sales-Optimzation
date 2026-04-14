@@ -15,6 +15,8 @@ import { Label } from "../Components/ui/label";
 import { AlertCircle } from "lucide-react";
 import { Skeleton } from "../Components/ui/skeleton";
 
+const DEFAULT_LOW_SERVING_THRESHOLD = 10;
+
 export default function EditProductDialog({ product, onClose, onSaved, categories = [], existingProducts = [] }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -25,6 +27,7 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
   const [price, setPrice] = useState(product?.price || "");
   const [category, setCategory] = useState(product?.category || "");
   const [servings, setServings] = useState(String(product?.stock_quantity ?? 0));
+  const [lowServingThreshold, setLowServingThreshold] = useState(String(product?.low_serving_threshold ?? DEFAULT_LOW_SERVING_THRESHOLD));
   const [image, setImage] = useState(null);
 
   const clearFieldError = (fieldName) => {
@@ -65,6 +68,12 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
     clearFieldError("servings");
   };
 
+  const handleLowServingThresholdChange = (e) => {
+    const val = e.target.value.replace(/[^0-9]/g, '');
+    setLowServingThreshold(val);
+    clearFieldError("low_serving_threshold");
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -74,6 +83,7 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
     const nextFieldErrors = {};
     const normalizedProductName = productName.trim();
     const numericPrice = parseFloat(price || "0");
+    const parsedThreshold = Number.parseInt(lowServingThreshold, 10);
 
     if (!normalizedProductName) {
       nextFieldErrors.product_name = "Product name must not be blank.";
@@ -85,6 +95,10 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
 
     if (price === "" || Number.isNaN(numericPrice) || numericPrice <= 0) {
       nextFieldErrors.price = "Price must be greater than 0.";
+    }
+
+    if (lowServingThreshold === "" || !Number.isInteger(parsedThreshold) || parsedThreshold < 0) {
+      nextFieldErrors.low_serving_threshold = "Low serving threshold must be 0 or greater.";
     }
 
     if (Object.keys(nextFieldErrors).length > 0) {
@@ -128,8 +142,10 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
 
     const parsedServings = parseInt(servings || "0", 10);
     const servingCount = Number.isFinite(parsedServings) ? Math.max(0, parsedServings) : 0;
+    const thresholdCount = Number.isFinite(parsedThreshold) ? Math.max(0, parsedThreshold) : DEFAULT_LOW_SERVING_THRESHOLD;
     
     formData.append("stock_quantity", servingCount);
+    formData.append("low_serving_threshold", thresholdCount);
     formData.append("track_stock", "true");
     formData.append("is_available", String(servingCount > 0));
     
@@ -280,6 +296,22 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
               className={getInputClassName("servings")}
               aria-invalid={!!fieldErrors.servings}
             />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="low-serving-threshold">Low Serving Threshold</Label>
+            <Input
+              id="low-serving-threshold"
+              type="text"
+              inputMode="numeric"
+              placeholder={String(DEFAULT_LOW_SERVING_THRESHOLD)}
+              value={lowServingThreshold}
+              onChange={handleLowServingThresholdChange}
+              maxLength={11}
+              className={getInputClassName("low_serving_threshold")}
+              aria-invalid={!!fieldErrors.low_serving_threshold}
+            />
+            <p className="text-xs text-muted-foreground">POS marks this product as low serving when remaining servings are at or below this number.</p>
           </div>
 
           <div className="grid gap-2">

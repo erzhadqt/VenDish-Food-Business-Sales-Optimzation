@@ -16,11 +16,17 @@ import { useReactToPrint } from 'react-to-print';
 
 import ReceiptPrintContent from "./ReceiptPrintContent"; 
 import api from "../api";
-import { DEFAULT_TIN_NUMBER, normalizeTinNumber } from "../utils/tinNumber";
+import {
+  DEFAULT_RECEIPT_PHONE,
+  DEFAULT_TIN_NUMBER,
+  normalizeReceiptPhone,
+  normalizeTinNumber,
+} from "../utils/tinNumber";
 
 export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, onOpenChange }) {
   const contentRef = useRef(null);
   const [tinNumber, setTinNumber] = useState(DEFAULT_TIN_NUMBER);
+  const [receiptPhone, setReceiptPhone] = useState(DEFAULT_RECEIPT_PHONE);
 
   useEffect(() => {
     let isActive = true;
@@ -30,9 +36,11 @@ export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, 
         const res = await api.get(`/settings/?t=${Date.now()}`);
         if (!isActive) return;
         setTinNumber(normalizeTinNumber(res.data?.tin_number, DEFAULT_TIN_NUMBER));
+        setReceiptPhone(normalizeReceiptPhone(res.data?.receipt_phone, DEFAULT_RECEIPT_PHONE));
       } catch {
         if (!isActive) return;
         setTinNumber(DEFAULT_TIN_NUMBER);
+        setReceiptPhone(DEFAULT_RECEIPT_PHONE);
       }
     };
 
@@ -40,6 +48,7 @@ export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, 
       fetchTinNumber();
     } else {
       setTinNumber(DEFAULT_TIN_NUMBER);
+      setReceiptPhone(DEFAULT_RECEIPT_PHONE);
     }
 
     return () => {
@@ -66,7 +75,7 @@ export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, 
   // Helper function to calculate and display both percentage and raw value
   const getCouponDisplay = (coupon) => {
     if (!coupon.criteria_details) return `- ${coupon.rate}`;
-    const { discount_type, discount_value, target_product } = coupon.criteria_details;
+    const { discount_type, discount_value, target_product, max_discount_amount } = coupon.criteria_details;
     
     if (discount_type === 'percentage') {
         let baseAmount = parseFloat(receiptDetails.subtotal || 0);
@@ -82,7 +91,11 @@ export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, 
             }
         }
         
-        const rawValue = (parseFloat(discount_value) / 100) * baseAmount;
+        let rawValue = (parseFloat(discount_value) / 100) * baseAmount;
+        const parsedCap = parseFloat(max_discount_amount);
+        if (!Number.isNaN(parsedCap) && parsedCap > 0) {
+          rawValue = Math.min(rawValue, parsedCap);
+        }
         return `- ${coupon.rate} (₱${rawValue.toFixed(2)})`;
     } else if (discount_type === 'fixed') {
         return `- ₱${parseFloat(discount_value).toFixed(2)}`;
@@ -107,6 +120,7 @@ export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, 
                       ref={contentRef} 
                       transactionData={receiptDetails} 
                       tinNumber={tinNumber}
+                      receiptPhone={receiptPhone}
                   />
               </div>
 
@@ -117,6 +131,7 @@ export default function ReceiptModal2({ title, receiptDetails, onConfirm, open, 
                       <h2 className="text-xl font-bold">Kuya Vince Karinderya</h2>
                       <p className="text-xs">Baliwasan, Zamboanga City</p>
                       <p className="text-xs font-mono text-muted-foreground">TIN: {tinNumber}</p>
+                      <p className="text-xs font-mono text-muted-foreground">Phone: {receiptPhone}</p>
                   </div>
 
                   <p className="text-muted-foreground mb-4 text-xs">

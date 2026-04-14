@@ -14,6 +14,7 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
   const [ruleName, setRuleName] = useState(""); 
   const [discountType, setDiscountType] = useState("percentage"); 
   const [discountValue, setDiscountValue] = useState("");
+  const [maxDiscountAmount, setMaxDiscountAmount] = useState("");
   const [minSpend, setMinSpend] = useState(""); 
   const [selectedFreeProduct, setSelectedFreeProduct] = useState("");
   const [targetProductId, setTargetProductId] = useState("all"); 
@@ -74,6 +75,26 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
     } else if (newType === 'free_item') {
       setDiscountValue(""); 
     }
+
+    if (newType !== 'percentage') {
+      setMaxDiscountAmount("");
+    }
+  };
+
+  const handleMaxDiscountAmountChange = (e) => {
+    let val = e.target.value.replace(/[^0-9.]/g, '');
+    const parts = val.split('.');
+    if (parts.length > 2) {
+      val = parts[0] + '.' + parts.slice(1).join('');
+    }
+
+    if (/^0+$/.test(val)) {
+      val = '';
+    } else if (val.length > 1 && val.startsWith('0') && !val.startsWith('0.')) {
+      val = val.replace(/^0+/, '');
+    }
+
+    setMaxDiscountAmount(val);
   };
 
   const handleMinSpendChange = (e) => {
@@ -98,6 +119,8 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
     // 🔴 1. Basic validation for text inputs
     if(!code || !ruleName) { setError("Please fill in all required fields (Code, Promotion Name, and Date)."); return; }
     if(discountType !== 'free_item' && !discountValue) { setError("Please enter a discount value."); return; }
+    if(discountType === 'free_item' && !selectedFreeProduct) { setError("Please select the free item for this coupon."); return; }
+    if(discountType === 'percentage' && maxDiscountAmount && parseFloat(maxDiscountAmount) <= 0) { setError("Maximum discount cap must be greater than zero."); return; }
 
     // 🔴 2. Strict validation for claim and usage limit
     if(!claimLimit || parseInt(claimLimit) <= 0) {
@@ -129,9 +152,9 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
         discount_type: discountType,
         min_spend: parseFloat(minSpend) || 0, 
         discount_value: discountType === 'free_item' ? 0 : parseFloat(discountValue),
+        max_discount_amount: discountType === 'percentage' && maxDiscountAmount !== '' ? parseFloat(maxDiscountAmount) : null,
         free_product: discountType === 'free_item' ? selectedFreeProduct : null,
         target_product: targetProductId === "all" ? null : targetProductId,
-        valid_from: new Date().toISOString(), 
         valid_to: formattedValidTo 
       };
 
@@ -155,6 +178,7 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
       // Reset State
       setCode(""); setClaimLimit(""); setRuleName("");
       setMinSpend(""); setSelectedFreeProduct(""); setTargetProductId("all");
+      setMaxDiscountAmount("");
       setValidTo(""); setError(null);
 
     } catch (err) {
@@ -290,7 +314,7 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                 <div className="grid gap-2">
                     <Label>Minimum Spend</Label>
                     <div className="relative">
-                        <span className="absolute left-3 top-2.5 text-gray-500">₱</span>
+                        <span className="absolute left-3 top-2 text-gray-500">₱</span>
                         <Input 
                           type="text" 
                           inputMode="decimal"
@@ -302,6 +326,24 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                         />
                     </div>
                 </div>
+                {discountType === 'percentage' && (
+                  <div className="grid gap-2">
+                    <Label>Maximum Discount Cap (Optional)</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-gray-500">₱</span>
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        className="pl-7"
+                        placeholder="e.g. 120.00"
+                        value={maxDiscountAmount}
+                        onChange={handleMaxDiscountAmountChange}
+                        maxLength={10}
+                      />
+                    </div>
+                    <p className="text-[10px] text-gray-400">Limits the peso value deducted by this percentage coupon.</p>
+                  </div>
+                )}
             </div>
         </div>
 

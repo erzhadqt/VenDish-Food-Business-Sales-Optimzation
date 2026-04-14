@@ -1,7 +1,12 @@
 import React, { forwardRef } from "react";
-import { DEFAULT_TIN_NUMBER, normalizeTinNumber } from "../utils/tinNumber";
+import {
+  DEFAULT_RECEIPT_PHONE,
+  DEFAULT_TIN_NUMBER,
+  normalizeReceiptPhone,
+  normalizeTinNumber,
+} from "../utils/tinNumber";
 
-const ReceiptPrintContent = forwardRef(({ transactionData, tinNumber }, ref) => {
+const ReceiptPrintContent = forwardRef(({ transactionData, tinNumber, receiptPhone }, ref) => {
   
   const items = transactionData?.items || [];
   
@@ -33,11 +38,16 @@ const ReceiptPrintContent = forwardRef(({ transactionData, tinNumber }, ref) => 
     DEFAULT_TIN_NUMBER
   );
 
+  const activeReceiptPhone = normalizeReceiptPhone(
+    receiptPhone || transactionData?.receipt_phone,
+    DEFAULT_RECEIPT_PHONE
+  );
+
   // ✅ FIX: Added getCouponDisplay specifically formatted for narrow thermal paper
   const getCouponDisplay = (coupon) => {
     if (!coupon.criteria_details) return `-${coupon.rate}`;
     
-    const { discount_type, discount_value, target_product } = coupon.criteria_details;
+    const { discount_type, discount_value, target_product, max_discount_amount } = coupon.criteria_details;
     
     if (discount_type === 'percentage') {
         let baseAmount = parseFloat(transactionData?.subtotal || 0);
@@ -53,7 +63,11 @@ const ReceiptPrintContent = forwardRef(({ transactionData, tinNumber }, ref) => 
             }
         }
         
-        const rawValue = (parseFloat(discount_value) / 100) * baseAmount;
+        let rawValue = (parseFloat(discount_value) / 100) * baseAmount;
+        const parsedCap = parseFloat(max_discount_amount);
+        if (!Number.isNaN(parsedCap) && parsedCap > 0) {
+          rawValue = Math.min(rawValue, parsedCap);
+        }
         // Output format: "-15%(45.00)" (Compact for 58mm printer)
         return `-${coupon.rate}(${rawValue.toFixed(2)})`; 
     } else if (discount_type === 'fixed') {
@@ -226,7 +240,7 @@ const ReceiptPrintContent = forwardRef(({ transactionData, tinNumber }, ref) => 
         {/* FOOTER */}
         <div style={{ textAlign: 'center', fontSize: '8px', marginBottom: '2px', marginTop: '4px', lineHeight: '1.4' }}>
           <div>System-Generated Receipt</div>
-          <div>+63 966 443 1581</div>
+          <div>{activeReceiptPhone}</div>
           <div style={{ fontWeight: 'bold' }}>Thank you!</div>
         </div>
 

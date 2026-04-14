@@ -1,19 +1,23 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   LineChart, Line, Legend, AreaChart, Area, PieChart, Pie, Cell
 } from "recharts";
 import { 
+  TrendingUp, TrendingDown, CalendarDays, 
+  Download, RefreshCw, PhilippinePesoIcon, Users, BarChart3, Clock,
+  ShoppingBag, Receipt, ScrollText,
+  TicketPlusIcon,
+  TicketPercentIcon,
+} from "lucide-react";
+import { 
   format, startOfMonth, endOfMonth, parseISO, 
   startOfWeek, endOfWeek, startOfYear, endOfYear, startOfDay, endOfDay,
   eachDayOfInterval, eachMonthOfInterval, subYears 
 } from "date-fns";
-import { 
-  TrendingUp, TrendingDown, CalendarDays, 
-  Download, RefreshCw, PhilippinePesoIcon, Users, BarChart3, Clock,
-  ShoppingBag
-} from "lucide-react";
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 
 import api from '../../api'; 
 import { Skeleton } from '../../Components/ui/skeleton';
@@ -52,6 +56,18 @@ const parseDateValue = (value) => {
   if (!value) return null;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const moneyToCents = (value) => {
+  const parsed = Number.parseFloat(value ?? 0);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.round(parsed * 100);
+};
+
+const centsToMoney = (value) => {
+  const parsed = Number(value || 0);
+  if (!Number.isFinite(parsed)) return 0;
+  return parsed / 100;
 };
 
 const getRangeForPeriod = (selectedPeriod, selectedRange) => {
@@ -107,19 +123,39 @@ const formatBucketLabel = (bucketValue, selectedPeriod, compact = false) => {
   return format(parsed, compact ? "MMM d" : "MMM d, yyyy");
 };
 
-const TimelineLoadingSkeleton = () => (
+// UPDATED SKELETON LAYOUT
+const TimelineLoadingSkeleton = ({ isAdmin = false }) => (
   <>
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    {/* Top Row: Primary Financials */}
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
       {Array.from({ length: 4 }).map((_, index) => (
-        <div key={index} className="bg-white shadow-lg rounded-xl p-5 border-l-4 border-gray-200">
-          <Skeleton className="h-4 w-1/2 mb-3" />
+        <div key={`stat-${index}`} className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <div className="flex justify-between items-start mb-4">
+            <Skeleton className="h-4 w-1/2" />
+            <Skeleton className="h-10 w-10 rounded-lg" />
+          </div>
           <Skeleton className="h-8 w-2/3 mb-2" />
           <Skeleton className="h-3 w-1/3" />
         </div>
       ))}
     </div>
 
-    <div className="bg-white p-6 rounded-xl shadow-lg mb-6">
+    {/* Bottom Row: Insights */}
+    <div className={`grid grid-cols-1 sm:grid-cols-2 ${isAdmin ? 'lg:grid-cols-4' : 'lg:grid-cols-2'} gap-4 mb-6`}>
+      {Array.from({ length: isAdmin ? 3 : 2 }).map((_, index) => (
+        <div key={`insight-${index}`} className={`bg-white rounded-xl shadow-sm border border-gray-100 p-5 ${isAdmin && index === 2 ? 'sm:col-span-2' : ''}`}>
+          <div className="flex justify-between items-start mb-4">
+            <Skeleton className="h-4 w-1/2" />
+            <Skeleton className="h-10 w-10 rounded-lg" />
+          </div>
+          <Skeleton className="h-8 w-2/3 mb-2" />
+          <Skeleton className="h-3 w-1/3" />
+        </div>
+      ))}
+    </div>
+
+    {/* Chart Skeleton */}
+    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
       <div className="flex justify-between items-center mb-6">
         <Skeleton className="h-6 w-52" />
         <div className="flex gap-2">
@@ -130,36 +166,22 @@ const TimelineLoadingSkeleton = () => (
       </div>
       <Skeleton className="h-80 w-full" />
     </div>
-
-    <div className="bg-white rounded-xl shadow-lg overflow-hidden mt-6 p-4 space-y-3">
-      <Skeleton className="h-10 w-full" />
-      {Array.from({ length: 5 }).map((_, index) => (
-        <div key={index} className="grid grid-cols-6 gap-4">
-          <Skeleton className="h-5 w-full" />
-          <Skeleton className="h-5 w-full" />
-          <Skeleton className="h-5 w-full" />
-          <Skeleton className="h-5 w-full" />
-          <Skeleton className="h-5 w-full" />
-          <Skeleton className="h-5 w-full" />
-        </div>
-      ))}
-    </div>
   </>
 );
 
 const StaffLoadingSkeleton = () => (
   <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-      <div className="bg-white p-6 rounded-xl shadow-lg">
+      <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
         <Skeleton className="h-6 w-48 mb-4" />
         <Skeleton className="h-80 w-full" />
       </div>
-      <div className="bg-white p-6 rounded-xl shadow-lg">
+      <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
         <Skeleton className="h-6 w-48 mb-4" />
         <Skeleton className="h-80 w-full" />
       </div>
     </div>
-    <div className="bg-white rounded-xl shadow-lg p-4 space-y-3">
+    <div className="bg-white rounded-xl shadow-lg p-4 border border-gray-100 space-y-3">
       <Skeleton className="h-10 w-full" />
       {Array.from({ length: 5 }).map((_, index) => (
         <div key={index} className="grid grid-cols-3 gap-4">
@@ -190,6 +212,8 @@ export default function SalesAndReports() {
     parse: (rawValue, fallback) => rawValue || fallback,
   });
 
+  const [showNetRevenue, setShowNetRevenue] = useState(false);
+
   const [viewMode, setViewMode] = usePersistedQueryState({
     searchParams,
     queryKey: "view",
@@ -199,7 +223,6 @@ export default function SalesAndReports() {
   });
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // Date & Time state defaults to start and end of current day
   const [dateRange, setDateRange] = useState(() => {
     const urlStart = parseDateValue(searchParams.get("start"));
     const urlEnd = parseDateValue(searchParams.get("end"));
@@ -211,6 +234,7 @@ export default function SalesAndReports() {
     const end = urlEnd || storedEnd || endOfDay(new Date());
     return [start, end];
   });
+
   const [period, setPeriod] = usePersistedQueryState({
     searchParams,
     queryKey: "period",
@@ -221,6 +245,7 @@ export default function SalesAndReports() {
       return periods.includes(normalizedValue) ? normalizedValue : "Custom Range";
     },
   });
+
   const [chartType, setChartType] = usePersistedQueryState({
     searchParams,
     queryKey: "chart",
@@ -239,7 +264,6 @@ export default function SalesAndReports() {
     };
   });
 
-  // Refs for click outside
   const calendarRef = useRef(null);
 
   useEffect(() => {
@@ -277,7 +301,6 @@ export default function SalesAndReports() {
     setSearchParams,
   ]);
 
-  // 1. CHECK ADMIN STATUS ON LOAD
   useEffect(() => {
     const getUserData = async () => {
       try {
@@ -292,8 +315,7 @@ export default function SalesAndReports() {
     getUserData();
   }, []);
 
-  // 2. FETCH REPORTS DYNAMICALLY
-  const fetchReports = async (cashierFilter = "ALL", selectedPeriod = period, selectedRange = dateRange) => {
+  const fetchReports = useCallback(async (cashierFilter, selectedPeriod, selectedRange) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -317,7 +339,6 @@ export default function SalesAndReports() {
 
       let nextChartReports = timelineData;
       if (selectedPeriod === "Weekly") {
-        // Weekly chart should show daily progression across the selected week.
         const chartParams = new URLSearchParams(params.toString());
         chartParams.set("period", "daily");
         const weeklyChartRes = await api.get(`/firstapp/sales/?${chartParams.toString()}`);
@@ -327,8 +348,22 @@ export default function SalesAndReports() {
       setChartReports(nextChartReports);
 
       if (isAdmin) {
-          const staffRes = await api.get('/firstapp/sales/by-staff/');
-          setStaffReports(staffRes.data);
+          const staffParams = new URLSearchParams();
+          if (cashierFilter !== "ALL") {
+            staffParams.set("cashier", cashierFilter);
+          }
+          if (start instanceof Date && !Number.isNaN(start.getTime())) {
+            staffParams.set("start", start.toISOString());
+          }
+          if (end instanceof Date && !Number.isNaN(end.getTime())) {
+            staffParams.set("end", end.toISOString());
+          }
+
+          const staffEndpoint = staffParams.toString()
+            ? `/firstapp/sales/by-staff/?${staffParams.toString()}`
+            : '/firstapp/sales/by-staff/';
+          const staffRes = await api.get(staffEndpoint);
+          setStaffReports(Array.isArray(staffRes.data) ? staffRes.data : []);
 
           const usersRes = await api.get('/firstapp/users/');
           const uniqueCashiers = new Set();
@@ -342,21 +377,23 @@ export default function SalesAndReports() {
              });
           }
           setCashierOptions(Array.from(uniqueCashiers).sort());
+      } else {
+          setStaffReports([]);
       }
     } catch (error) {
       console.error("Failed to fetch reports:", error);
       setReports([]);
       setChartReports([]);
+      setStaffReports([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAdmin]);
 
   useEffect(() => {
     fetchReports(filterCashier, period, dateRange);
-  }, [isAdmin, filterCashier, period, dateRange]);
+  }, [fetchReports, filterCashier, period, dateRange]);
 
-  // 3. HANDLE CLICK OUTSIDE CALENDAR TO CLOSE
   useEffect(() => {
     function handleClickOutside(event) {
       if (calendarRef.current && !calendarRef.current.contains(event.target)) {
@@ -384,10 +421,8 @@ export default function SalesAndReports() {
     }
   };
 
-  // --- DATA FILTERING (Timeline) ---
   const filteredReports = useMemo(() => reports, [reports]);
 
-  // --- CHART DATA (Timeline) ---
   const chartData = useMemo(() => {
     const getVal = (val) => parseFloat(val || 0);
 
@@ -494,10 +529,17 @@ export default function SalesAndReports() {
       }));
   }, [chartReports, period, dateRange]);
 
-  // --- WIDGET STATS ---
   const stats = useMemo(() => {
-    const totalRev = filteredReports.reduce((acc, curr) => acc + parseFloat(curr.total_revenue || 0), 0);
+    const totalRev = centsToMoney(
+      filteredReports.reduce((acc, curr) => acc + moneyToCents(curr.total_revenue), 0)
+    );
     const totalOrders = filteredReports.reduce((acc, curr) => acc + (curr.total_orders || 0), 0);
+    const totalVat = centsToMoney(
+      filteredReports.reduce((acc, curr) => acc + moneyToCents(curr.total_vat), 0)
+    );
+    const totalDiscount = centsToMoney(
+      filteredReports.reduce((acc, curr) => acc + moneyToCents(curr.total_discount), 0)
+    );
     
     const productTotals = {};
     filteredReports.forEach(r => {
@@ -538,10 +580,30 @@ export default function SalesAndReports() {
       leastSellerName = Object.keys(leastSellers).sort((a,b) => leastSellers[b] - leastSellers[a])[0] || "N/A";
     }
 
-    return { totalRev, totalOrders, topSellerName, leastSellerName };
+    return { totalRev, totalOrders, totalVat, totalDiscount, topSellerName, leastSellerName };
   }, [filteredReports]);
 
-  // --- SORTING ---
+  const topCashier = useMemo(() => {
+    if (!isAdmin || !Array.isArray(staffReports) || staffReports.length === 0) {
+      return null;
+    }
+
+    const rankedStaff = staffReports
+      .map((staff) => ({
+        name: String(staff?.name || "N/A"),
+        revenue: Number.parseFloat(staff?.revenue || 0),
+        orders: Number(staff?.orders || 0),
+      }))
+      .filter((staff) => Number.isFinite(staff.revenue) && Number.isFinite(staff.orders))
+      .sort((a, b) => {
+        if (b.revenue !== a.revenue) return b.revenue - a.revenue;
+        if (b.orders !== a.orders) return b.orders - a.orders;
+        return a.name.localeCompare(b.name);
+      });
+
+    return rankedStaff[0] || null;
+  }, [isAdmin, staffReports]);
+
   const handleSort = (key) => {
     let direction = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
@@ -585,193 +647,194 @@ export default function SalesAndReports() {
     return 'Day';
   }, [period]);
 
-  // --- EXPORT FUNCTION ---
-  const exportToCSV = () => {
-    const bom = "\uFEFF";
+  const exportToExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'VenDish System';
+    workbook.created = new Date();
+    
+    const worksheet = workbook.addWorksheet(viewMode === 'staff' ? 'Staff Performance' : 'Sales Report');
 
-    const escapeCSV = (value) => {
-      if (value === null || value === undefined) return '';
-      const text = String(value);
-      if (/[",\n]/.test(text)) {
-        return `"${text.replace(/"/g, '""')}"`;
-      }
-      return text;
+    const titleFont = { name: 'Arial', size: 18, bold: true, color: { argb: 'FF1F2937' } };
+    const subtitleFont = { name: 'Arial', size: 12, bold: true, color: { argb: 'FF4B5563' } };
+    const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+    const headerFont = { name: 'Arial', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+    const borderStyle = {
+      top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+      left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+      bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+      right: { style: 'thin', color: { argb: 'FFD1D5DB' } }
     };
 
-    const formatMoney = (value) => Number.parseFloat(value || 0).toFixed(2);
-    const periodStart = dateRange[0];
-    const periodEnd = dateRange[1];
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local';
+    const titleRow = worksheet.addRow(['VenDish Business Report']);
+    titleRow.getCell(1).font = titleFont;
+    worksheet.mergeCells('A1:E1');
+    worksheet.addRow([]);
 
-    const baseMetadata = [
-      ['Generated At', format(new Date(), 'yyyy-MM-dd HH:mm:ss')],
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local';
+    const metadata = [
       ['Report View', viewMode === 'staff' ? 'Staff Performance' : 'Sales Timeline'],
+      ['Generated At', format(new Date(), 'MMM d, yyyy HH:mm:ss')],
       ['Selected Period', period],
-      ['Range Start', periodStart ? format(periodStart, 'yyyy-MM-dd HH:mm:ss') : 'N/A'],
-      ['Range End', periodEnd ? format(periodEnd, 'yyyy-MM-dd HH:mm:ss') : 'N/A'],
       ['Timezone', timezone],
     ];
 
-    let summaryRows = [];
-    let detailHeaders = [];
-    let detailRows = [];
+    worksheet.addRow(['Report Information']).getCell(1).font = subtitleFont;
+    metadata.forEach(row => {
+      const addedRow = worksheet.addRow(row);
+      addedRow.getCell(1).font = { bold: true };
+    });
+    worksheet.addRow([]); 
+
     let filename = '';
+    const formatMoney = (val) => Number.parseFloat(val || 0);
+
+    worksheet.addRow(['Performance Summary']).getCell(1).font = subtitleFont;
 
     if (viewMode === 'staff') {
-      const rankedStaff = [...staffReports].sort(
-        (a, b) => Number.parseFloat(b.revenue || 0) - Number.parseFloat(a.revenue || 0)
-      );
+      const rankedStaff = [...staffReports].sort((a, b) => Number.parseFloat(b.revenue || 0) - Number.parseFloat(a.revenue || 0));
       const totalStaffRevenue = rankedStaff.reduce((sum, row) => sum + Number.parseFloat(row.revenue || 0), 0);
       const totalStaffOrders = rankedStaff.reduce((sum, row) => sum + Number(row.orders || 0), 0);
       const overallAov = totalStaffOrders > 0 ? totalStaffRevenue / totalStaffOrders : 0;
       const topStaff = rankedStaff[0]?.name || 'N/A';
 
-      summaryRows = [
-        ['Total Staff', rankedStaff.length],
+      const summaryRows = [
+        ['Total Staff Members', rankedStaff.length],
         ['Total Orders', totalStaffOrders],
-        ['Total Revenue (PHP)', formatMoney(totalStaffRevenue)],
-        ['Average Order Value (PHP)', formatMoney(overallAov)],
+        ['Total Revenue', totalStaffRevenue],
+        ['Average Order Value', overallAov],
         ['Top Performer', topStaff],
       ];
 
-      detailHeaders = [
-        'Rank',
-        'Staff Name',
-        'Total Orders',
-        'Total Revenue (PHP)',
-        'Average Order Value (PHP)',
-        'Revenue Share (%)',
-        'Order Share (%)',
-      ];
+      summaryRows.forEach(row => {
+        const addedRow = worksheet.addRow(row);
+        addedRow.getCell(1).font = { bold: true };
+        if (typeof row[1] === 'number' && (row[0].includes('Revenue') || row[0].includes('Value'))) {
+          addedRow.getCell(2).numFmt = '₱#,##0.00';
+        }
+      });
+      worksheet.addRow([]);
 
-      detailRows = rankedStaff.map((staff, index) => {
+      const headerRow = worksheet.addRow(['Rank', 'Staff Name', 'Total Orders', 'Total Revenue', 'Avg Order Value', 'Revenue Share', 'Order Share']);
+      headerRow.eachCell(cell => {
+        cell.fill = headerFill;
+        cell.font = headerFont;
+        cell.alignment = { horizontal: 'center' };
+        cell.border = borderStyle;
+      });
+
+      rankedStaff.forEach((staff, index) => {
         const revenue = Number.parseFloat(staff.revenue || 0);
         const orders = Number(staff.orders || 0);
         const aov = orders > 0 ? revenue / orders : 0;
-        const revenueShare = totalStaffRevenue > 0 ? (revenue / totalStaffRevenue) * 100 : 0;
-        const orderShare = totalStaffOrders > 0 ? (orders / totalStaffOrders) * 100 : 0;
+        const revenueShare = totalStaffRevenue > 0 ? (revenue / totalStaffRevenue) : 0;
+        const orderShare = totalStaffOrders > 0 ? (orders / totalStaffOrders) : 0;
 
-        return [
+        const row = worksheet.addRow([
           index + 1,
           staff.name || 'N/A',
           orders,
-          formatMoney(revenue),
-          formatMoney(aov),
-          revenueShare.toFixed(2),
-          orderShare.toFixed(2),
-        ];
+          revenue,
+          aov,
+          revenueShare,
+          orderShare
+        ]);
+
+        row.eachCell(cell => { cell.border = borderStyle; });
+        row.getCell(4).numFmt = '₱#,##0.00'; 
+        row.getCell(5).numFmt = '₱#,##0.00'; 
+        row.getCell(6).numFmt = '0.00%';     
+        row.getCell(7).numFmt = '0.00%';     
       });
 
-      filename = `staff-performance-report-${format(new Date(), 'yyyy-MM-dd')}`;
+      filename = `staff-performance-${format(new Date(), 'yyyy-MM-dd')}`;
     } else {
       const totalVoidedOrders = filteredReports.reduce((sum, row) => sum + Number(row.voided_orders || 0), 0);
       const averageOrderValue = stats.totalOrders > 0 ? stats.totalRev / stats.totalOrders : 0;
-
-      const highestRevenueDay = filteredReports.reduce((maxRow, row) => {
-        const rowRev = Number.parseFloat(row.total_revenue || 0);
-        const maxRev = maxRow ? Number.parseFloat(maxRow.total_revenue || 0) : -1;
-        return rowRev > maxRev ? row : maxRow;
-      }, null);
-
-      const highestRevenueDayLabel = highestRevenueDay?.report_date
-        ? formatBucketLabel(highestRevenueDay.report_date, period)
-        : 'N/A';
-
-      summaryRows = [
+      
+      const summaryRows = [
         ['Cashier Filter', filterCashier],
-        ['Total Records', filteredReports.length],
         ['Total Orders', stats.totalOrders],
-        ['Total Revenue (PHP)', formatMoney(stats.totalRev)],
+        ['Total Revenue', stats.totalRev],
+        ['Total VAT', stats.totalVat],
+        ['Total Discount Used', stats.totalDiscount],
         ['Total Voided Orders', totalVoidedOrders],
-        ['Average Order Value (PHP)', formatMoney(averageOrderValue)],
-        ['Top Seller', stats.topSellerName || 'N/A'],
-        ['Least Seller', stats.leastSellerName || 'N/A'],
-        [`Highest Revenue ${periodColumnTitle}`, highestRevenueDayLabel],
+        ['Average Order Value', averageOrderValue],
+        ['Top Cashier', topCashier?.name || 'N/A'],
+        ['Top Cashier Revenue', topCashier?.revenue || 0],
+        ['Top Cashier Orders', topCashier?.orders || 0],
+        ['Top Selling Product', stats.topSellerName || 'N/A'],
+        ['Least Selling Product', stats.leastSellerName || 'N/A'],
       ];
 
-      detailHeaders = [
-        'No.',
-        periodColumnTitle,
-        'Total Orders',
-        'Total Revenue (PHP)',
-        'Voided Orders',
-        'Top Seller',
-        'Least Seller',
-        'Average Order Value (PHP)',
-      ];
+      summaryRows.forEach(row => {
+        const addedRow = worksheet.addRow(row);
+        addedRow.getCell(1).font = { bold: true };
+        if (typeof row[1] === 'number' && (row[0].includes('Revenue') || row[0].includes('VAT') || row[0].includes('Discount') || row[0].includes('Value'))) {
+          addedRow.getCell(2).numFmt = '₱#,##0.00';
+        }
+      });
+      worksheet.addRow([]);
 
-      detailRows = sortedTableData.map((report, index) => {
-        const revenue = Number.parseFloat(report.total_revenue || 0);
+      const headerRow = worksheet.addRow(['No.', periodColumnTitle, 'Orders', 'Revenue', 'VAT', 'Discount', 'Voided', 'Top Seller', 'Least Seller', 'Avg Order Value']);
+      headerRow.eachCell(cell => {
+        cell.fill = headerFill;
+        cell.font = headerFont;
+        cell.alignment = { horizontal: 'center' };
+        cell.border = borderStyle;
+      });
+
+      sortedTableData.forEach((report, index) => {
+        const revenue = formatMoney(report.total_revenue);
         const orders = Number(report.total_orders || 0);
+        const vat = formatMoney(report.total_vat);
+        const discount = formatMoney(report.total_discount);
         const aov = orders > 0 ? revenue / orders : 0;
-
         const displayDate = formatBucketLabel(report.report_date, period);
 
-        return [
+        const row = worksheet.addRow([
           index + 1,
           displayDate,
           orders,
-          formatMoney(revenue),
+          revenue,
+          vat,
+          discount,
           Number(report.voided_orders || 0),
           report.top_selling_product || 'N/A',
           report.least_selling_product || 'N/A',
-          formatMoney(aov),
-        ];
+          aov
+        ]);
+
+        row.eachCell(cell => { cell.border = borderStyle; });
+        row.getCell(4).numFmt = '₱#,##0.00';
+        row.getCell(5).numFmt = '₱#,##0.00';
+        row.getCell(6).numFmt = '₱#,##0.00';
+        row.getCell(10).numFmt = '₱#,##0.00';
       });
 
-      const safeCashierFilter = String(filterCashier || 'ALL')
-        .replace(/\s+/g, '-')
-        .replace(/[^a-zA-Z0-9\-_]/g, '')
-        .toLowerCase();
-
+      const safeCashierFilter = String(filterCashier || 'ALL').replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-_]/g, '').toLowerCase();
       filename = `sales-report-${safeCashierFilter}-${format(new Date(), 'yyyy-MM-dd')}`;
     }
 
-    const allRows = [
-      ['VenDish Business Report'],
-      [],
-      ['Report Metadata'],
-      ['Field', 'Value'],
-      ...baseMetadata,
-      [],
-      ['Summary'],
-      ['Metric', 'Value'],
-      ...summaryRows,
-      [],
-      ['Detailed Records'],
-      detailHeaders,
-      ...detailRows,
-    ];
-
-    if (viewMode === 'timeline' && chartData.length > 0) {
-      allRows.push([]);
-      allRows.push(['Period Buckets']);
-      allRows.push(['Bucket', 'Revenue (PHP)', 'Orders']);
-      chartData.forEach((bucket) => {
-        allRows.push([
-          bucket.label,
-          formatMoney(bucket.revenue),
-          Number(bucket.orders || 0),
-        ]);
+    worksheet.columns.forEach(column => {
+      let maxLength = 0;
+      column.eachCell({ includeEmpty: true }, cell => {
+        if(cell.row === 1) return; 
+        let columnLength = cell.value ? cell.value.toString().length : 10;
+        if (cell.type === ExcelJS.ValueType.Number && cell.numFmt) {
+           columnLength += 5; 
+        }
+        if (columnLength > maxLength) {
+          maxLength = columnLength;
+        }
       });
-    }
+      column.width = maxLength < 12 ? 12 : maxLength + 2;
+    });
 
-    const csvContent = bom + allRows
-      .map((row) => row.map(escapeCSV).join(','))
-      .join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${filename}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    saveAs(blob, `${filename}.xlsx`);
   };
 
-  // --- AXIS FORMATTER ---
   const formatAxisCurrency = (value) => {
     if (value >= 1000) {
       const formatted = Number.isInteger(value / 1000) 
@@ -840,9 +903,9 @@ export default function SalesAndReports() {
                 <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
                 {loading ? "Syncing..." : "Sync"}
             </button>
-            <button onClick={exportToCSV} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 shadow-sm transition-all">
+            <button onClick={exportToExcel} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 shadow-sm transition-all text-green-700 hover:text-green-800 hover:border-green-600">
                 <Download size={18} />
-                Export
+                Export Excel
             </button>
         </div>
       </div>
@@ -852,8 +915,6 @@ export default function SalesAndReports() {
         <>
             {/* CONTROLS */}
             <div className="flex flex-wrap gap-3 mb-6 relative">
-                
-                {/* CALENDAR TRIGGER AND POPOVER WRAPPER */}
                 <div className="relative" ref={calendarRef}>
                     <button 
                         onClick={() => setShowCalendar(!showCalendar)} 
@@ -861,14 +922,12 @@ export default function SalesAndReports() {
                     >
                         <CalendarDays size={18} className={showCalendar ? "text-blue-600" : "text-gray-600"}/>
                         <span className="font-medium text-gray-700">
-                            {/* CHANGED: Shows Time as well on the button */}
                             {dateRange[0] && dateRange[1] && period === "Custom Range" 
                             ? `${format(dateRange[0], "MMM d, h:mma")} - ${format(dateRange[1], "MMM d, h:mma")}`
                             : "Select Date & Time"}
                         </span>
                     </button>
 
-                    {/* NEW: DATETIME PICKER POPOVER */}
                     {showCalendar && (
                         <div className="absolute left-0 top-full mt-2 bg-white p-5 rounded-xl shadow-2xl border border-gray-100 z-50 min-w-[320px] animate-in fade-in slide-in-from-top-2 duration-200">
                             <h4 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
@@ -924,55 +983,180 @@ export default function SalesAndReports() {
             </div>
 
             {loading ? (
-              <TimelineLoadingSkeleton />
+              <TimelineLoadingSkeleton isAdmin={isAdmin} />
             ) : (
               <>
-              {/* WIDGETS */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                <div className="bg-white shadow-lg rounded-xl p-5 border-l-4 border-blue-800">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-gray-600 font-medium text-sm">Total Revenue</h3>
-                  <PhilippinePesoIcon className="text-blue-800" size={24} />
-                </div>
-                <p className="text-blue-800 font-bold text-3xl">₱ {stats.totalRev.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
-                <p className="text-xs text-gray-400 mt-1">
-                  {filterCashier === 'ALL' ? 'Overall Revenue' : `Rev. by ${filterCashier}`}
-                </p>
+              {/* ======================= REFACTORED WIDGETS ROW 1 (Primary Financials) ======================= */}
+              {/* ======================= REFACTORED WIDGETS ROW 1 (Primary Financials) ======================= */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                
+                {/* Revenue Card */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-gray-500 font-medium text-sm">Total Revenue</h3>
+                        {/* Toggle Button for Net vs Gross */}
+                        <button
+                          onClick={() => setShowNetRevenue(!showNetRevenue)}
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded transition-colors ${
+                            showNetRevenue 
+                              ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' 
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                          title={showNetRevenue ? "Click to show Gross (Includes VAT)" : "Click to show Net (Excludes VAT)"}
+                        >
+                          {showNetRevenue ? 'NO VAT' : 'With VAT'}
+                        </button>
+                      </div>
+                      
+                      <p className="text-gray-900 font-bold text-2xl lg:text-3xl tracking-tight mt-1">
+                        ₱ {(showNetRevenue ? stats.totalRev - stats.totalVat : stats.totalRev).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                      </p>
+                    </div>
+                    <div className="p-2.5 bg-blue-50 text-blue-600 rounded-lg shrink-0">
+                      <PhilippinePesoIcon size={22} />
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2 font-medium">
+                    {filterCashier === 'ALL' 
+                      ? (showNetRevenue ? 'Raw revenue minus VAT' : 'Overall revenue collected') 
+                      : `Revenue by ${filterCashier}`}
+                  </p>
                 </div>
 
-                <div className="bg-white shadow-lg rounded-xl p-5 border-l-4 border-orange-500">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-gray-600 font-medium text-sm">Total Orders</h3>
-                  <ShoppingBag className="text-orange-500" size={24} />
-                </div>
-                <p className="text-orange-500 font-bold text-3xl">{stats.totalOrders}</p>
+                {/* Orders Card */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <h3 className="text-gray-500 font-medium text-sm">Total Orders</h3>
+                      <p className="text-gray-900 font-bold text-2xl lg:text-3xl tracking-tight mt-1">
+                        {stats.totalOrders}
+                      </p>
+                    </div>
+                    <div className="p-2.5 bg-orange-50 text-orange-600 rounded-lg shrink-0">
+                      <ShoppingBag size={22} />
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2 font-medium">
+                    {filterCashier === 'ALL' ? 'Overall successful orders' : `Orders by ${filterCashier}`}
+                  </p>
                 </div>
 
-                <div className="bg-white shadow-lg rounded-xl p-5 border-l-4 border-purple-500">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-gray-600 font-medium text-sm">Top Seller</h3>
-                  <TrendingUp className="text-purple-500" size={24} />
-                </div>
-                <p className="text-purple-500 font-bold text-xl truncate">{stats.topSellerName}</p>
-                <p className="text-xs text-gray-400 mt-1">
-                  {filterCashier === 'ALL' ? 'Most bought' : `Top item for ${filterCashier}`}
-                </p>
+                {/* VAT Card */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <h3 className="text-gray-500 font-medium text-sm">Total VAT</h3>
+                      <p className="text-gray-900 font-bold text-2xl lg:text-3xl tracking-tight mt-1">
+                        ₱ {stats.totalVat.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                      </p>
+                    </div>
+                    <div className="p-2.5 bg-red-50 text-red-600 rounded-lg shrink-0">
+                      <ScrollText size={22} />
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2 font-medium">Total VAT (12%) collected</p>
                 </div>
 
-                <div className="bg-white shadow-lg rounded-xl p-5 border-l-4 border-red-500">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-gray-600 font-medium text-sm">Least Seller</h3>
-                  <TrendingDown className="text-red-500" size={24} />
-                </div>
-                <p className="text-red-500 font-bold text-xl truncate">{stats.leastSellerName}</p>
-                <p className="text-xs text-gray-400 mt-1">
-                  {filterCashier === 'ALL' ? 'Least bought' : `Least item for ${filterCashier}`}
-                </p>
+                {/* Discount Card */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <h3 className="text-gray-500 font-medium text-sm">Total Discount</h3>
+                      <p className="text-gray-900 font-bold text-2xl lg:text-3xl tracking-tight mt-1">
+                        ₱ {stats.totalDiscount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                      </p>
+                    </div>
+                    <div className="p-2.5 bg-green-50 text-green-600 rounded-lg shrink-0">
+                      <TicketPercentIcon size={22} />
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2 font-medium">Value of discounts applied</p>
                 </div>
               </div>
 
+              {/* ======================= REFACTORED WIDGETS ROW 2 (Insights) ======================= */}
+              <div className={`grid grid-cols-1 sm:grid-cols-2 ${isAdmin ? 'lg:grid-cols-4' : 'lg:grid-cols-2'} gap-4 mb-6`}>
+                
+                {/* Top Seller Card */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="min-w-0 pr-4">
+                      <h3 className="text-gray-500 font-medium text-sm">Top Seller</h3>
+                      <p className="text-gray-900 font-bold text-lg lg:text-xl truncate mt-1" title={stats.topSellerName}>
+                        {stats.topSellerName}
+                      </p>
+                    </div>
+                    <div className="p-2.5 bg-purple-50 text-purple-600 rounded-lg shrink-0">
+                      <TrendingUp size={22} />
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2 font-medium">
+                    {filterCashier === 'ALL' ? 'Most frequently bought' : `Top item for ${filterCashier}`}
+                  </p>
+                </div>
+
+                {/* Least Seller Card */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="min-w-0 pr-4">
+                      <h3 className="text-gray-500 font-medium text-sm">Least Seller</h3>
+                      <p className="text-gray-900 font-bold text-lg lg:text-xl truncate mt-1" title={stats.leastSellerName}>
+                        {stats.leastSellerName}
+                      </p>
+                    </div>
+                    <div className="p-2.5 bg-rose-50 text-rose-600 rounded-lg shrink-0">
+                      <TrendingDown size={22} />
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2 font-medium">
+                    {filterCashier === 'ALL' ? 'Least frequently bought' : `Least item for ${filterCashier}`}
+                  </p>
+                </div>
+
+                {/* Top Cashier Hero Card (Admin Only - Spans 2 columns on large screens) */}
+                {isAdmin && (
+                  <div className="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-xl shadow-sm border border-indigo-500 p-5 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 relative overflow-hidden sm:col-span-2 text-white group">
+                    {/* Decorative Background Icon with slight scale effect on hover */}
+                    <div className="absolute -right-6 -top-6 opacity-10 pointer-events-none transition-transform duration-500 group-hover:scale-110">
+                      <Users size={120} />
+                    </div>
+                    
+                    <div className="flex items-start justify-between mb-2 relative z-10">
+                      <div className="min-w-0 pr-4">
+                        <h3 className="text-indigo-100 font-medium text-xs uppercase tracking-wider">Top Performing Cashier</h3>
+                        <p className="text-white font-bold text-2xl lg:text-3xl truncate mt-1 drop-shadow-sm" title={topCashier?.name || 'N/A'}>
+                          {topCashier?.name || 'N/A'}
+                        </p>
+                      </div>
+                      <div className="p-2.5 bg-white/20 rounded-lg shrink-0 backdrop-blur-sm">
+                        <Users size={22} className="text-white" />
+                      </div>
+                    </div>
+                    
+                    {/* Stats Footer inside Hero Card */}
+                    <div className="flex items-center gap-6 mt-4 relative z-10">
+                      <div>
+                        <p className="text-indigo-200 text-xs uppercase tracking-wider mb-1">Generated Revenue</p>
+                        <p className="font-semibold text-lg drop-shadow-sm">
+                          ₱ {(topCashier?.revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                      <div className="h-8 w-px bg-white/20"></div>
+                      <div>
+                        <p className="text-indigo-200 text-xs uppercase tracking-wider mb-1">Total Orders</p>
+                        <p className="font-semibold text-lg drop-shadow-sm">
+                          {(topCashier?.orders || 0).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* CHARTS */}
-              <div className="bg-white p-6 rounded-xl shadow-lg mb-6">
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
                 <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-semibold text-gray-800">
                   {filterCashier === 'ALL' ? 'Financial Performance' : `Performance: ${filterCashier}`}
@@ -1019,11 +1203,11 @@ export default function SalesAndReports() {
               </div>
 
               {/* TABLE */}
-              <div className="bg-white rounded-xl shadow-lg overflow-hidden mt-6">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mt-6">
                 <div className="overflow-x-auto">
                 <table className="min-w-200 w-full">
                   <thead>
-                  <tr className="bg-gray-800 text-white">
+                  <tr className="bg-gray-50 border-b border-gray-100 text-gray-700">
                     <th onClick={() => handleSort('report_date')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">{periodColumnTitle} {sortConfig.key === 'report_date' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
                     <th onClick={() => handleSort('total_orders')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Orders {sortConfig.key === 'total_orders' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
                     <th onClick={() => handleSort('total_revenue')} className="py-3 px-4 text-left font-semibold cursor-pointer text-sm">Revenue {sortConfig.key === 'total_revenue' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
@@ -1034,17 +1218,17 @@ export default function SalesAndReports() {
                   </thead>
                   <tbody>
                   {sortedTableData.length > 0 ? sortedTableData.map((report) => (
-                    <tr key={report.id || report.report_date} className="border-b hover:bg-gray-50 transition-colors">
+                    <tr key={report.id || report.report_date} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                     <td className="py-3 px-4 text-sm font-medium text-gray-900">{formatBucketLabel(report.report_date, period)}</td>
                     <td className="py-3 px-4 text-sm text-gray-600">{report.total_orders}</td>
                     <td className="py-3 px-4 text-sm font-semibold text-blue-700">₱ {parseFloat(report.total_revenue).toLocaleString()}</td>
                     <td className="py-3 px-4 text-sm text-gray-600">
-                      <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs font-medium">
+                      <span className="bg-purple-50 text-purple-700 px-2.5 py-1 rounded-md text-xs font-medium border border-purple-100">
                         {report.top_selling_product || "N/A"}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-sm text-gray-600">
-                      <span className="bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs font-medium">
+                      <span className="bg-rose-50 text-rose-700 px-2.5 py-1 rounded-md text-xs font-medium border border-rose-100">
                         {report.least_selling_product || "N/A"}
                       </span>
                     </td>
@@ -1075,7 +1259,7 @@ export default function SalesAndReports() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 
                 {/* CHART 1: REVENUE */}
-                <div className="bg-white p-6 rounded-xl shadow-lg">
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                     <h3 className="text-lg font-semibold text-gray-800 mb-4">Revenue by Staff</h3>
                     <ResponsiveContainer width="100%" height={300}>
                         <BarChart data={staffReports} layout="vertical" margin={{ left: 20 }}>
@@ -1093,7 +1277,7 @@ export default function SalesAndReports() {
                 </div>
 
                 {/* CHART 2: ORDERS */}
-                <div className="bg-white p-6 rounded-xl shadow-lg">
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                     <h3 className="text-lg font-semibold text-gray-800 mb-4">Orders Distribution</h3>
                     <ResponsiveContainer width="100%" height={300}>
                         <PieChart>
@@ -1117,10 +1301,10 @@ export default function SalesAndReports() {
             </div>
 
             {/* STAFF TABLE */}
-            <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
               <table className="min-w-full">
                   <thead>
-                      <tr className="bg-gray-800 text-white">
+                      <tr className="bg-gray-50 border-b border-gray-100 text-gray-700">
                           <th className="py-3 px-4 text-left text-sm font-semibold">Staff Name</th>
                           <th className="py-3 px-4 text-left text-sm font-semibold">Total Orders</th>
                           <th className="py-3 px-4 text-left text-sm font-semibold">Total Revenue</th>
@@ -1128,7 +1312,7 @@ export default function SalesAndReports() {
                   </thead>
                   <tbody>
                       {staffReports.length > 0 ? staffReports.map((staff, idx) => (
-                          <tr key={idx} className="border-b hover:bg-gray-50">
+                          <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50">
                               <td className="py-3 px-4 font-medium text-gray-900">{staff.name}</td>
                               <td className="py-3 px-4 text-gray-600">{staff.orders}</td>
                               <td className="py-3 px-4 font-bold text-green-600">
