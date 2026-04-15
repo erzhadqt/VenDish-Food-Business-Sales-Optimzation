@@ -26,7 +26,7 @@ export default function EditProductDialog({ product, onClose, onSaved, categorie
   const [productName, setProductName] = useState(product?.product_name || "");
   const [price, setPrice] = useState(product?.price || "");
   const [category, setCategory] = useState(product?.category || "");
-  const [servings, setServings] = useState(String(product?.stock_quantity ?? 0));
+  const [servings, setServings] = useState(String(product?.stock_quantity ?? ""));
   const [lowServingThreshold, setLowServingThreshold] = useState(String(product?.low_serving_threshold ?? DEFAULT_LOW_SERVING_THRESHOLD));
   const [image, setImage] = useState(null);
 

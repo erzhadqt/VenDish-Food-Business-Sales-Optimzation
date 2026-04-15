@@ -997,7 +997,7 @@ export default function SalesAndReports() {
                       <div className="flex items-center gap-2">
                         <h3 className="text-gray-500 font-medium text-sm">Total Revenue</h3>
                         {/* Toggle Button for Net vs Gross */}
-                        <button
+                        {/* <button
                           onClick={() => setShowNetRevenue(!showNetRevenue)}
                           className={`text-[10px] font-bold px-2 py-0.5 rounded transition-colors ${
                             showNetRevenue 
@@ -1007,7 +1007,7 @@ export default function SalesAndReports() {
                           title={showNetRevenue ? "Click to show Gross (Includes VAT)" : "Click to show Net (Excludes VAT)"}
                         >
                           {showNetRevenue ? 'NO VAT' : 'With VAT'}
-                        </button>
+                        </button> */}
                       </div>
                       
                       <p className="text-gray-900 font-bold text-2xl lg:text-3xl tracking-tight mt-1">
@@ -1023,6 +1023,7 @@ export default function SalesAndReports() {
                       ? (showNetRevenue ? 'Raw revenue without VAT' : 'Overall revenue collected') 
                       : `Revenue by ${filterCashier}`}
                   </p>
+                  <p className="text-xs text-gray-400 mt-2 font-medium">Rev without VAT: <span className="text-black ">₱ {(stats.totalRev - stats.totalVat).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span></p>
                 </div>
 
                 {/* Orders Card */}

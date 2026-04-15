@@ -279,7 +279,7 @@ export default function GCashPaymentModal({
         <DialogFooter className="gap-2 sm:gap-2 mt-4 border-t pt-4 flex flex-col sm:flex-row justify-between w-full">
           {!isPaid && (
             <div className="flex flex-col sm:flex-row gap-2 w-full">
-              {onDevOverride && (
+              {/* {onDevOverride && (
                 <Button 
                   type="button" 
                   variant="outline" 
@@ -288,7 +288,7 @@ export default function GCashPaymentModal({
                 >
                   Test: Force Paid
                 </Button>
-              )}
+              )} */}
               <Button type="button" variant="outline" onClick={onRefresh} className="w-full sm:w-auto">
                 Refresh Status
               </Button>
