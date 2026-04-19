@@ -9,7 +9,7 @@ from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 import re
 
-from .models import Product, Category, Receipt, ReceiptItem, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, Review, UserProfile, OTP, Notification, StaffInvitationToken, EmailVerificationToken
+from .models import Product, Category, Receipt, ReceiptItem, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, Review, UserProfile, OTP, Notification, StaffInvitationToken, EmailVerificationToken, ProfitLog, DrawerBalanceLog
 
 
 def _normalize_gcash_reference(value):
@@ -71,7 +71,7 @@ class UserSerializer(serializers.ModelSerializer):
     def get_has_completed_transaction(self, obj):
         # Check if the user has any receipt where they are the customer and status is completed
         # Excluding voided ones, assuming status=COMPLETED is what we count
-        return obj.customer_receipts.filter(status=Receipt.Status.COMPLETED).exists()
+        return obj.customer_receipts.filter(status__iexact=Receipt.Status.COMPLETED).exists()
 
     def get_role(self, obj):
         if obj.is_staff and obj.is_superuser:
@@ -270,12 +270,28 @@ class CouponSerializer(serializers.ModelSerializer):
     class Meta:
         model = Coupon
         fields = [
-            'id', 'code', 'status', 'usage_limit', 'claim_limit', 'times_used', 'times_claimed',
+            'id', 'code', 'status', 'target_audience', 'min_completed_orders', 'usage_limit', 'claim_limit', 'times_used', 'times_claimed',
             'created_at', 'is_archived', 'archived_at', 'criteria_details', 'criteria_id',
             'name', 'product_name', 'rate', 'description', 
             'is_used'
         ]
         read_only_fields = ['is_archived', 'archived_at']
+
+    def validate(self, attrs):
+        instance = getattr(self, 'instance', None)
+
+        target_audience = attrs.get('target_audience', getattr(instance, 'target_audience', Coupon.TargetAudience.ALL_USERS))
+        min_completed_orders = attrs.get('min_completed_orders', getattr(instance, 'min_completed_orders', 0) or 0)
+
+        if target_audience == Coupon.TargetAudience.FREQUENT_CUSTOMERS and int(min_completed_orders) < 1:
+            raise serializers.ValidationError({
+                'min_completed_orders': 'Minimum completed orders must be at least 1 for frequent-customer targeting.'
+            })
+
+        if target_audience != Coupon.TargetAudience.FREQUENT_CUSTOMERS:
+            attrs['min_completed_orders'] = 0
+
+        return attrs
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -370,7 +386,7 @@ class CouponSerializer(serializers.ModelSerializer):
             return Receipt.objects.filter(
                 coupons=obj,  # <--- CHANGED from 'coupon' to 'coupons'
                 customer=request.user, 
-                status='COMPLETED'
+                status__iexact=Receipt.Status.COMPLETED,
             ).exists()
         return False
     
@@ -398,6 +414,11 @@ class ReceiptSerializer(serializers.ModelSerializer):
         required=False, 
         write_only=True
     )
+    coupon_codes = serializers.DictField(
+        child=serializers.CharField(allow_blank=True),
+        required=False,
+        write_only=True,
+    )
 
     # FIX: Return details for list of coupons
     coupon_details = CouponSerializer(source='coupons', many=True, read_only=True)
@@ -409,6 +430,7 @@ class ReceiptSerializer(serializers.ModelSerializer):
             'cash_given', 'change', 'created_at', 
             'items', 
             'coupons',          # <--- Renamed from coupon
+            'coupon_codes',
             'coupon_details',
             'payment_method',
             'payment_status',
@@ -465,6 +487,7 @@ class ReceiptSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         items_data = validated_data.pop("items") 
         coupons_data = validated_data.pop("coupons", []) # Extract list
+        validated_data.pop("coupon_codes", None)
 
         computed_subtotal = sum(
             (Decimal(str(item_data.get("price", 0))) * Decimal(str(item_data.get("quantity", 0))))
@@ -642,6 +665,99 @@ class StaffPerformanceSerializer(serializers.Serializer):
     name = serializers.CharField(read_only=True)
     revenue = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     orders = serializers.IntegerField(read_only=True)
+
+
+class ProfitLogSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.SerializerMethodField(read_only=True)
+    period_label = serializers.CharField(source='get_period_display', read_only=True)
+
+    class Meta:
+        model = ProfitLog
+        fields = [
+            'id',
+            'created_by',
+            'created_by_name',
+            'period',
+            'period_label',
+            'revenue',
+            'expenses',
+            'net_profit',
+            'notes',
+            'created_at',
+        ]
+        read_only_fields = ['id', 'created_by', 'created_by_name', 'period_label', 'net_profit', 'created_at']
+
+    def get_created_by_name(self, obj):
+        if not obj.created_by:
+            return 'Deleted user'
+
+        first_name = (obj.created_by.first_name or '').strip()
+        last_name = (obj.created_by.last_name or '').strip()
+        full_name = f"{first_name} {last_name}".strip()
+        return full_name or obj.created_by.username
+
+    def validate(self, attrs):
+        revenue = attrs.get('revenue', Decimal('0'))
+        expenses = attrs.get('expenses', Decimal('0'))
+
+        if revenue < 0:
+            raise serializers.ValidationError({'revenue': 'Revenue cannot be negative.'})
+
+        if expenses < 0:
+            raise serializers.ValidationError({'expenses': 'Expenses cannot be negative.'})
+
+        return attrs
+
+    def create(self, validated_data):
+        revenue = Decimal(str(validated_data.get('revenue', 0)))
+        expenses = Decimal(str(validated_data.get('expenses', 0)))
+        validated_data['net_profit'] = revenue - expenses
+        return super().create(validated_data)
+
+
+class DrawerBalanceLogSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = DrawerBalanceLog
+        fields = [
+            'id',
+            'created_by',
+            'created_by_name',
+            'opening_balance',
+            'today_sales_total',
+            'projected_total',
+            'notes',
+            'created_at',
+        ]
+        read_only_fields = ['id', 'created_by', 'created_by_name', 'projected_total', 'created_at']
+
+    def get_created_by_name(self, obj):
+        if not obj.created_by:
+            return 'Deleted user'
+
+        first_name = (obj.created_by.first_name or '').strip()
+        last_name = (obj.created_by.last_name or '').strip()
+        full_name = f"{first_name} {last_name}".strip()
+        return full_name or obj.created_by.username
+
+    def validate(self, attrs):
+        opening_balance = attrs.get('opening_balance', Decimal('0'))
+        today_sales_total = attrs.get('today_sales_total', Decimal('0'))
+
+        if opening_balance < 0:
+            raise serializers.ValidationError({'opening_balance': 'Opening balance cannot be negative.'})
+
+        if today_sales_total < 0:
+            raise serializers.ValidationError({'today_sales_total': 'Today sales total cannot be negative.'})
+
+        return attrs
+
+    def create(self, validated_data):
+        opening_balance = Decimal(str(validated_data.get('opening_balance', 0)))
+        today_sales_total = Decimal(str(validated_data.get('today_sales_total', 0)))
+        validated_data['projected_total'] = opening_balance + today_sales_total
+        return super().create(validated_data)
 
 class FeedbackSerializer(serializers.ModelSerializer):
     class Meta: model = Feedback; fields = '__all__'

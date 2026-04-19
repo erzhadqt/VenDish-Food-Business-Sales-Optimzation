@@ -1,5 +1,5 @@
 from django.urls import path, include
-from .views import ProductViewSet, CategoryViewSet, FeedbackViewSet, ReceiptViewSet, CouponViewSet, HomePageViewSet, ServicesPageViewSet, AboutPageViewSet, ContactPageViewSet, UserViewSet, DailySalesReportViewSet, CouponCriteriaViewSet, ReviewViewSet, GCashPaymentCreateView, GCashPaymentStatusView, GCashPaymentWebhookView, GCashAttachReceiptView, GCashPaymentFinalizeByReferenceView, GCashReferenceAvailabilityView, GCashReconciliationView, NotificationViewSet, trigger_deactivated_cleanup, thermal_receipt_view
+from .views import ProductViewSet, CategoryViewSet, FeedbackViewSet, ReceiptViewSet, CouponViewSet, HomePageViewSet, ServicesPageViewSet, AboutPageViewSet, ContactPageViewSet, UserViewSet, DailySalesReportViewSet, CouponCriteriaViewSet, ReviewViewSet, GCashPaymentCreateView, GCashPaymentStatusView, GCashPaymentWebhookView, GCashAttachReceiptView, GCashPaymentFinalizeByReferenceView, GCashReferenceAvailabilityView, GCashReconciliationView, NotificationViewSet, ProfitLogViewSet, DrawerBalanceLogViewSet, trigger_deactivated_cleanup, thermal_receipt_view
 
 from rest_framework.routers import DefaultRouter
 
@@ -23,6 +23,8 @@ router.register(r'coupons', CouponViewSet, basename='coupon')
 router.register(r'coupons-criteria', CouponCriteriaViewSet, basename='coupons-criteria')
 
 router.register(r'notifications', NotificationViewSet, basename='notification')
+router.register(r'profit-logs', ProfitLogViewSet, basename='profit-log')
+router.register(r'drawer-balance-logs', DrawerBalanceLogViewSet, basename='drawer-balance-log')
 
 urlpatterns = [
     path('', include(router.urls)),

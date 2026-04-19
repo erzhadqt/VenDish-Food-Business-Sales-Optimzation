@@ -152,6 +152,7 @@ const ReceiptPrintContent = forwardRef(({ transactionData, tinNumber, receiptPho
         <div style={{ textAlign: 'center', fontSize: '8px', marginBottom: '4px', borderBottom: '1px solid #000', paddingBottom: '4px', lineHeight: '1.3' }}>
           <div style={{ marginBottom: '1px' }}>Baliwasan, Zamboanga City</div>
           <div>TIN: {activeTinNumber}</div>
+          <div>{activeReceiptPhone}</div>
         </div>
 
         {/* DATE */}
@@ -241,9 +242,8 @@ const ReceiptPrintContent = forwardRef(({ transactionData, tinNumber, receiptPho
 
         {/* FOOTER */}
         <div style={{ textAlign: 'center', fontSize: '8px', marginBottom: '2px', marginTop: '4px', lineHeight: '1.4' }}>
-          <div>System-Generated Receipt</div>
-          <div>{activeReceiptPhone}</div>
           <div style={{ fontWeight: 'bold' }}>Thank you!</div>
+          <div>System-Generated Receipt by: GenTech</div>
         </div>
 
         <div style={{ textAlign: 'center', fontSize: '7px', fontStyle: 'italic', opacity: '0.7' }}>

@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
-import { User, Search, X, Tag } from "lucide-react";
+import React, { useMemo, useState, useEffect } from "react";
+import { Search, User, Tag, X, ChevronDown, ChevronUp } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -10,174 +10,231 @@ import {
 const CustomerCouponModal = ({
   open,
   onOpenChange,
-  users,
+  promoQuery,
+  matchedCoupons,
+  searchLoading,
   selectedCustomerId,
-  onSelectCustomer,
   onClearCustomer,
-  customerCoupons,
-  customerCouponsLoading,
   appliedCoupons,
   onApplyCoupon,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [expandedIds, setExpandedIds] = useState(new Set());
 
-  const normalUsers = useMemo(() => users.filter((user) => !user.is_staff), [users]);
-
-  const filteredUsers = useMemo(() => {
-    if (!searchQuery.trim()) return normalUsers;
-
-    const query = searchQuery.toLowerCase();
-    return normalUsers.filter((user) => {
-      const fullName = `${user.first_name || ""} ${user.last_name || ""}`.toLowerCase();
-      return (
-        user.username.toLowerCase().includes(query) ||
-        fullName.includes(query)
-      );
-    });
-  }, [normalUsers, searchQuery]);
-
-  const selectedUser = useMemo(
-    () => normalUsers.find((user) => user.id === selectedCustomerId) || null,
-    [normalUsers, selectedCustomerId]
+  const safeCoupons = useMemo(
+    () => (Array.isArray(matchedCoupons) ? matchedCoupons : []),
+    [matchedCoupons]
   );
+
+  const filteredCoupons = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const pQuery = (promoQuery || "").trim().toLowerCase();
+
+    let processed = safeCoupons
+      .map((coupon) => {
+        const claimants = Array.isArray(coupon?.claimants) ? coupon.claimants : [];
+        
+        // Filter claimants by search query
+        const filteredClaimants = query
+          ? claimants.filter((claimant) => {
+              const fullName = `${claimant.first_name || ""} ${claimant.last_name || ""}`.trim().toLowerCase();
+              const username = String(claimant.username || "").toLowerCase();
+              const code = String(claimant.code || "").toLowerCase();
+              return fullName.includes(query) || username.includes(query) || code.includes(query);
+            })
+          : claimants;
+
+        // Sort claimants by exact relevance
+        const activeSearch = query || pQuery;
+        const sortedClaimants = [...filteredClaimants].sort((a, b) => {
+          if (!activeSearch) return 0;
+          
+          const getMatchScore = (c) => {
+            const fullName = `${c.first_name || ""} ${c.last_name || ""}`.trim().toLowerCase();
+            const username = String(c.username || "").toLowerCase();
+            const code = String(c.code || "").toLowerCase();
+
+            if (code === activeSearch || fullName === activeSearch || username === activeSearch) return 3;
+            if (code.includes(activeSearch)) return 2;
+            if (fullName.includes(activeSearch) || username.includes(activeSearch)) return 1;
+            return 0;
+          };
+
+          return getMatchScore(b) - getMatchScore(a);
+        });
+
+        return {
+          ...coupon,
+          claimants: sortedClaimants,
+        };
+      })
+      .filter((coupon) => (coupon.claimants || []).length > 0);
+
+    // Sort coupons by relevance to promoQuery
+    if (pQuery) {
+      processed.sort((a, b) => {
+        const getCouponScore = (c) => {
+          const name = String(c?.criteria_details?.name || c?.name || "").toLowerCase();
+          const code = String(c?.code || "").toLowerCase();
+          
+          if (code === pQuery || name === pQuery) return 3;
+          if (code.includes(pQuery) || name.includes(pQuery)) return 2;
+          return 0;
+        };
+        return getCouponScore(b) - getCouponScore(a);
+      });
+    }
+
+    return processed;
+  }, [safeCoupons, searchQuery, promoQuery]);
+
+  // Auto-expand the most relevant coupon when results load
+  useEffect(() => {
+    if (filteredCoupons.length > 0) {
+      setExpandedIds(new Set([filteredCoupons[0].id]));
+    } else {
+      setExpandedIds(new Set());
+    }
+    // We bind to matchedCoupons so it correctly resets on a fresh query trigger
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchedCoupons]);
+
+  const selectedCustomer = useMemo(() => {
+    for (const coupon of safeCoupons) {
+      const claimants = Array.isArray(coupon?.claimants) ? coupon.claimants : [];
+      const selected = claimants.find((claimant) => claimant.id === selectedCustomerId);
+      if (selected) return selected;
+    }
+    return null;
+  }, [safeCoupons, selectedCustomerId]);
+
+  const toggleExpand = (id) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* Increased max-w-3xl to max-w-4xl for a slightly wider modal */}
       <DialogContent className="max-w-4xl bg-white p-0 overflow-hidden" showCloseButton>
         <DialogHeader className="px-5 py-4 border-b bg-gray-50">
-          <DialogTitle className="text-lg text-gray-800">Select User & Claimed Coupons</DialogTitle>
+          <DialogTitle className="text-lg text-gray-800">Select Claimant User</DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
-          <div className="border-r border-gray-100">
-            <div className="p-4 border-b border-gray-100">
-              <div className="relative">
-                {/* Slightly bigger search icon */}
-                <Search size={18} className="absolute left-3 top-2.5 text-gray-400" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search customer..."
-                  // Increased text-sm to text-base
-                  className="w-full pl-10 pr-3 py-2 border rounded-md text-base outline-none focus:ring-2 focus:ring-blue-100"
-                />
-              </div>
-            </div>
-
-            <div className="max-h-80 overflow-y-auto p-2">
-              {filteredUsers.length === 0 && (
-                <div className="text-sm text-gray-400 p-2 text-center">No customers found.</div>
-              )}
-
-              {filteredUsers.map((user) => {
-                const isActive = selectedCustomerId === user.id;
-                return (
-                  <button
-                    key={user.id}
-                    type="button"
-                    onClick={() => onSelectCustomer(user)}
-                    className={`w-full text-left p-3 rounded-md mb-1 border transition ${isActive ? "bg-blue-50 border-blue-200" : "hover:bg-gray-50 border-transparent"}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      {/* Slightly bigger avatar */}
-                      <div className="bg-gray-200 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-gray-700">
-                        {user.username?.charAt(0)?.toUpperCase() || "U"}
-                      </div>
-                      <div className="min-w-0">
-                        {/* Increased text-sm to text-base */}
-                        <div className="text-base font-medium text-gray-800 truncate">
-                          {(user.first_name || user.username) + (user.last_name ? ` ${user.last_name}` : "")}
-                        </div>
-                        {/* Increased text-xs to text-sm */}
-                        <div className="text-sm text-gray-500 truncate">@{user.username}</div>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+        <div className="px-5 py-4 border-b border-gray-100 bg-white">
+          <div className="text-sm text-gray-700 mb-3">
+            Promo search: <span className="font-semibold">{promoQuery || "N/A"}</span>
           </div>
 
-          <div>
-            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-              <div className="text-base text-gray-700 flex items-center gap-2">
-                <User size={16} className="text-green-600" />
-                {selectedUser ? (
-                  <span className="font-medium">
-                    {(selectedUser.first_name || selectedUser.username) + (selectedUser.last_name ? ` ${selectedUser.last_name}` : "")}
-                  </span>
-                ) : (
-                  <span className="text-gray-400">No customer selected</span>
-                )}
-              </div>
+          <div className="relative">
+            <Search size={18} className="absolute left-3 top-2.5 text-gray-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Filter claimants by name, username, or code..."
+              className="w-full pl-10 pr-3 py-2 border rounded-md text-base outline-none focus:ring-2 focus:ring-blue-100"
+            />
+          </div>
 
-              {selectedUser && (
+          <div className="mt-3 flex items-center justify-between">
+            <div className="text-sm text-gray-700 flex items-center gap-2">
+              <User size={16} className={selectedCustomer ? "text-green-600" : "text-gray-400"} />
+              {selectedCustomer ? (
+                <span className="font-medium">
+                  {(selectedCustomer.first_name || selectedCustomer.username) + (selectedCustomer.last_name ? ` ${selectedCustomer.last_name}` : "")}
+                </span>
+              ) : (
+                <span className="text-gray-400">No customer selected</span>
+              )}
+            </div>
+
+            {selectedCustomer && (
+              <button
+                type="button"
+                onClick={onClearCustomer}
+                className="text-sm px-3 py-1.5 rounded border text-gray-600 hover:bg-gray-50"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="max-h-96 overflow-y-auto p-4 space-y-3">
+          {searchLoading && (
+            <div className="text-sm text-gray-400 p-2">Searching promo claimants...</div>
+          )}
+
+          {!searchLoading && filteredCoupons.length === 0 && (
+            <div className="text-sm text-gray-400 p-2">No claimant users found for this promo search.</div>
+          )}
+
+          {!searchLoading && filteredCoupons.map((coupon) => {
+            const couponTitle = coupon?.criteria_details?.name || coupon?.name || `Coupon #${coupon.id}`;
+            const claimants = coupon.claimants || [];
+            const isExpanded = expandedIds.has(coupon.id);
+
+            return (
+              <div key={coupon.id} className="border rounded-lg overflow-hidden">
                 <button
                   type="button"
-                  onClick={onClearCustomer}
-                  // Increased text-xs to text-sm
-                  className="text-sm px-3 py-1.5 rounded border text-gray-600 hover:bg-gray-50"
+                  onClick={() => toggleExpand(coupon.id)}
+                  className="w-full px-3 py-2 bg-gray-50 border-b flex items-center justify-between hover:bg-gray-100 transition-colors text-left"
                 >
-                  Clear
-                </button>
-              )}
-            </div>
-
-            <div className="max-h-80 overflow-y-auto p-3 space-y-2">
-              {!selectedUser && (
-                <div className="text-sm text-gray-400 p-2">Select a customer to view claimed coupons.</div>
-              )}
-
-              {selectedUser && customerCouponsLoading && (
-                <div className="text-sm text-gray-400 p-2">Loading claimed coupons...</div>
-              )}
-
-              {selectedUser && !customerCouponsLoading && customerCoupons.length === 0 && (
-                <div className="text-sm text-gray-400 p-2">No claimed coupons found for this user.</div>
-              )}
-
-              {selectedUser && !customerCouponsLoading && customerCoupons.map((coupon) => {
-                const alreadyApplied = appliedCoupons.some((applied) => applied.id === coupon.id);
-                const disabled = alreadyApplied || coupon.is_used || coupon.status === "Expired";
-
-                return (
-                  <div
-                    key={coupon.id}
-                    className="flex items-center justify-between border rounded px-3 py-2.5"
-                  >
-                    <div className="min-w-0">
-                      {/* Increased text-xs to text-sm */}
-                      <div className="text-sm font-bold text-gray-800 truncate flex items-center gap-1.5">
-                        <Tag size={14} /> {coupon.code}
-                      </div>
-                      {/* Increased text-[10px] to text-xs */}
-                      <div className="text-xs text-gray-500 mt-0.5">
-                        {coupon.is_used ? "Used" : coupon.status === "Expired" ? "Expired" : "Available"}
-                      </div>
+                  <div>
+                    <div className="text-sm font-semibold text-gray-800">{couponTitle}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      Status: {coupon?.status || "Unknown"} • Claimants: {claimants.length}
                     </div>
-
-                    <button
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => onApplyCoupon(coupon)}
-                      // Increased text-[10px] to text-xs and added a bit more padding
-                      className={`text-xs font-bold px-3 py-1.5 rounded ${disabled ? "bg-gray-200 text-gray-500 cursor-not-allowed" : "bg-blue-600 text-white hover:bg-blue-700"}`}
-                    >
-                      {coupon.is_used ? "Used" : coupon.status === "Expired" ? "Expired" : "Available" && coupon.is_used ? "Used" : "Use"}
-                    </button>
                   </div>
-                );
-              })}
-            </div>
+                  <div className="text-gray-400 mr-1">
+                    {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                  </div>
+                </button>
 
-            {/* Increased text-[11px] to text-xs */}
-            <div className="p-3 border-t bg-gray-50 text-xs text-gray-500 flex items-center gap-1.5">
-              <X size={14} />
-              Only selected user’s claimed coupons can be applied.
-            </div>
-          </div>
+                {isExpanded && (
+                  <div className="p-2 space-y-2">
+                    {claimants.map((claimant) => {
+                      const alreadyApplied = appliedCoupons.some((applied) => applied.id === coupon.id);
+                      const isExpired = String(coupon.status || "").toLowerCase() === "expired";
+                      const disabled = alreadyApplied || claimant.is_used || isExpired;
+                      const claimantName = (claimant.first_name || claimant.username) + (claimant.last_name ? ` ${claimant.last_name}` : "");
+
+                      return (
+                        <div key={`${coupon.id}-${claimant.id}`} className="flex items-center justify-between border rounded px-3 py-2.5">
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-gray-800 truncate">{claimantName}</div>
+                            <div className="text-xs text-gray-500 truncate">@{claimant.username}</div>
+                            <div className="text-xs font-semibold text-blue-600 mt-1 flex items-center gap-1">
+                              <Tag size={12} /> {claimant.code || coupon.code || "No code"}
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => onApplyCoupon(coupon, claimant)}
+                            className={`text-xs font-bold px-3 py-1.5 rounded ${disabled ? "bg-gray-200 text-gray-500 cursor-not-allowed" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                          >
+                            {claimant.is_used ? "Used" : isExpired ? "Expired" : alreadyApplied ? "Applied" : "Use"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="p-3 border-t bg-gray-50 text-xs text-gray-500 flex items-center gap-1.5">
+          <X size={14} />
+          Select a claimant user to apply the searched promo to this POS order.
         </div>
       </DialogContent>
     </Dialog>

@@ -8,6 +8,7 @@ import api from "../api";
 
 export default function ManagePosBalanceDialog({ open, onOpenChange }) {
   const [amount, setAmount] = useState("");
+  const [initialBalance, setInitialBalance] = useState(0);
   const [currentBalance, setCurrentBalance] = useState(0); 
   const [action, setAction] = useState("set"); // 'set', 'add', 'deduct'
   const [loading, setLoading] = useState(false);
@@ -33,17 +34,22 @@ export default function ManagePosBalanceDialog({ open, onOpenChange }) {
     if (open) {
       api.get(`/settings/?t=${new Date().getTime()}`)
         .then((res) => {
-          if (res.data && res.data.pos_cash_balance !== undefined) {
-            const fetchedBalance = parseFloat(res.data.pos_cash_balance) || 0;
-            setCurrentBalance(fetchedBalance);
-            // Only pre-fill the input if we are in 'set' mode
+          if (res.data) {
+            const fetchedInitialBalance = parseFloat(res.data.pos_initial_balance) || 0;
+            const fetchedCurrentBalance = parseFloat(res.data.pos_cash_balance) || 0;
+
+            setInitialBalance(fetchedInitialBalance);
+            setCurrentBalance(fetchedCurrentBalance);
+
+            // In set mode, edit the configured initial balance value.
             if (action === "set") {
-              setAmount(fetchedBalance.toString());
+              setAmount(fetchedInitialBalance.toString());
             }
           }
         })
         .catch((err) => console.error("Failed to fetch current balance:", err));
     } else {
+      setInitialBalance(0);
       setCurrentBalance(0);
       resetForm();
     }
@@ -57,7 +63,7 @@ export default function ManagePosBalanceDialog({ open, onOpenChange }) {
     setFieldErrors({});
     // If switching back to set, pre-fill current. Otherwise, clear input to prevent accidental huge adds
     if (newAction === "set") {
-      setAmount(currentBalance.toString());
+      setAmount(initialBalance.toString());
     } else {
       setAmount("");
     }
@@ -110,16 +116,24 @@ export default function ManagePosBalanceDialog({ open, onOpenChange }) {
 
     setLoading(true);
     try {
-      const response = await api.post("/settings/", {
-        pos_cash_balance: finalBalance,
-      });
+      const payload = { pos_cash_balance: finalBalance };
+      if (action === 'set') {
+        // Setting the baseline should reset both initial and current drawer values.
+        payload.pos_initial_balance = finalBalance;
+      }
+
+      const response = await api.post("/settings/", payload);
 
       // Verify the response actually came from our POST handler
       if (response.data.message === "Settings updated successfully.") {
-        setCurrentBalance(finalBalance); 
+        const nextCurrentBalance = parseFloat(response.data.pos_cash_balance) || finalBalance;
+        const nextInitialBalance = parseFloat(response.data.pos_initial_balance) || (action === 'set' ? finalBalance : initialBalance);
+
+        setCurrentBalance(nextCurrentBalance);
+        setInitialBalance(nextInitialBalance);
         
         const successActions = {
-          set: "updated",
+          set: "updated and synced",
           add: "increased",
           deduct: "deducted"
         };
@@ -155,19 +169,37 @@ export default function ManagePosBalanceDialog({ open, onOpenChange }) {
             <PhilippinePeso size={20} className="text-green-600" /> Manage POS Drawer
           </DialogTitle>
           <DialogDescription>
-            Set, add to, or deduct from the POS drawer starting balance.
+            Configure the POS opening balance and manage the live drawer amount.
           </DialogDescription>
         </DialogHeader>
 
-        {/* --- CURRENT BALANCE DISPLAY --- */}
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex items-center justify-between mt-2">
-          <div className="flex items-center gap-2 text-gray-600">
-            <Wallet size={18} />
-            <span className="text-sm font-medium">Current Drawer Balance</span>
+        {/* --- BALANCE SUMMARY --- */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-blue-800">
+              <Wallet size={18} />
+              <span className="text-sm font-medium">POS Initial Balance</span>
+            </div>
+            <span className="text-lg font-bold text-blue-900">
+              ₱{initialBalance.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
           </div>
-          <span className="text-lg font-bold text-gray-900">
-            ₱{currentBalance.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </span>
+
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-gray-600">
+              <Wallet size={18} />
+              <span className="text-sm font-medium">Current Drawer Balance</span>
+            </div>
+            <span className="text-lg font-bold text-gray-900">
+              ₱{currentBalance.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          </div>
+        </div>
+
+        <div className="bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-xs text-amber-800">
+          <p>
+            <strong>Set:</strong> updates both initial and current balances. <strong>Add/Deduct:</strong> updates only current drawer balance.
+          </p>
         </div>
 
         {error && (
@@ -221,7 +253,7 @@ export default function ManagePosBalanceDialog({ open, onOpenChange }) {
 
           <div className="space-y-2">
             <Label htmlFor="balanceAmount">
-              {action === 'set' && "Set New Drawer Amount"}
+              {action === 'set' && "Set POS Initial Balance"}
               {action === 'add' && "Amount to Add to Drawer"}
               {action === 'deduct' && "Amount to Deduct from Drawer"}
             </Label>

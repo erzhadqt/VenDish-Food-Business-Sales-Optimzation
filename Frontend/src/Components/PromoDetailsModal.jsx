@@ -77,7 +77,9 @@ export default function PromoDetailsModal({ open, onOpenChange, coupon, products
         <DialogHeader>
           <DialogTitle className="text-xl">Promo Details</DialogTitle>
           <DialogDescription className="text-base">
-            Full details for promo code {coupon.code}.
+            {coupon.code
+              ? `Full details for promo code ${coupon.code}.`
+              : "This coupon generates a unique promo code per user at claim time."}
           </DialogDescription>
         </DialogHeader>
 
@@ -89,7 +91,22 @@ export default function PromoDetailsModal({ open, onOpenChange, coupon, products
 
           <div className="rounded-md border border-gray-200 bg-gray-50 p-4">
             <p className="text-sm uppercase tracking-wide text-gray-500">Promo Code</p>
-            <p className="text-xl font-mono font-bold text-blue-700 mt-1 tracking-wider">{coupon.code}</p>
+            {coupon.code ? (
+              <p className="text-xl font-mono font-bold text-blue-700 mt-1 tracking-wider">{coupon.code}</p>
+            ) : (
+              <p className="text-base font-medium text-gray-700 mt-1">Generated per customer when claimed</p>
+            )}
+          </div>
+
+          <div className="rounded-md border border-gray-200 bg-gray-50 p-4 sm:col-span-2">
+            <p className="text-sm uppercase tracking-wide text-gray-500">Target Audience</p>
+            {coupon.target_audience === "frequent_customers" ? (
+              <p className="text-base font-medium text-gray-800 mt-1">
+                Frequent customers with at least {coupon.min_completed_orders || 1} completed POS order(s)
+              </p>
+            ) : (
+              <p className="text-base font-medium text-gray-800 mt-1">All users</p>
+            )}
           </div>
 
           <div className="rounded-md border border-gray-200 bg-gray-50 p-4 sm:col-span-2">

@@ -14,7 +14,8 @@ import {
   PresentationIcon,
   TicketPercent,
   Store,
-  Loader2 // Added for loading state
+  Loader2, // Added for loading state
+  FileClock
 } from 'lucide-react';
 import AlertDialog from "./AlertDialog";
 import { useAuth } from '../context/AuthContext';
@@ -35,6 +36,7 @@ const Sidebar = ({ isExpanded, toggleSidebar }) => {
     { id: 'menu', icon: Menu, label: 'Menu & Products', path: '/admin/menu', restricted: true },
     { id: 'users', icon: Users, label: 'User Management', path: '/admin/userManagement', restricted: true },
     { id: 'promo-management', icon: TicketPercent, label: 'Promo Management', path: '/admin/promo-management', restricted: true },
+    { id: 'admin-logs', icon: FileClock, label: 'Admin Logs', path: '/admin/logs', restricted: true },
     { id: 'feedback', icon: MessageSquare, label: 'Customer Feedback', path: '/admin/customerFeedback', restricted: true },
     { id: 'transaction', icon: FileText, label: 'Transaction', path: '/admin/transaction', restricted: false },
     { id: 'point-of-sale', icon: PresentationIcon, label: 'POS', path: '/admin/pos', restricted: false },

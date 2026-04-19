@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Tag, Trash2, ShoppingBag, User, X, Search } from "lucide-react"; 
 import { FaExclamationCircle } from "react-icons/fa"; 
 import { useLocation, useSearchParams } from "react-router-dom";
@@ -32,11 +32,22 @@ const POS_QUERY_KEYS = {
 };
 
 const BEST_SELLER_LIMIT = 4;
+const BEST_SELLER_PERIOD = "daily";
+const BEST_SELLER_DAY_REFRESH_INTERVAL_MS = 60 * 1000;
 const DEFAULT_LOW_SERVING_THRESHOLD = 10;
 const PH_VAT_RATE = 0.12;
 const PH_VAT_INCLUSIVE_DIVISOR = 1 + PH_VAT_RATE;
+const BEST_SELLER_EXCLUDED_CATEGORY_KEYS = new Set(["addon", "addons", "other", "others"]);
 
 const normalizeProductName = (value) => String(value || "").trim().toLowerCase();
+const normalizeCategoryKey = (value) => String(value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+const getProductCategoryLabel = (product) => {
+  if (typeof product?.category === "string") return product.category;
+  if (product?.category && typeof product.category === "object") return product.category?.name || "";
+  return "";
+};
+const isBestSellerEligibleProduct = (product) =>
+  !BEST_SELLER_EXCLUDED_CATEGORY_KEYS.has(normalizeCategoryKey(getProductCategoryLabel(product)));
 
 const computePhilippinesVatFromVatInclusiveTotal = (vatInclusiveTotal) => {
   const safeTotal = Number(vatInclusiveTotal || 0);
@@ -67,13 +78,21 @@ const getTodaySalesRange = () => {
   };
 };
 
-const resolveBestSellerIdsFromSalesReport = (salesRows, products) => {
+const toDateOnlyKey = (value) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return format(parsed, "yyyy-MM-dd");
+};
+
+const resolveBestSellerIdsFromSalesReport = (salesRows, products, targetDateKey = toDateOnlyKey(new Date())) => {
   if (!Array.isArray(salesRows) || salesRows.length === 0 || !Array.isArray(products) || products.length === 0) {
     return [];
   }
 
   const productIdByName = new Map();
   products.forEach((product) => {
+    if (!isBestSellerEligibleProduct(product)) return;
+
     const normalizedName = normalizeProductName(product?.product_name);
     const productId = Number(product?.id);
     if (normalizedName && Number.isFinite(productId) && !productIdByName.has(normalizedName)) {
@@ -81,25 +100,59 @@ const resolveBestSellerIdsFromSalesReport = (salesRows, products) => {
     }
   });
 
+  const scopedSalesRows = salesRows.filter((row) => {
+    if (!targetDateKey) return true;
+    const rowDateKey = toDateOnlyKey(row?.report_date);
+    return rowDateKey === targetDateKey;
+  });
+
+  if (scopedSalesRows.length === 0) {
+    return [];
+  }
+
   const aggregatedSalesByName = {};
-  salesRows.forEach((row) => {
+  scopedSalesRows.forEach((row) => {
     const dailyProductSales = row?.daily_product_sales;
-    if (!dailyProductSales || typeof dailyProductSales !== "object") return;
+    const dailyProductRevenue = row?.daily_product_sales_revenue;
+    const dailyProductOrderCounts = row?.daily_product_order_counts;
 
-    Object.entries(dailyProductSales).forEach(([productName, quantity]) => {
+    const keys = new Set([
+      ...Object.keys(dailyProductSales && typeof dailyProductSales === "object" ? dailyProductSales : {}),
+      ...Object.keys(dailyProductRevenue && typeof dailyProductRevenue === "object" ? dailyProductRevenue : {}),
+      ...Object.keys(dailyProductOrderCounts && typeof dailyProductOrderCounts === "object" ? dailyProductOrderCounts : {}),
+    ]);
+
+    keys.forEach((productName) => {
       const safeName = String(productName || "").trim();
-      const safeQuantity = Number(quantity || 0);
+      const safeQuantity = Number(dailyProductSales?.[productName] || 0);
+      const safeRevenue = Number(dailyProductRevenue?.[productName] || 0);
+      const safeOrders = Number(dailyProductOrderCounts?.[productName] || 0);
 
-      if (!safeName || !Number.isFinite(safeQuantity) || safeQuantity <= 0) return;
-      aggregatedSalesByName[safeName] = (aggregatedSalesByName[safeName] || 0) + safeQuantity;
+      if (!safeName) return;
+
+      const current = aggregatedSalesByName[safeName] || { revenue: 0, orders: 0, quantity: 0 };
+      if (Number.isFinite(safeRevenue) && safeRevenue > 0) current.revenue += safeRevenue;
+      if (Number.isFinite(safeOrders) && safeOrders > 0) current.orders += safeOrders;
+      if (Number.isFinite(safeQuantity) && safeQuantity > 0) current.quantity += safeQuantity;
+
+      if (current.revenue > 0 || current.orders > 0 || current.quantity > 0) {
+        aggregatedSalesByName[safeName] = current;
+      }
     });
   });
 
   const seen = new Set();
   const rankedIds = Object.entries(aggregatedSalesByName)
     .sort((a, b) => {
-      const qtyDiff = Number(b[1]) - Number(a[1]);
+      const revenueDiff = Number(b[1]?.revenue || 0) - Number(a[1]?.revenue || 0);
+      if (revenueDiff !== 0) return revenueDiff;
+
+      const orderDiff = Number(b[1]?.orders || 0) - Number(a[1]?.orders || 0);
+      if (orderDiff !== 0) return orderDiff;
+
+      const qtyDiff = Number(b[1]?.quantity || 0) - Number(a[1]?.quantity || 0);
       if (qtyDiff !== 0) return qtyDiff;
+
       return String(a[0]).localeCompare(String(b[0]), undefined, { sensitivity: "base" });
     })
     .map(([productName]) => productIdByName.get(normalizeProductName(productName)))
@@ -117,6 +170,7 @@ const resolveBestSellerIdsFromSalesReport = (salesRows, products) => {
 const Pos = () => {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
+  const bestSellerDayRef = useRef(toDateOnlyKey(new Date()));
 
   const [selectedCategory, setSelectedCategory] = usePersistedQueryState({
     searchParams,
@@ -161,11 +215,10 @@ const Pos = () => {
 
   const [maxCoupons, setMaxCoupons] = useState(2);
   
-  // --- CUSTOMER SEARCH STATES ---
-  const [users, setUsers] = useState([]); 
+  // --- CUSTOMER + PROMO CLAIM SEARCH STATES ---
   const [selectedCustomer, setSelectedCustomer] = useState(null); 
-  const [customerCoupons, setCustomerCoupons] = useState([]);
-  const [customerCouponsLoading, setCustomerCouponsLoading] = useState(false);
+  const [selectedCustomerInfo, setSelectedCustomerInfo] = useState(null);
+  const [couponClaimSearchResults, setCouponClaimSearchResults] = useState([]);
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
 
   const [receiptDetails, setReceiptDetails] = useState(null);
@@ -230,9 +283,11 @@ const Pos = () => {
   };
 
   const fetchDailyBestSellerProductIds = useCallback(async (productsSnapshot = []) => {
+    const todayDateKey = toDateOnlyKey(new Date());
+
     try {
       const bestSellerResponse = await api.get(
-        `/firstapp/products/best-sellers/?period=daily&limit=${BEST_SELLER_LIMIT}`
+        `/firstapp/products/best-sellers/?period=${BEST_SELLER_PERIOD}&limit=${BEST_SELLER_LIMIT}`
       );
 
       const seen = new Set();
@@ -256,12 +311,13 @@ const Pos = () => {
     try {
       const { todayStartStr, todayEndStr } = getTodaySalesRange();
       const salesResponse = await api.get(
-        `/firstapp/sales/?period=daily&start=${encodeURIComponent(todayStartStr)}&end=${encodeURIComponent(todayEndStr)}`
+        `/firstapp/sales/?period=${BEST_SELLER_PERIOD}&start=${encodeURIComponent(todayStartStr)}&end=${encodeURIComponent(todayEndStr)}`
       );
 
       return resolveBestSellerIdsFromSalesReport(
         Array.isArray(salesResponse.data) ? salesResponse.data : [],
-        Array.isArray(productsSnapshot) ? productsSnapshot : []
+        Array.isArray(productsSnapshot) ? productsSnapshot : [],
+        todayDateKey
       );
     } catch (error) {
       console.error("Failed to fetch fallback daily best sellers:", error);
@@ -327,16 +383,14 @@ const Pos = () => {
     const fetchData = async () => {
       setDataLoading(true);
       try {
-        const [prodRes, userRes, settingsRes, catRes] = await Promise.all([
+        const [prodRes, settingsRes, catRes] = await Promise.all([
             api.get("/firstapp/products/"),
-            api.get("/firstapp/users/"),
             api.get(`/settings/?t=${new Date().getTime()}`),
             api.get("/firstapp/categories/"),
         ]);
 
         const nextProducts = Array.isArray(prodRes.data) ? prodRes.data : [];
         setProducts(nextProducts);
-        setUsers(Array.isArray(userRes.data) ? userRes.data : []);
 
         if (settingsRes.data.max_coupons_per_order !== undefined) {
              setMaxCoupons(settingsRes.data.max_coupons_per_order);
@@ -359,6 +413,20 @@ const Pos = () => {
     };
     fetchData();
   }, [fetchDailyBestSellerProductIds]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      const currentDayKey = toDateOnlyKey(new Date());
+      if (currentDayKey && currentDayKey !== bestSellerDayRef.current) {
+        bestSellerDayRef.current = currentDayKey;
+        refreshMenuInventory();
+      }
+    }, BEST_SELLER_DAY_REFRESH_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [refreshMenuInventory]);
 
   useEffect(() => {
     const handleInventoryUpdate = () => {
@@ -444,82 +512,59 @@ const Pos = () => {
     [bestSellerProductIds]
   );
 
-  const selectedCustomerInfo = useMemo(
-    () => users.find((user) => user.id === selectedCustomer) || null,
-    [users, selectedCustomer]
-  );
-
-  const handleSelectCustomer = (user) => {
-      if (selectedCustomer !== user.id) {
-        setAppliedCoupons([]);
-        setPromoCode("");
-        setCouponError("");
-      }
-      setSelectedCustomer(user.id);
-  };
-
   const handleClearCustomer = () => {
       setSelectedCustomer(null);
-      setCustomerCoupons([]);
+      setSelectedCustomerInfo(null);
+      setCouponClaimSearchResults([]);
       setAppliedCoupons([]);
       setPromoCode("");
       setCouponError("");
   };
 
-  useEffect(() => {
-    const fetchCustomerCoupons = async () => {
-      if (!selectedCustomer) {
-        setCustomerCoupons([]);
-        return;
-      }
-
-      setCustomerCouponsLoading(true);
-      try {
-        const response = await api.get(`/firstapp/users/${selectedCustomer}/claimed-coupons/`);
-        setCustomerCoupons(Array.isArray(response.data) ? response.data : []);
-      } catch (error) {
-        console.error("Failed to fetch customer claimed coupons:", error);
-        setCustomerCoupons([]);
-      } finally {
-        setCustomerCouponsLoading(false);
-      }
-    };
-
-    fetchCustomerCoupons();
-  }, [selectedCustomer]);
-
-  const applyClaimedCoupon = (coupon) => {
-    if (!selectedCustomer) {
-      setCouponError("Select a customer first. Coupons are tied to user accounts.");
-      return;
+  const applyClaimedCoupon = (coupon, claimantUser) => {
+    const claimantId = Number(claimantUser?.id || 0);
+    if (!Number.isFinite(claimantId) || claimantId <= 0) {
+      setCouponError("Please select a valid customer claimant.");
+      return false;
     }
 
-    if (appliedCoupons.length >= maxCoupons) {
+    const switchingCustomer = Boolean(selectedCustomer && selectedCustomer !== claimantId);
+    const baseAppliedCoupons = switchingCustomer ? [] : appliedCoupons;
+
+    if (baseAppliedCoupons.length >= maxCoupons) {
       setCouponError(`Maximum of ${maxCoupons} coupons allowed per order.`);
-      return;
+      return false;
     }
 
-    if (appliedCoupons.some((existing) => existing.id === coupon.id)) {
+    if (baseAppliedCoupons.some((existing) => existing.id === coupon.id)) {
       setCouponError("This coupon is already applied!");
-      return;
+      return false;
     }
 
     if (coupon.is_used) {
       setCouponError("This coupon was already used by the selected customer.");
-      return;
+      return false;
     }
 
     if (coupon.status === 'Expired') {
       setCouponError("Coupon is Expired");
-      return;
+      return false;
     }
 
     if (coupon.criteria_details && parseFloat(coupon.criteria_details.min_spend) > 0) {
       if (subTotal < parseFloat(coupon.criteria_details.min_spend)) {
         setCouponError(`Minimum spend of ₱${coupon.criteria_details.min_spend} required.`);
-        return;
+        return false;
       }
     }
+
+    setSelectedCustomer(claimantId);
+    setSelectedCustomerInfo({
+      id: claimantId,
+      username: claimantUser?.username || '',
+      first_name: claimantUser?.first_name || '',
+      last_name: claimantUser?.last_name || '',
+    });
 
     if (coupon.criteria_details) {
       const criteria = coupon.criteria_details;
@@ -536,8 +581,9 @@ const Pos = () => {
       }
     }
 
-    setAppliedCoupons((prev) => [...prev, coupon]);
+    setAppliedCoupons([...baseAppliedCoupons, coupon]);
     setCouponError("");
+    return true;
   };
 
   const getCurrentProductStock = (productId, fallbackStock = 0) => {
@@ -683,13 +729,8 @@ const Pos = () => {
   };
 
   const handleApplyPromo = async () => {
-    if (!selectedCustomer) {
-      setCouponError("Select a customer first. Coupons are tied to user accounts.");
-      return;
-    }
-
     if (!promoCode.trim()) {
-      setCouponError("Please enter a promo code");
+      setCouponError("Please enter a promo name");
       return;
     }
 
@@ -702,63 +743,23 @@ const Pos = () => {
     setCouponError("");
     
     try {
-      const response = await api.get(`/firstapp/coupons/?code=${promoCode.toUpperCase()}`);
-      const couponData = Array.isArray(response.data) ? response.data[0] : response.data;
+      const response = await api.get(
+        `/firstapp/users/coupon-claimants/?promo_name=${encodeURIComponent(promoCode.trim())}`
+      );
+      const matches = Array.isArray(response.data) ? response.data : [];
 
-      if (!couponData) {
-        setCouponError("Invalid Coupon Code");
-        setCouponLoading(false);
+      if (matches.length === 0) {
+        setCouponError("No claimed coupons found for this promo name.");
         return;
       }
 
-      if (appliedCoupons.some(c => c.id === couponData.id)) {
-        setCouponError("This coupon is already applied!");
-        setCouponLoading(false);
-        return;
-      }
-
-      const coupon = couponData;
-
-      if (coupon.is_archived) {
-        setCouponError("This coupon is archived and cannot be used on POS.");
-        setCouponLoading(false);
-        return;
-      }
-
-      const ownedCoupon = customerCoupons.find(c => c.id === coupon.id);
-      if (!ownedCoupon) {
-        setCouponError("This coupon is not claimed by the selected customer.");
-        setCouponLoading(false);
-        return;
-      }
-
-      if (ownedCoupon.is_used) {
-        setCouponError("This coupon was already used by the selected customer.");
-        setCouponLoading(false);
-        return;
-      }
-      
-      const validStatuses = ['Active', 'active', 'Redeemed', 'redeemed'];
-      if (!validStatuses.includes(coupon.status)) {
-        setCouponError(`Coupon is ${coupon.status}`);
-        setCouponLoading(false);
-        return;
-      }
-
-      if (coupon.criteria_details && parseFloat(coupon.criteria_details.min_spend) > 0) {
-        if (subTotal < parseFloat(coupon.criteria_details.min_spend)) {
-            setCouponError(`Minimum spend of ₱${coupon.criteria_details.min_spend} required.`);
-            setCouponLoading(false);
-            return;
-        }
-      }
-
-      applyClaimedCoupon({ ...coupon, is_used: ownedCoupon.is_used });
-      setPromoCode("");
+      setCouponClaimSearchResults(matches);
+      setIsCustomerModalOpen(true);
+      setCouponError("");
       
     } catch (error) {
       console.error("Promo check failed", error);
-      setCouponError("Error validating coupon");
+      setCouponError(error.response?.data?.error || "Error searching promo claimants.");
     } finally {
       setCouponLoading(false);
     }
@@ -847,6 +848,11 @@ const Pos = () => {
 
   const buildReceiptPayload = () => {
     const isCash = paymentMethod === "cash";
+    const couponCodeMap = appliedCoupons.reduce((acc, coupon) => {
+      if (!coupon?.id) return acc;
+      acc[String(coupon.id)] = (coupon.code || "").toUpperCase();
+      return acc;
+    }, {});
 
     return {
       subtotal: subTotal.toFixed(2),
@@ -856,6 +862,7 @@ const Pos = () => {
       change: isCash ? change : "0.00",
       payment_method: isCash ? "CASH" : "GCASH",
       coupons: appliedCoupons.map(c => c.id),
+      coupon_codes: couponCodeMap,
       discount_type: selectedDiscount !== "none" ? selectedDiscount : null,
       customer_id: selectedCustomer,
       items: cartItems.map((i) => ({
@@ -1136,7 +1143,8 @@ const Pos = () => {
       setSelectedDiscount(null);
       setReceiptDetails(null);
       setSelectedCustomer(null); 
-      setCustomerCoupons([]);
+      setSelectedCustomerInfo(null);
+      setCouponClaimSearchResults([]);
       setIsCustomerModalOpen(false);
       setPaymentMethod("cash");
       setGcashModalOpen(false);
@@ -1344,13 +1352,6 @@ const Pos = () => {
                           Clear
                         </button>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => setIsCustomerModalOpen(true)}
-                        className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
-                      >
-                        Select User & Coupons
-                      </button>
                     </div>
                   </div>
                 </div>
@@ -1415,11 +1416,11 @@ const Pos = () => {
                 <div className="flex gap-2 mb-2">
                     <input 
                       value={promoCode} 
-                      onChange={(e) => setPromoCode(e.target.value.toUpperCase())} 
-                      onKeyPress={(e) => e.key === 'Enter' && handleApplyPromo()}
-                      placeholder="PROMO CODE" 
-                      maxLength={8}
-                      className={`flex-1 border rounded-md px-3 py-2 uppercase text-sm outline-none focus:ring-2 transition ${couponError ? 'border-red-300 focus:ring-red-200' : 'focus:ring-blue-200'}`} 
+                      onChange={(e) => setPromoCode(e.target.value)} 
+                      onKeyDown={(e) => e.key === 'Enter' && handleApplyPromo()}
+                      placeholder="PROMO NAME" 
+                      maxLength={80}
+                      className={`flex-1 border rounded-md px-3 py-2 text-sm outline-none focus:ring-2 transition ${couponError ? 'border-red-300 focus:ring-red-200' : 'focus:ring-blue-200'}`} 
                     />
                     <button 
                         onClick={handleApplyPromo}
@@ -1439,7 +1440,7 @@ const Pos = () => {
                     {appliedCoupons.map((coupon) => (
                             <div key={coupon.id} className="bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-200 text-xs font-bold flex items-center gap-2">
                                 <span className="flex items-center gap-1">
-                                    <Tag size={10}/> {coupon.code}
+                            <Tag size={10}/> {coupon.code || coupon.name || `#${coupon.id}`}
                                 </span>
                                 <button 
                                     onClick={() => handleRemoveCoupon(coupon.id)}
@@ -1495,14 +1496,25 @@ const Pos = () => {
         <CustomerCouponModal
           open={isCustomerModalOpen}
           onOpenChange={setIsCustomerModalOpen}
-          users={users}
+          promoQuery={promoCode}
+          matchedCoupons={couponClaimSearchResults}
+          searchLoading={couponLoading}
           selectedCustomerId={selectedCustomer}
-          onSelectCustomer={handleSelectCustomer}
-          onClearCustomer={handleClearCustomer}
-          customerCoupons={customerCoupons}
-          customerCouponsLoading={customerCouponsLoading}
           appliedCoupons={appliedCoupons}
-          onApplyCoupon={applyClaimedCoupon}
+          onClearCustomer={handleClearCustomer}
+          onApplyCoupon={(coupon, claimant) => {
+            const claimBoundCoupon = {
+              ...coupon,
+              code: claimant?.code || coupon.code || '',
+              is_used: Boolean(claimant?.is_used),
+            };
+            const wasApplied = applyClaimedCoupon(claimBoundCoupon, claimant);
+            if (wasApplied) {
+              setPromoCode('');
+              setCouponClaimSearchResults([]);
+              setIsCustomerModalOpen(false);
+            }
+          }}
         />
 
         <GCashPaymentModal

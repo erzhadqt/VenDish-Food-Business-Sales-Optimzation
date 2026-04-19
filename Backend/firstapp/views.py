@@ -5,7 +5,7 @@ from django.core.mail import send_mail
 from django.db import transaction, IntegrityError
 from django.utils import timezone
 from django.conf import settings
-from django.db.models import F
+from django.db.models import F, DecimalField, ExpressionWrapper
 from rest_framework.decorators import action, api_view, permission_classes
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets, generics, permissions, status
@@ -42,9 +42,9 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.permissions import AllowAny
 
 from .serializers import (
-    UserSerializer, FeedbackSerializer, ProductSerializer, CategorySerializer, ReceiptSerializer, CouponSerializer, HomePageSerializer, ServicesPageSerializer, AboutPageSerializer, ContactPageSerializer, CouponCriteriaSerializer, StaffPerformanceSerializer, ReviewSerializer, OTPSerializer, NotificationSerializer
+    UserSerializer, FeedbackSerializer, ProductSerializer, CategorySerializer, ReceiptSerializer, CouponSerializer, HomePageSerializer, ServicesPageSerializer, AboutPageSerializer, ContactPageSerializer, CouponCriteriaSerializer, StaffPerformanceSerializer, ReviewSerializer, OTPSerializer, NotificationSerializer, ProfitLogSerializer, DrawerBalanceLogSerializer
 )   
-from .models import Product, Category, Receipt, Coupon, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, ReceiptItem, Review, OTP, PasswordResetToken, EmailVerificationToken, StoreSettings, StaffInvitationToken, PaymentTransaction, PaymentWebhookEventLog, Notification
+from .models import Product, Category, Receipt, Coupon, CouponClaim, Feedback, HomePage, ServicesPage, AboutPage, ContactPage, CouponCriteria, ReceiptItem, Review, OTP, PasswordResetToken, EmailVerificationToken, StoreSettings, StaffInvitationToken, PaymentTransaction, PaymentWebhookEventLog, Notification, ProfitLog, DrawerBalanceLog
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.exceptions import AuthenticationFailed
 
@@ -114,6 +114,32 @@ STAFF_INVITATION_EXPIRY_MINUTES = max(1, int(getattr(settings, 'STAFF_INVITATION
 EMAIL_VERIFICATION_EXPIRY_MINUTES = max(1, int(getattr(settings, 'EMAIL_VERIFICATION_EXPIRY_MINUTES', 30)))
 
 logger = logging.getLogger(__name__)
+
+
+BEST_SELLER_EXCLUDED_CATEGORY_NAMES = (
+    'add-ons',
+    'add on',
+    'add-on',
+    'add ons',
+    'addons',
+    'addon',
+    'others',
+    'other',
+)
+
+
+def _build_best_seller_category_exclusion_q(field_name):
+    exclusion_q = Q()
+    for category_name in BEST_SELLER_EXCLUDED_CATEGORY_NAMES:
+        exclusion_q |= Q(**{f'{field_name}__iexact': category_name})
+    return exclusion_q
+
+
+def _receipt_item_revenue_expression():
+    return ExpressionWrapper(
+        F('price') * F('quantity'),
+        output_field=DecimalField(max_digits=14, decimal_places=2),
+    )
 
 
 def _extract_human_error_message(detail):
@@ -289,43 +315,128 @@ def trigger_deactivated_cleanup(request):
         )
 
 
-def _process_coupon_usage(receipt, target_customer):
+def _normalize_coupon_code(raw_code):
+    if raw_code is None:
+        return ''
+    return re.sub(r'[^A-Za-z0-9]', '', str(raw_code)).upper()
+
+
+def _coupon_display_reference(coupon, fallback=None):
+    if fallback:
+        return fallback
+    if coupon.code:
+        return coupon.code
+    if coupon.criteria and coupon.criteria.name:
+        return coupon.criteria.name
+    return f"Coupon #{coupon.id}"
+
+
+def _generate_unique_claim_code():
+    alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+    for _ in range(12):
+        candidate = 'VD' + ''.join(secrets.choice(alphabet) for _ in range(8))
+        if not CouponClaim.objects.filter(code=candidate).exists():
+            return candidate
+    return f"VD{uuid.uuid4().hex[:10].upper()}"
+
+
+def _get_or_create_personal_claim_code(coupon, user):
+    existing = CouponClaim.objects.filter(coupon=coupon, user=user).first()
+    if existing:
+        return existing
+
+    for _ in range(12):
+        try:
+            return CouponClaim.objects.create(
+                coupon=coupon,
+                user=user,
+                code=_generate_unique_claim_code(),
+            )
+        except IntegrityError:
+            # Handle both code collision and duplicate claim races.
+            current = CouponClaim.objects.filter(coupon=coupon, user=user).first()
+            if current:
+                return current
+
+    # Last-resort deterministic fallback if collisions keep happening.
+    return CouponClaim.objects.get_or_create(
+        coupon=coupon,
+        user=user,
+        defaults={'code': f"VD{uuid.uuid4().hex[:10].upper()}"},
+    )[0]
+
+
+def _process_coupon_usage(receipt, target_customer, coupon_codes=None):
+    coupon_codes = coupon_codes if isinstance(coupon_codes, dict) else {}
+
     for coupon_ref in receipt.coupons.all():
         coupon = Coupon.objects.select_for_update().get(id=coupon_ref.id)
+        submitted_code = _normalize_coupon_code(
+            coupon_codes.get(str(coupon.id)) if str(coupon.id) in coupon_codes else coupon_codes.get(coupon.id)
+        )
+        coupon_ref_label = _coupon_display_reference(coupon, submitted_code or None)
 
         if coupon.is_archived:
-            raise Exception(f"Coupon {coupon.code} is archived.")
+            raise Exception(f"Coupon {coupon_ref_label} is archived.")
 
         if coupon.criteria and coupon.criteria.valid_to and coupon.criteria.valid_to < timezone.now():
-            raise Exception(f"Coupon {coupon.code} has expired.")
+            raise Exception(f"Coupon {coupon_ref_label} has expired.")
 
         if coupon.criteria and coupon.criteria.min_spend > 0:
             if receipt.subtotal < coupon.criteria.min_spend:
-                raise Exception(f"Coupon {coupon.code} requires a minimum spend of ₱{coupon.criteria.min_spend}.")
+                raise Exception(f"Coupon {coupon_ref_label} requires a minimum spend of ₱{coupon.criteria.min_spend}.")
 
         if not target_customer:
             raise Exception("Coupons are tied to user accounts. Please select a customer first.")
 
-        has_claim = coupon.claimed_by.filter(id=target_customer.id).exists()
-        if not has_claim:
-            raise Exception(f"Coupon {coupon.code} is not claimed by user {target_customer.username}.")
+        claim = None
+        if submitted_code:
+            claim = CouponClaim.objects.select_for_update().filter(
+                coupon=coupon,
+                user=target_customer,
+                code__iexact=submitted_code,
+            ).first()
 
-        already_used = Receipt.objects.filter(
-            coupons=coupon,
-            customer=target_customer,
-            status='COMPLETED'
-        ).exclude(id=receipt.id).exists()
+        if not claim:
+            claim = CouponClaim.objects.select_for_update().filter(
+                coupon=coupon,
+                user=target_customer,
+            ).first()
 
-        if already_used:
-            raise Exception(f"User {target_customer.username} has already used coupon {coupon.code}.")
+        # Keep backward compatibility for legacy shared-code coupons that predate CouponClaim.
+        legacy_code = _normalize_coupon_code(coupon.code)
+        is_legacy_code_match = bool(submitted_code and legacy_code and submitted_code == legacy_code)
+
+        if not claim:
+            has_claim = coupon.claimed_by.filter(id=target_customer.id).exists()
+            if not has_claim or (submitted_code and not is_legacy_code_match):
+                raise Exception(f"Coupon {coupon_ref_label} is not claimed by user {target_customer.username}.")
+
+        if claim and claim.is_redeemed:
+            raise Exception(f"User {target_customer.username} has already used coupon {coupon_ref_label}.")
+
+        if not claim:
+            already_used = Receipt.objects.filter(
+                coupons=coupon,
+                customer=target_customer,
+                status__iexact=Receipt.Status.COMPLETED,
+            ).exclude(id=receipt.id).exists()
+
+            if already_used:
+                raise Exception(f"User {target_customer.username} has already used coupon {coupon_ref_label}.")
 
         if coupon.usage_limit is not None and coupon.times_used >= coupon.usage_limit:
-            raise Exception(f"Coupon {coupon.code} is sold out.")
+            raise Exception(f"Coupon {coupon_ref_label} is sold out.")
 
         coupon.times_used += 1
         if coupon.usage_limit is not None and coupon.times_used >= coupon.usage_limit:
             coupon.status = 'Redeemed'
         coupon.save()
+
+        if claim and not claim.is_redeemed:
+            claim.is_redeemed = True
+            claim.redeemed_at = timezone.now()
+            claim.save(update_fields=['is_redeemed', 'redeemed_at'])
 
 
 def _normalize_payment_status(event_type="", raw_status=""):
@@ -885,23 +996,122 @@ class UserViewSet(viewsets.ModelViewSet):
 
         customer = get_object_or_404(User, id=pk)
 
-        claimed_coupons = Coupon.objects.filter(claimed_by=customer, is_archived=False).annotate(
+        claimed_coupons = Coupon.objects.filter(is_archived=False).filter(
+            Q(claimed_by=customer) | Q(claims__user=customer)
+        ).annotate(
             is_used_by_user=Exists(
                 Receipt.objects.filter(
                     coupons=OuterRef('pk'),
                     customer=customer,
-                    status='COMPLETED'
+                    status__iexact=Receipt.Status.COMPLETED,
                 )
             )
-        ).order_by('-created_at')
+        ).distinct().order_by('-created_at')
 
         serializer = CouponSerializer(claimed_coupons, many=True, context={'request': request})
         data = serializer.data
 
+        claim_map = {
+            claim['coupon_id']: claim
+            for claim in CouponClaim.objects.filter(
+                user=customer,
+                coupon_id__in=[coupon.id for coupon in claimed_coupons],
+            ).values('coupon_id', 'code', 'is_redeemed')
+        }
+
         for index, coupon in enumerate(claimed_coupons):
-            data[index]['is_used'] = coupon.is_used_by_user
+            claim_info = claim_map.get(coupon.id)
+            if claim_info:
+                data[index]['code'] = claim_info.get('code') or data[index].get('code')
+                data[index]['is_used'] = bool(claim_info.get('is_redeemed'))
+            else:
+                data[index]['is_used'] = coupon.is_used_by_user
 
         return Response(data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='coupon-claimants')
+    def coupon_claimants(self, request):
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response({"error": "Only staff can search coupon claimants."}, status=status.HTTP_403_FORBIDDEN)
+
+        promo_name = str(request.query_params.get('promo_name', '')).strip()
+        if not promo_name:
+            return Response({"error": "promo_name query parameter is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        matched_coupons = list(
+            Coupon.objects.filter(is_archived=False)
+            .filter(criteria__name__icontains=promo_name)
+            .order_by('-created_at')
+        )
+
+        if not matched_coupons:
+            return Response([], status=status.HTTP_200_OK)
+
+        serialized_coupons = CouponSerializer(
+            matched_coupons,
+            many=True,
+            context={'request': request},
+        ).data
+        coupon_payload_map = {item['id']: item for item in serialized_coupons}
+
+        claim_rows = CouponClaim.objects.filter(coupon__in=matched_coupons).select_related('user', 'coupon')
+        claims_by_coupon_id = {}
+        for claim in claim_rows:
+            claims_by_coupon_id.setdefault(claim.coupon_id, []).append(claim)
+
+        response_rows = []
+        for coupon in matched_coupons:
+            coupon_payload = dict(coupon_payload_map.get(coupon.id, {}))
+            claimants = []
+            claimed_user_ids = set()
+
+            for claim in claims_by_coupon_id.get(coupon.id, []):
+                user = claim.user
+                claimed_user_ids.add(user.id)
+                claimants.append(
+                    {
+                        'id': user.id,
+                        'username': user.username,
+                        'first_name': user.first_name,
+                        'last_name': user.last_name,
+                        'code': claim.code,
+                        'is_used': bool(claim.is_redeemed),
+                    }
+                )
+
+            legacy_claimants = coupon.claimed_by.exclude(id__in=claimed_user_ids)
+            for user in legacy_claimants:
+                legacy_is_used = Receipt.objects.filter(
+                    coupons=coupon,
+                    customer=user,
+                    status__iexact=Receipt.Status.COMPLETED,
+                ).exists()
+                claimants.append(
+                    {
+                        'id': user.id,
+                        'username': user.username,
+                        'first_name': user.first_name,
+                        'last_name': user.last_name,
+                        'code': coupon.code or '',
+                        'is_used': bool(legacy_is_used),
+                    }
+                )
+
+            if not claimants:
+                continue
+
+            claimants.sort(
+                key=lambda row: (
+                    str(row.get('first_name') or '').strip().lower(),
+                    str(row.get('last_name') or '').strip().lower(),
+                    str(row.get('username') or '').strip().lower(),
+                )
+            )
+
+            coupon_payload['claimants'] = claimants
+            response_rows.append(coupon_payload)
+
+        return Response(response_rows, status=status.HTTP_200_OK)
 
     # [NEW] 2. NEW ACTION TO HANDLE THE VERIFICATION FROM EMAIL
     @action(detail=False, methods=['get', 'post'], permission_classes=[AllowAny], url_path='verify-invite')
@@ -1098,7 +1308,11 @@ class ProductViewSet(viewsets.ModelViewSet):
         serialized = self.get_serializer(ordered_products, many=True, context={'request': request}).data
         for item in serialized:
             stats = stats_by_product.get(item['id'], {})
-            item['units_sold_weekly'] = int(stats.get('units_sold_weekly', 0) or 0)
+            units_sold = int(stats.get('units_sold_weekly', 0) or 0)
+            item['units_sold_weekly'] = units_sold
+            item['units_sold_period'] = int(stats.get('units_sold_period', units_sold) or 0)
+            item['total_revenue_period'] = float(stats.get('total_revenue_period', 0) or 0)
+            item['total_orders_period'] = int(stats.get('total_orders_period', 0) or 0)
             item['average_rating'] = float(stats.get('average_rating', 0) or 0)
             item['review_count'] = int(stats.get('review_count', 0) or 0)
         return serialized
@@ -1123,13 +1337,19 @@ class ProductViewSet(viewsets.ModelViewSet):
             product__isnull=False,
             product__is_archived=False,
             receipt__created_at__gte=period_start,
-        )
+        ).exclude(_build_best_seller_category_exclusion_q('product__category__name'))
+
+        revenue_expression = _receipt_item_revenue_expression()
 
         sales_rows = list(
             sales_queryset
             .values('product')
-            .annotate(units_sold=Sum('quantity'))
-            .order_by('-units_sold', 'product')[:limit]
+            .annotate(
+                total_revenue=Sum(revenue_expression),
+                total_orders=Count('receipt', distinct=True),
+                units_sold=Sum('quantity'),
+            )
+            .order_by('-total_revenue', '-total_orders', '-units_sold', 'product')[:limit]
         )
 
         product_ids = [row['product'] for row in sales_rows if row.get('product')]
@@ -1156,8 +1376,12 @@ class ProductViewSet(viewsets.ModelViewSet):
         for row in sales_rows:
             product_id = row['product']
             rating_data = rating_map.get(product_id, {'average_rating': 0, 'review_count': 0})
+            units_sold = int(row.get('units_sold') or 0)
             stats_by_product[product_id] = {
-                'units_sold_weekly': int(row.get('units_sold') or 0),
+                'units_sold_weekly': units_sold,
+                'units_sold_period': units_sold,
+                'total_revenue_period': float(row.get('total_revenue') or 0),
+                'total_orders_period': int(row.get('total_orders') or 0),
                 'average_rating': rating_data['average_rating'],
                 'review_count': rating_data['review_count'],
                 'period': period,
@@ -1326,6 +1550,24 @@ class ReceiptViewSet(viewsets.ModelViewSet):
         
         return queryset.filter(cashier=user)
 
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='my-transactions')
+    def my_transactions(self, request):
+        status_filter = str(request.query_params.get('status', '')).strip().upper()
+        valid_statuses = {choice for choice, _ in Receipt.Status.choices}
+
+        queryset = (
+            Receipt.objects.filter(customer=request.user)
+            .select_related('cashier', 'customer')
+            .prefetch_related('items', 'coupons')
+            .order_by('-created_at')
+        )
+
+        if status_filter in valid_statuses:
+            queryset = queryset.filter(status=status_filter)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     # ---------------------------------------------------------
     # 1. CREATE RECEIPT (Checkout)
     # ---------------------------------------------------------
@@ -1334,6 +1576,10 @@ class ReceiptViewSet(viewsets.ModelViewSet):
         max_allowed_coupons = settings.max_coupons_per_order
 
         coupons_data = request.data.get('coupons', [])
+        coupon_codes = request.data.get('coupon_codes', {})
+        if not isinstance(coupon_codes, dict):
+            coupon_codes = {}
+
         if isinstance(coupons_data, list) and len(coupons_data) > max_allowed_coupons:
             return Response(
                 {"error": f"Maximum of {max_allowed_coupons} coupons allowed per order."}, 
@@ -1372,7 +1618,7 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                         settings_obj.save(update_fields=['pos_cash_balance'])
 
                     if target_customer:
-                        _process_coupon_usage(receipt, target_customer)
+                        _process_coupon_usage(receipt, target_customer, coupon_codes=coupon_codes)
 
                     return Response(
                         {"receipt_id": receipt.id, **serializer.data},
@@ -1468,6 +1714,13 @@ class ReceiptViewSet(viewsets.ModelViewSet):
 
                     if coupon.times_used > 0:
                         coupon.times_used -= 1
+
+                    if receipt.customer_id:
+                        claim = CouponClaim.objects.filter(coupon=coupon, user_id=receipt.customer_id).first()
+                        if claim and claim.is_redeemed:
+                            claim.is_redeemed = False
+                            claim.redeemed_at = None
+                            claim.save(update_fields=['is_redeemed', 'redeemed_at'])
 
                     if coupon.usage_limit is not None and coupon.times_used < coupon.usage_limit:
                         coupon.status = 'Active'
@@ -1892,6 +2145,89 @@ class CouponViewSet(viewsets.ModelViewSet):
     @staticmethod
     def _is_truthy(value):
         return str(value).strip().lower() in {'1', 'true', 'yes', 'on'}
+
+    def _completed_orders_count_for_user(self, user):
+        if not (user and user.is_authenticated):
+            return 0
+        return Receipt.objects.filter(
+            customer=user,
+            status__iexact=Receipt.Status.COMPLETED,
+        ).count()
+
+    def _eligible_active_filter(self, user, completed_orders=None):
+        if completed_orders is None:
+            completed_orders = self._completed_orders_count_for_user(user)
+
+        return (
+            Q(status='Active', target_audience=Coupon.TargetAudience.ALL_USERS)
+            |
+            Q(
+                status='Active',
+                target_audience=Coupon.TargetAudience.FREQUENT_CUSTOMERS,
+                min_completed_orders__lte=completed_orders,
+            )
+        )
+
+    def _lookup_coupon_by_claim_code(self, request, code_value):
+        normalized_code = _normalize_coupon_code(code_value)
+        if not normalized_code:
+            return Response([], status=status.HTTP_200_OK)
+
+        include_archived = self._is_truthy(request.query_params.get('include_archived'))
+        raw_customer_id = request.query_params.get('customer_id')
+        selected_customer_id = None
+
+        if raw_customer_id not in [None, '']:
+            try:
+                selected_customer_id = int(raw_customer_id)
+            except (TypeError, ValueError):
+                return Response({'error': 'Invalid customer_id.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        claim = CouponClaim.objects.select_related('coupon', 'coupon__criteria').filter(code__iexact=normalized_code).first()
+        if claim:
+            coupon = claim.coupon
+            if coupon.is_archived and not include_archived:
+                return Response([], status=status.HTTP_200_OK)
+
+            if selected_customer_id is not None and claim.user_id != selected_customer_id:
+                return Response([], status=status.HTTP_200_OK)
+
+            serializer = self.get_serializer(coupon, context={'request': request})
+            payload = serializer.data
+            payload['code'] = claim.code
+            payload['is_used'] = bool(claim.is_redeemed)
+            return Response([payload], status=status.HTTP_200_OK)
+
+        legacy_coupon = Coupon.objects.filter(code__iexact=normalized_code).order_by('-id').first()
+        if not legacy_coupon:
+            return Response([], status=status.HTTP_200_OK)
+
+        if legacy_coupon.is_archived and not include_archived:
+            return Response([], status=status.HTTP_200_OK)
+
+        if selected_customer_id is not None and not legacy_coupon.claimed_by.filter(id=selected_customer_id).exists():
+            return Response([], status=status.HTTP_200_OK)
+
+        serializer = self.get_serializer(legacy_coupon, context={'request': request})
+        payload = serializer.data
+
+        if selected_customer_id is not None:
+            selected_claim = CouponClaim.objects.filter(coupon=legacy_coupon, user_id=selected_customer_id).first()
+            if selected_claim:
+                payload['code'] = selected_claim.code
+                payload['is_used'] = bool(selected_claim.is_redeemed)
+
+        return Response([payload], status=status.HTTP_200_OK)
+
+    def list(self, request, *args, **kwargs):
+        lookup_code = request.query_params.get('code')
+        user = request.user
+        is_staff_user = bool(user and user.is_authenticated and (user.is_staff or user.is_superuser))
+
+        if lookup_code and is_staff_user:
+            return self._lookup_coupon_by_claim_code(request, lookup_code)
+
+        return super().list(request, *args, **kwargs)
     
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
@@ -1908,8 +2244,12 @@ class CouponViewSet(viewsets.ModelViewSet):
         include_archived = self._is_truthy(self.request.query_params.get('include_archived'))
         archived_only = self._is_truthy(self.request.query_params.get('archived_only'))
 
-        # Base query for public coupons
-        public_coupons = Coupon.objects.filter(status='Active', is_archived=False)
+        # Base query for public coupons (only globally visible audience)
+        public_coupons = Coupon.objects.filter(
+            status='Active',
+            is_archived=False,
+            target_audience=Coupon.TargetAudience.ALL_USERS,
+        )
 
         if user.is_authenticated:
             # Allow STAFF (Cashiers/Admin) to optionally include archived coupons for management.
@@ -1924,10 +2264,14 @@ class CouponViewSet(viewsets.ModelViewSet):
 
                 return staff_queryset.filter(is_archived=False)
             
-            # For Users: Show Active Public + Coupons they own
+            # For customers: show coupons they are eligible to claim + coupons they already own.
+            completed_orders = self._completed_orders_count_for_user(user)
+            eligible_active_filter = self._eligible_active_filter(user, completed_orders=completed_orders)
+
             return Coupon.objects.filter(
-                Q(status='Active') |
-                Q(claimed_by=user)
+                eligible_active_filter |
+                Q(claimed_by=user) |
+                Q(claims__user=user)
             ).filter(is_archived=False).distinct().order_by('-id')
         
         return public_coupons.order_by('-id')
@@ -2031,8 +2375,28 @@ class CouponViewSet(viewsets.ModelViewSet):
                 if coupon.status != 'Active':
                     return Response({"error": "This coupon is no longer active."}, status=status.HTTP_400_BAD_REQUEST)
 
-                if coupon.claimed_by.filter(id=user.id).exists():
-                    return Response({"message": "You already have this coupon in your wallet."}, status=status.HTTP_200_OK)
+                existing_claim = CouponClaim.objects.select_for_update().filter(coupon=coupon, user=user).first()
+                if not existing_claim and coupon.claimed_by.filter(id=user.id).exists():
+                    existing_claim = _get_or_create_personal_claim_code(coupon, user)
+
+                if existing_claim:
+                    serializer = self.get_serializer(coupon)
+                    payload = serializer.data
+                    payload['code'] = existing_claim.code
+                    payload['is_used'] = bool(existing_claim.is_redeemed)
+                    payload['message'] = "You already have this coupon in your wallet."
+                    return Response(payload, status=status.HTTP_200_OK)
+
+                if coupon.target_audience == Coupon.TargetAudience.FREQUENT_CUSTOMERS:
+                    required_orders = max(int(coupon.min_completed_orders or 0), 1)
+                    completed_orders = self._completed_orders_count_for_user(user)
+                    if completed_orders < required_orders:
+                        return Response(
+                            {
+                                "error": f"This coupon is only available to frequent customers with at least {required_orders} completed orders."
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
 
                 # Defensive count: protect against stale counter drift by taking the higher value.
                 current_claims = max(coupon.times_claimed, coupon.claimed_by.count())
@@ -2040,11 +2404,13 @@ class CouponViewSet(viewsets.ModelViewSet):
                     return Response({"error": "This coupon is fully claimed (Sold Out in App)."}, status=status.HTTP_400_BAD_REQUEST)
 
                 coupon.claimed_by.add(user)
+                claim = _get_or_create_personal_claim_code(coupon, user)
 
                 # Re-check after insertion to hard-stop over-claiming in edge/race cases.
                 updated_claims = coupon.claimed_by.count()
                 if coupon.claim_limit is not None and updated_claims > coupon.claim_limit:
                     coupon.claimed_by.remove(user)
+                    CouponClaim.objects.filter(coupon=coupon, user=user).delete()
                     coupon.times_claimed = coupon.claimed_by.count()
                     coupon.save(update_fields=['times_claimed'])
                     return Response({"error": "This coupon is fully claimed (Sold Out in App)."}, status=status.HTTP_400_BAD_REQUEST)
@@ -2053,7 +2419,10 @@ class CouponViewSet(viewsets.ModelViewSet):
                 coupon.save(update_fields=['times_claimed'])
 
             serializer = self.get_serializer(coupon)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            payload = serializer.data
+            payload['code'] = claim.code
+            payload['is_used'] = bool(claim.is_redeemed)
+            return Response(payload, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -2065,22 +2434,37 @@ class CouponViewSet(viewsets.ModelViewSet):
             return Response({"error": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
 
         # Check if a COMPLETED receipt exists for this specific user & coupon
-        my_coupons = Coupon.objects.filter(claimed_by=user, is_archived=False).annotate(
+        my_coupons = Coupon.objects.filter(is_archived=False).filter(
+            Q(claimed_by=user) | Q(claims__user=user)
+        ).annotate(
             is_used_by_user=Exists(
                 Receipt.objects.filter(
                     coupons=OuterRef('pk'),
                     customer=user,
-                    status='COMPLETED'
+                    status__iexact=Receipt.Status.COMPLETED,
                 )
             )
-        ).order_by('-created_at')
+        ).distinct().order_by('-created_at')
         
         serializer = self.get_serializer(my_coupons, many=True)
         data = serializer.data
+
+        claim_map = {
+            claim['coupon_id']: claim
+            for claim in CouponClaim.objects.filter(
+                user=user,
+                coupon_id__in=[coupon.id for coupon in my_coupons],
+            ).values('coupon_id', 'code', 'is_redeemed')
+        }
         
         # Inject the 'is_used' boolean directly into the serialized data
         for index, coupon in enumerate(my_coupons):
-            data[index]['is_used'] = coupon.is_used_by_user
+            claim_info = claim_map.get(coupon.id)
+            if claim_info:
+                data[index]['code'] = claim_info.get('code') or data[index].get('code')
+                data[index]['is_used'] = bool(claim_info.get('is_redeemed'))
+            else:
+                data[index]['is_used'] = coupon.is_used_by_user
 
         return Response(data)
 
@@ -2113,6 +2497,25 @@ class CouponViewSet(viewsets.ModelViewSet):
                 if 'claim_limit' in data:
                     val = data['claim_limit']
                     instance.claim_limit = int(val) if val not in [None, ''] else None
+
+                if 'target_audience' in data:
+                    target_audience = str(data['target_audience']).strip()
+                    valid_audiences = {choice for choice, _ in Coupon.TargetAudience.choices}
+                    if target_audience not in valid_audiences:
+                        raise ValueError('Invalid target_audience value.')
+                    instance.target_audience = target_audience
+
+                if 'min_completed_orders' in data:
+                    val = data['min_completed_orders']
+                    parsed_orders = int(val) if val not in [None, ''] else 0
+                    if parsed_orders < 0:
+                        raise ValueError('min_completed_orders cannot be negative.')
+                    instance.min_completed_orders = parsed_orders
+
+                if instance.target_audience != Coupon.TargetAudience.FREQUENT_CUSTOMERS:
+                    instance.min_completed_orders = 0
+                elif instance.min_completed_orders < 1:
+                    instance.min_completed_orders = 1
 
                 # 3. Recalculate Status manually
                 is_expired = instance.criteria and instance.criteria.valid_to and instance.criteria.valid_to < timezone.now()
@@ -2232,19 +2635,33 @@ class DailySalesReportViewSet(viewsets.ViewSet):
         least_seller_map = {}
         least_qty_map = {}
         product_sales_map = {}
+        product_revenue_map = {}
+        product_order_count_map = {}
         receipt_ids = queryset.values_list('id', flat=True)
         if receipt_ids:
+            revenue_expression = _receipt_item_revenue_expression()
             item_stats = (
-                ReceiptItem.objects.filter(receipt__in=receipt_ids)
+                ReceiptItem.objects.filter(
+                    receipt__in=receipt_ids,
+                    product__isnull=False,
+                    product__is_archived=False,
+                )
+                .exclude(_build_best_seller_category_exclusion_q('product__category__name'))
                 .annotate(report_bucket=trunc_func('receipt__created_at'))
                 .values('report_bucket', 'product_name')
-                .annotate(qty_sold=Sum('quantity'))
-                .order_by('report_bucket', '-qty_sold', 'product_name') 
+                .annotate(
+                    qty_sold=Sum('quantity'),
+                    total_revenue=Sum(revenue_expression),
+                    total_orders=Count('receipt', distinct=True),
+                )
+                .order_by('report_bucket', '-total_revenue', '-total_orders', '-qty_sold', 'product_name')
             )
             for stat in item_stats:
                 date_str = _bucket_key(stat['report_bucket'])
                 product_name = (stat['product_name'] or '').strip()
                 qty_sold = stat['qty_sold'] or 0
+                total_revenue = float(stat['total_revenue'] or 0)
+                total_orders = int(stat['total_orders'] or 0)
 
                 if not product_name:
                     continue
@@ -2252,6 +2669,14 @@ class DailySalesReportViewSet(viewsets.ViewSet):
                 if date_str not in product_sales_map:
                     product_sales_map[date_str] = {}
                 product_sales_map[date_str][product_name] = qty_sold
+
+                if date_str not in product_revenue_map:
+                    product_revenue_map[date_str] = {}
+                product_revenue_map[date_str][product_name] = total_revenue
+
+                if date_str not in product_order_count_map:
+                    product_order_count_map[date_str] = {}
+                product_order_count_map[date_str][product_name] = total_orders
 
                 if date_str not in top_seller_map:
                     top_seller_map[date_str] = product_name
@@ -2280,7 +2705,9 @@ class DailySalesReportViewSet(viewsets.ViewSet):
                 "voided_orders": void_map.get(date_str, 0),
                 "top_selling_product": top_seller_map.get(date_str, "N/A"),
                 "least_selling_product": least_seller_map.get(date_str, "N/A"),
-                "daily_product_sales": product_sales_map.get(date_str, {})
+                "daily_product_sales": product_sales_map.get(date_str, {}),
+                "daily_product_sales_revenue": product_revenue_map.get(date_str, {}),
+                "daily_product_order_counts": product_order_count_map.get(date_str, {}),
             })
 
         return Response(final_response)
@@ -2330,6 +2757,44 @@ class DailySalesReportViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['post'], url_path='refresh-today')
     def refresh_today(self, request):
         return Response({"message": "Data synchronized"}, status=200)
+
+
+class ProfitLogViewSet(viewsets.ModelViewSet):
+    serializer_class = ProfitLogSerializer
+    permission_classes = [IsAdminUser]
+    http_method_names = ['get', 'post', 'head', 'options']
+
+    def get_queryset(self):
+        queryset = ProfitLog.objects.select_related('created_by').all().order_by('-created_at')
+
+        period_filter = (self.request.query_params.get('period') or '').strip().upper()
+        valid_periods = {choice for choice, _ in ProfitLog.Period.choices}
+        if period_filter in valid_periods:
+            queryset = queryset.filter(period=period_filter)
+
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+class DrawerBalanceLogViewSet(viewsets.ModelViewSet):
+    serializer_class = DrawerBalanceLogSerializer
+    permission_classes = [IsAdminUser]
+    http_method_names = ['get', 'post', 'head', 'options']
+
+    def get_queryset(self):
+        return DrawerBalanceLog.objects.select_related('created_by').all().order_by('-created_at')
+
+    def perform_create(self, serializer):
+        # Keep out-drawer logging and drawer reset in one transaction to avoid partial updates.
+        with transaction.atomic():
+            serializer.save(created_by=self.request.user)
+
+            settings_obj, _ = StoreSettings.objects.select_for_update().get_or_create(id=1)
+            settings_obj.pos_initial_balance = 0
+            settings_obj.pos_cash_balance = 0
+            settings_obj.save(update_fields=['pos_initial_balance', 'pos_cash_balance'])
 
 class ReviewViewSet(viewsets.ModelViewSet):
     queryset = Review.objects.all().order_by('-created_at')
@@ -2763,6 +3228,7 @@ class StoreSettingsView(APIView):
         return Response({
             "store_is_open": settings.store_is_open,
             "max_coupons_per_order": settings.max_coupons_per_order,
+            "pos_initial_balance": settings.pos_initial_balance,
             "pos_cash_balance": settings.pos_cash_balance, # [NEW] Return balance
             "tin_number": settings.tin_number,
             "receipt_phone": settings.receipt_phone,
@@ -2795,6 +3261,10 @@ class StoreSettingsView(APIView):
             settings.max_coupons_per_order = int(max_coupons)
             
         # [NEW] Handle Initial Balance setting
+        pos_initial_balance = request.data.get('pos_initial_balance')
+        if pos_initial_balance is not None:
+            settings.pos_initial_balance = Decimal(str(pos_initial_balance))
+
         pos_cash_balance = request.data.get('pos_cash_balance')
         if pos_cash_balance is not None:
             settings.pos_cash_balance = Decimal(str(pos_cash_balance))
@@ -2847,6 +3317,7 @@ class StoreSettingsView(APIView):
             "message": "Settings updated successfully.",
             "store_is_open": settings.store_is_open,
             "max_coupons_per_order": settings.max_coupons_per_order,
+            "pos_initial_balance": settings.pos_initial_balance,
             "pos_cash_balance": settings.pos_cash_balance, # [NEW] Return updated balance
             "tin_number": settings.tin_number,
             "receipt_phone": settings.receipt_phone,

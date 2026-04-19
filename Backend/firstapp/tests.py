@@ -7,7 +7,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from .models import OTP, PasswordResetToken, EmailVerificationToken, Review, Category, Product, Coupon, CouponCriteria, StoreSettings, Receipt
+from .models import OTP, PasswordResetToken, EmailVerificationToken, Review, Category, Product, Coupon, CouponClaim, CouponCriteria, StoreSettings, Receipt, ReceiptItem, DrawerBalanceLog
 
 
 @override_settings(
@@ -349,6 +349,48 @@ class StoreOpenCloseLoginGuardTests(APITestCase):
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertIn('store_is_open', response.data)
 		self.assertFalse(response.data.get('store_is_open'))
+
+
+class DrawerBalanceLogResetTests(APITestCase):
+	def setUp(self):
+		user_model = get_user_model()
+		self.admin = user_model.objects.create_user(
+			username='drawer_reset_admin',
+			email='drawer_reset_admin@example.com',
+			password='AdminPass123!',
+			is_staff=True,
+		)
+		self.client.force_authenticate(user=self.admin)
+
+		StoreSettings.objects.update_or_create(
+			id=1,
+			defaults={
+				'pos_initial_balance': '1500.00',
+				'pos_cash_balance': '2450.75',
+			},
+		)
+
+	def test_creating_out_drawer_log_resets_pos_balances(self):
+		response = self.client.post(
+			'/firstapp/drawer-balance-logs/',
+			{
+				'opening_balance': '1500.00',
+				'today_sales_total': '950.75',
+				'notes': 'End of day close',
+			},
+			format='json',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+		settings_obj = StoreSettings.objects.get(id=1)
+		self.assertEqual(str(settings_obj.pos_initial_balance), '0.00')
+		self.assertEqual(str(settings_obj.pos_cash_balance), '0.00')
+
+		created_log = DrawerBalanceLog.objects.get(id=response.data['id'])
+		self.assertEqual(str(created_log.opening_balance), '1500.00')
+		self.assertEqual(str(created_log.today_sales_total), '950.75')
+		self.assertEqual(str(created_log.projected_total), '2450.75')
 
 
 class ReviewAdminReplyTests(APITestCase):
@@ -852,6 +894,250 @@ class CouponArchiveTests(APITestCase):
 		self.assertEqual(limited_coupon.times_claimed, 2)
 
 
+class CouponDynamicEligibilityAndClaimCodeTests(APITestCase):
+	def setUp(self):
+		user_model = get_user_model()
+		self.admin = user_model.objects.create_user(
+			username='coupon_dynamic_admin',
+			email='coupon_dynamic_admin@example.com',
+			password='AdminPass123!',
+			is_staff=True,
+		)
+		self.customer_a = user_model.objects.create_user(
+			username='coupon_dynamic_customer_a',
+			email='coupon_dynamic_customer_a@example.com',
+			password='CustomerPass123!',
+		)
+		self.customer_b = user_model.objects.create_user(
+			username='coupon_dynamic_customer_b',
+			email='coupon_dynamic_customer_b@example.com',
+			password='CustomerPass123!',
+		)
+
+		self.criteria = CouponCriteria.objects.create(
+			name='Frequent Customer Promo',
+			discount_type='fixed',
+			discount_value='30.00',
+		)
+		self.frequent_coupon = Coupon.objects.create(
+			criteria=self.criteria,
+			status='Active',
+			claim_limit=20,
+			usage_limit=20,
+			target_audience=Coupon.TargetAudience.FREQUENT_CUSTOMERS,
+			min_completed_orders=2,
+		)
+		self.public_coupon = Coupon.objects.create(
+			code='PUBLICONE',
+			criteria=self.criteria,
+			status='Active',
+			claim_limit=20,
+			usage_limit=20,
+			target_audience=Coupon.TargetAudience.ALL_USERS,
+		)
+
+	def _create_completed_receipt(self, customer):
+		return Receipt.objects.create(
+			subtotal='100.00',
+			vat='0.00',
+			total='100.00',
+			cash_given='100.00',
+			change='0.00',
+			status=Receipt.Status.COMPLETED,
+			customer=customer,
+		)
+
+	def _create_legacy_completed_receipt(self, customer):
+		return Receipt.objects.create(
+			subtotal='100.00',
+			vat='0.00',
+			total='100.00',
+			cash_given='100.00',
+			change='0.00',
+			status='completed',
+			customer=customer,
+		)
+
+	def test_coupon_visible_when_completed_orders_exactly_match_threshold(self):
+		self.frequent_coupon.min_completed_orders = 5
+		self.frequent_coupon.save(update_fields=['min_completed_orders'])
+
+		for _ in range(5):
+			self._create_completed_receipt(self.customer_a)
+
+		self.client.force_authenticate(user=self.customer_a)
+		response = self.client.get('/firstapp/coupons/')
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		returned_ids = {item['id'] for item in response.data}
+		self.assertIn(self.frequent_coupon.id, returned_ids)
+
+	def test_legacy_completed_status_is_counted_for_frequent_coupon_eligibility(self):
+		self._create_legacy_completed_receipt(self.customer_a)
+		self._create_legacy_completed_receipt(self.customer_a)
+
+		self.client.force_authenticate(user=self.customer_a)
+		response = self.client.get('/firstapp/coupons/')
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		returned_ids = {item['id'] for item in response.data}
+		self.assertIn(self.frequent_coupon.id, returned_ids)
+
+	def test_ineligible_customer_cannot_view_frequent_coupon(self):
+		self.client.force_authenticate(user=self.customer_a)
+
+		response = self.client.get('/firstapp/coupons/')
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		returned_ids = {item['id'] for item in response.data}
+		self.assertNotIn(self.frequent_coupon.id, returned_ids)
+		self.assertIn(self.public_coupon.id, returned_ids)
+
+	def test_ineligible_customer_cannot_claim_frequent_coupon(self):
+		self.client.force_authenticate(user=self.customer_a)
+
+		response = self.client.post(f'/firstapp/coupons/{self.frequent_coupon.id}/claim/', format='json')
+
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		self.assertIn('frequent customers', str(response.data.get('error', '')).lower())
+
+	def test_eligible_customer_receives_generated_claim_code(self):
+		self._create_completed_receipt(self.customer_a)
+		self._create_completed_receipt(self.customer_a)
+
+		self.client.force_authenticate(user=self.customer_a)
+		response = self.client.post(f'/firstapp/coupons/{self.frequent_coupon.id}/claim/', format='json')
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		generated_code = response.data.get('code')
+		self.assertTrue(generated_code)
+
+		claim = CouponClaim.objects.get(coupon=self.frequent_coupon, user=self.customer_a)
+		self.assertEqual(generated_code, claim.code)
+
+	def test_generated_codes_are_unique_per_customer(self):
+		self._create_completed_receipt(self.customer_a)
+		self._create_completed_receipt(self.customer_a)
+		self._create_completed_receipt(self.customer_b)
+		self._create_completed_receipt(self.customer_b)
+
+		self.client.force_authenticate(user=self.customer_a)
+		first = self.client.post(f'/firstapp/coupons/{self.frequent_coupon.id}/claim/', format='json')
+		self.assertEqual(first.status_code, status.HTTP_200_OK)
+
+		self.client.force_authenticate(user=self.customer_b)
+		second = self.client.post(f'/firstapp/coupons/{self.frequent_coupon.id}/claim/', format='json')
+		self.assertEqual(second.status_code, status.HTTP_200_OK)
+
+		self.assertNotEqual(first.data.get('code'), second.data.get('code'))
+
+	def test_pos_code_lookup_is_strictly_bound_to_selected_customer(self):
+		self._create_completed_receipt(self.customer_a)
+		self._create_completed_receipt(self.customer_a)
+
+		self.client.force_authenticate(user=self.customer_a)
+		claim_response = self.client.post(f'/firstapp/coupons/{self.frequent_coupon.id}/claim/', format='json')
+		claim_code = claim_response.data.get('code')
+
+		self.client.force_authenticate(user=self.admin)
+		allowed = self.client.get(
+			f'/firstapp/coupons/?code={claim_code}&customer_id={self.customer_a.id}'
+		)
+		blocked = self.client.get(
+			f'/firstapp/coupons/?code={claim_code}&customer_id={self.customer_b.id}'
+		)
+
+		self.assertEqual(allowed.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(allowed.data), 1)
+		self.assertEqual(allowed.data[0].get('code'), claim_code)
+
+		self.assertEqual(blocked.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(blocked.data), 0)
+
+	def test_claimed_coupon_remains_visible_after_threshold_increase(self):
+		self._create_completed_receipt(self.customer_a)
+		self._create_completed_receipt(self.customer_a)
+
+		self.client.force_authenticate(user=self.customer_a)
+		claim_response = self.client.post(f'/firstapp/coupons/{self.frequent_coupon.id}/claim/', format='json')
+		self.assertEqual(claim_response.status_code, status.HTTP_200_OK)
+		claim_code = claim_response.data.get('code')
+
+		self.frequent_coupon.min_completed_orders = 10
+		self.frequent_coupon.save(update_fields=['min_completed_orders'])
+
+		list_response = self.client.get('/firstapp/coupons/')
+		self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+		listed_ids = {item['id'] for item in list_response.data}
+		self.assertIn(self.frequent_coupon.id, listed_ids)
+
+		claim_again_response = self.client.post(f'/firstapp/coupons/{self.frequent_coupon.id}/claim/', format='json')
+		self.assertEqual(claim_again_response.status_code, status.HTTP_200_OK)
+		self.assertEqual(claim_again_response.data.get('code'), claim_code)
+		self.assertIn('already', str(claim_again_response.data.get('message', '')).lower())
+
+	def test_legacy_shared_code_lookup_remains_customer_bound(self):
+		self.public_coupon.claimed_by.add(self.customer_a)
+		self.assertFalse(
+			CouponClaim.objects.filter(coupon=self.public_coupon, user=self.customer_a).exists()
+		)
+
+		self.client.force_authenticate(user=self.admin)
+		allowed = self.client.get(
+			f'/firstapp/coupons/?code={self.public_coupon.code}&customer_id={self.customer_a.id}'
+		)
+		blocked = self.client.get(
+			f'/firstapp/coupons/?code={self.public_coupon.code}&customer_id={self.customer_b.id}'
+		)
+
+		self.assertEqual(allowed.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(allowed.data), 1)
+		self.assertEqual(allowed.data[0].get('id'), self.public_coupon.id)
+		self.assertEqual(allowed.data[0].get('code'), self.public_coupon.code)
+
+		self.assertEqual(blocked.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(blocked.data), 0)
+
+	def test_staff_can_search_coupon_claimants_by_promo_name(self):
+		self._create_completed_receipt(self.customer_a)
+		self._create_completed_receipt(self.customer_a)
+
+		self.client.force_authenticate(user=self.customer_a)
+		claim_response = self.client.post(f'/firstapp/coupons/{self.frequent_coupon.id}/claim/', format='json')
+		self.assertEqual(claim_response.status_code, status.HTTP_200_OK)
+		claim_code = claim_response.data.get('code')
+
+		self.client.force_authenticate(user=self.admin)
+		response = self.client.get(
+			'/firstapp/users/coupon-claimants/',
+			{'promo_name': 'Frequent Customer Promo'},
+			format='json',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertGreaterEqual(len(response.data), 1)
+
+		coupon_entry = next((item for item in response.data if item.get('id') == self.frequent_coupon.id), None)
+		self.assertIsNotNone(coupon_entry)
+
+		claimants = coupon_entry.get('claimants', [])
+		claimant_entry = next((item for item in claimants if item.get('id') == self.customer_a.id), None)
+		self.assertIsNotNone(claimant_entry)
+		self.assertEqual(claimant_entry.get('code'), claim_code)
+		self.assertFalse(bool(claimant_entry.get('is_used')))
+
+	def test_non_staff_cannot_search_coupon_claimants_by_promo_name(self):
+		self.client.force_authenticate(user=self.customer_a)
+
+		response = self.client.get(
+			'/firstapp/users/coupon-claimants/',
+			{'promo_name': 'Frequent'},
+			format='json',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
 class CouponCriteriaDiscountCapTests(APITestCase):
 	def setUp(self):
 		user_model = get_user_model()
@@ -1027,3 +1313,228 @@ class SalesByStaffFilteringTests(APITestCase):
 		self.assertEqual(response.data[0]['name'], 'Beta Cashier')
 		self.assertEqual(self._to_float(response.data[0]['revenue']), 175.00)
 		self.assertEqual(response.data[0]['orders'], 1)
+
+
+class BestSellerRevenueRankingTests(APITestCase):
+	def setUp(self):
+		user_model = get_user_model()
+		self.admin = user_model.objects.create_user(
+			username='best_seller_admin',
+			email='best_seller_admin@example.com',
+			password='AdminPass123!',
+			is_staff=True,
+			is_superuser=True,
+		)
+
+		self.main_category = Category.objects.create(name='Meals')
+		self.addons_category = Category.objects.create(name='Add-ons')
+		self.others_category = Category.objects.create(name='Others')
+
+		self.sisig = Product.objects.create(
+			product_name='Sisig',
+			category=self.main_category,
+			price='120.00',
+			stock_quantity=50,
+			is_available=True,
+		)
+		self.adobo = Product.objects.create(
+			product_name='Adobo',
+			category=self.main_category,
+			price='50.00',
+			stock_quantity=50,
+			is_available=True,
+		)
+		self.steak = Product.objects.create(
+			product_name='Steak',
+			category=self.main_category,
+			price='100.00',
+			stock_quantity=50,
+			is_available=True,
+		)
+		self.water = Product.objects.create(
+			product_name='Water',
+			category=self.addons_category,
+			price='500.00',
+			stock_quantity=50,
+			is_available=True,
+		)
+		self.utensils = Product.objects.create(
+			product_name='Utensils',
+			category=self.others_category,
+			price='600.00',
+			stock_quantity=50,
+			is_available=True,
+		)
+
+	def _create_completed_receipt_item(self, *, product, quantity, created_at=None):
+		if created_at is None:
+			created_at = timezone.now()
+
+		line_total = float(product.price) * int(quantity)
+		receipt = Receipt.objects.create(
+			subtotal=f'{line_total:.2f}',
+			vat='0.00',
+			total=f'{line_total:.2f}',
+			cash_given=f'{line_total:.2f}',
+			change='0.00',
+			created_at=created_at,
+			status=Receipt.Status.COMPLETED,
+			cashier=self.admin,
+		)
+
+		ReceiptItem.objects.create(
+			receipt=receipt,
+			product=product,
+			product_name=product.product_name,
+			price=product.price,
+			quantity=quantity,
+		)
+
+		return receipt
+
+	def test_best_sellers_endpoint_prefers_revenue_then_order_count(self):
+		now = timezone.now()
+
+		# Sisig: revenue 240 (top).
+		self._create_completed_receipt_item(product=self.sisig, quantity=2, created_at=now)
+
+		# Adobo: revenue 200 with 2 separate orders.
+		self._create_completed_receipt_item(product=self.adobo, quantity=2, created_at=now)
+		self._create_completed_receipt_item(product=self.adobo, quantity=2, created_at=now)
+
+		# Steak: revenue 200 with only 1 order.
+		self._create_completed_receipt_item(product=self.steak, quantity=2, created_at=now)
+
+		# Excluded categories should never enter best-seller ranking even with high revenue.
+		self._create_completed_receipt_item(product=self.water, quantity=10, created_at=now)
+		self._create_completed_receipt_item(product=self.utensils, quantity=10, created_at=now)
+
+		response = self.client.get('/firstapp/products/best-sellers/?period=daily&limit=5')
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		returned_ids = [row.get('id') for row in response.data]
+
+		self.assertEqual(returned_ids[:3], [self.sisig.id, self.adobo.id, self.steak.id])
+		self.assertNotIn(self.water.id, returned_ids)
+		self.assertNotIn(self.utensils.id, returned_ids)
+
+		self.assertEqual(response.data[0].get('total_orders_period'), 1)
+		self.assertGreater(float(response.data[0].get('total_revenue_period') or 0), 0)
+
+	def test_sales_report_top_seller_uses_same_policy_and_exclusions(self):
+		now = timezone.now()
+
+		# Adobo beats Steak because revenue ties (200) but Adobo has more distinct orders.
+		self._create_completed_receipt_item(product=self.adobo, quantity=2, created_at=now)
+		self._create_completed_receipt_item(product=self.adobo, quantity=2, created_at=now)
+		self._create_completed_receipt_item(product=self.steak, quantity=2, created_at=now)
+
+		# Excluded non-food categories should not appear in report ranking maps.
+		self._create_completed_receipt_item(product=self.water, quantity=20, created_at=now)
+
+		self.client.force_authenticate(user=self.admin)
+		response = self.client.get(
+			'/firstapp/sales/',
+			{
+				'period': 'daily',
+				'start': (now - timedelta(hours=2)).isoformat(),
+				'end': (now + timedelta(hours=2)).isoformat(),
+			},
+			format='json',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertGreaterEqual(len(response.data), 1)
+
+		row = response.data[0]
+		self.assertEqual(row.get('top_selling_product'), self.adobo.product_name)
+
+		revenue_map = row.get('daily_product_sales_revenue') or {}
+		order_map = row.get('daily_product_order_counts') or {}
+
+		self.assertNotIn(self.water.product_name, revenue_map)
+		self.assertEqual(int(order_map.get(self.adobo.product_name, 0)), 2)
+		self.assertEqual(int(order_map.get(self.steak.product_name, 0)), 1)
+
+
+class CustomerReceiptHistoryTests(APITestCase):
+	def setUp(self):
+		user_model = get_user_model()
+		self.cashier = user_model.objects.create_user(
+			username='history_cashier',
+			email='history_cashier@example.com',
+			password='CashierPass123!',
+			is_staff=True,
+		)
+		self.customer = user_model.objects.create_user(
+			username='history_customer',
+			email='history_customer@example.com',
+			password='CustomerPass123!',
+		)
+		self.other_customer = user_model.objects.create_user(
+			username='history_other_customer',
+			email='history_other_customer@example.com',
+			password='CustomerPass123!',
+		)
+
+		self.older_receipt = self._create_receipt(
+			customer=self.customer,
+			total='120.00',
+			receipt_status=Receipt.Status.COMPLETED,
+			created_at=timezone.now() - timedelta(days=1),
+		)
+		self.newer_receipt = self._create_receipt(
+			customer=self.customer,
+			total='180.00',
+			receipt_status=Receipt.Status.VOIDED,
+			created_at=timezone.now(),
+		)
+		self.other_customer_receipt = self._create_receipt(
+			customer=self.other_customer,
+			total='999.00',
+			receipt_status=Receipt.Status.COMPLETED,
+			created_at=timezone.now(),
+		)
+
+	def _create_receipt(self, *, customer, total, receipt_status, created_at):
+		return Receipt.objects.create(
+			subtotal=str(total),
+			vat='0.00',
+			total=str(total),
+			cash_given=str(total),
+			change='0.00',
+			created_at=created_at,
+			status=receipt_status,
+			payment_method=Receipt.PaymentMethod.CASH,
+			payment_status=Receipt.PaymentStatus.PAID,
+			cashier=self.cashier,
+			customer=customer,
+		)
+
+	def test_my_transactions_returns_only_logged_in_customer_receipts(self):
+		self.client.force_authenticate(user=self.customer)
+
+		response = self.client.get('/firstapp/receipt/my-transactions/', format='json')
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		ids = [row['id'] for row in response.data]
+		self.assertEqual(ids, [self.newer_receipt.id, self.older_receipt.id])
+		self.assertNotIn(self.other_customer_receipt.id, ids)
+
+	def test_my_transactions_supports_status_filter(self):
+		self.client.force_authenticate(user=self.customer)
+
+		response = self.client.get(
+			'/firstapp/receipt/my-transactions/',
+			{'status': Receipt.Status.COMPLETED},
+			format='json',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data), 1)
+		self.assertEqual(response.data[0]['id'], self.older_receipt.id)
+
+	def test_my_transactions_requires_authentication(self):
+		response = self.client.get('/firstapp/receipt/my-transactions/', format='json')
+
+		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)

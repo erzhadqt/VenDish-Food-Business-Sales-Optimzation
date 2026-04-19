@@ -1,5 +1,5 @@
 from django.db import models
-from django.db.models import Sum
+from django.db.models import Sum, Count, Q
 from django.utils import timezone
 
 from django.contrib.auth.models import User
@@ -69,6 +69,7 @@ class StoreSettings(models.Model):
     void_pin = models.CharField(max_length=128, blank=True, null=True)
     store_is_open = models.BooleanField(default=True)
     max_coupons_per_order = models.PositiveIntegerField(default=2)
+    pos_initial_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     pos_cash_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     tin_number = models.CharField(max_length=15, default='123-456-789-000')
     receipt_phone = models.CharField(max_length=25, default='+63 966 443 1581')
@@ -140,15 +141,29 @@ class CouponCriteria(models.Model):
 
 # COUPON
 class Coupon(models.Model):
+    class TargetAudience(models.TextChoices):
+        ALL_USERS = 'all_users', 'All Users'
+        FREQUENT_CUSTOMERS = 'frequent_customers', 'Frequent Customers'
+
     class Status(models.TextChoices):
         ACTIVE = 'Active', 'Active'
         CLAIMED = 'Claimed', 'Claimed' 
         REDEEMED = 'Redeemed', 'Redeemed'
         EXPIRED = 'Expired', 'Expired'
 
-    code = models.CharField(max_length=50, unique=True)
+    code = models.CharField(max_length=50, unique=True, null=True, blank=True)
     criteria = models.ForeignKey(CouponCriteria, on_delete=models.SET_NULL, related_name='coupons', null=True, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
+    target_audience = models.CharField(
+        max_length=32,
+        choices=TargetAudience.choices,
+        default=TargetAudience.ALL_USERS,
+        help_text='Controls which users can see and claim this coupon.',
+    )
+    min_completed_orders = models.PositiveIntegerField(
+        default=0,
+        help_text='Required completed POS orders when audience is frequent customers.',
+    )
     
     usage_limit = models.PositiveIntegerField(null=True, blank=True, help_text="Total times this code can be claimed")
     claim_limit = models.PositiveIntegerField(null=True, blank=True, help_text="Total times this code can be CLAIMED by users in the app")
@@ -164,9 +179,13 @@ class Coupon(models.Model):
 
     def __str__(self):
         criteria_name = self.criteria.name if self.criteria else "Legacy Coupon"
-        return f"{self.code} - {criteria_name}"
+        coupon_ref = self.code or f"COUPON-{self.id or 'NEW'}"
+        return f"{coupon_ref} - {criteria_name}"
 
     def save(self, *args, **kwargs):
+        if self.target_audience != self.TargetAudience.FREQUENT_CUSTOMERS:
+            self.min_completed_orders = 0
+
         # 1. CHECK EXPIRATION FIRST
         # If an expiration date exists and has passed, force status to EXPIRED
         if self.criteria and self.criteria.valid_to and self.criteria.valid_to < timezone.now():
@@ -183,6 +202,21 @@ class Coupon(models.Model):
                 self.status = self.Status.ACTIVE
             
         super().save(*args, **kwargs)
+
+
+class CouponClaim(models.Model):
+    coupon = models.ForeignKey(Coupon, on_delete=models.CASCADE, related_name='claims')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='coupon_claims')
+    code = models.CharField(max_length=32, unique=True)
+    is_redeemed = models.BooleanField(default=False)
+    claimed_at = models.DateTimeField(auto_now_add=True)
+    redeemed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ('coupon', 'user')
+
+    def __str__(self):
+        return f"{self.code} - {self.user.username}"
 
 
 @receiver(m2m_changed, sender=Coupon.claimed_by.through)
@@ -252,6 +286,66 @@ class ReceiptItem(models.Model):
 
     def __str__(self):
         return f"{self.quantity} × {self.product_name}"
+
+
+class ProfitLog(models.Model):
+    class Period(models.TextChoices):
+        CUSTOM = 'CUSTOM', 'Custom Range'
+        DAILY = 'DAILY', 'Daily'
+        WEEKLY = 'WEEKLY', 'Weekly'
+        MONTHLY = 'MONTHLY', 'Monthly'
+        YEARLY = 'YEARLY', 'Yearly'
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='profit_logs',
+    )
+    period = models.CharField(max_length=20, choices=Period.choices)
+    revenue = models.DecimalField(max_digits=12, decimal_places=2)
+    expenses = models.DecimalField(max_digits=12, decimal_places=2)
+    net_profit = models.DecimalField(max_digits=12, decimal_places=2)
+    notes = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def save(self, *args, **kwargs):
+        self.net_profit = Decimal(self.revenue or 0) - Decimal(self.expenses or 0)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        creator = self.created_by.username if self.created_by else 'Deleted user'
+        return f"{self.get_period_display()} log by {creator}"
+
+
+class DrawerBalanceLog(models.Model):
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='drawer_balance_logs',
+    )
+    opening_balance = models.DecimalField(max_digits=12, decimal_places=2)
+    today_sales_total = models.DecimalField(max_digits=12, decimal_places=2)
+    projected_total = models.DecimalField(max_digits=12, decimal_places=2)
+    notes = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def save(self, *args, **kwargs):
+        self.projected_total = Decimal(self.opening_balance or 0) + Decimal(self.today_sales_total or 0)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        creator = self.created_by.username if self.created_by else 'Deleted user'
+        return f"Drawer log by {creator} @ {self.created_at}"
 
 class PaymentTransaction(models.Model):
     class Provider(models.TextChoices):
@@ -370,11 +464,20 @@ def notify_promo_updates(sender, instance, created, **kwargs):
             if coupon.criteria.target_product:
                 return f"{c_name} ({coupon.criteria.target_product.product_name})"
             return c_name
-        return coupon.code
+        return coupon.code or f"Coupon #{coupon.id}"
 
     if created and instance.status == 'Active':
-        # 1. New Promo Created: Notify all active customers
+        # 1. New Promo Created: Notify eligible active customers
         customers = User.objects.filter(is_active=True, is_staff=False)
+        if instance.target_audience == Coupon.TargetAudience.FREQUENT_CUSTOMERS:
+            minimum_orders = max(int(instance.min_completed_orders or 0), 1)
+            customers = customers.annotate(
+                completed_orders=Count(
+                    'customer_receipts',
+                    filter=Q(customer_receipts__status__iexact=Receipt.Status.COMPLETED),
+                )
+            ).filter(completed_orders__gte=minimum_orders)
+
         details = get_coupon_details(instance)
         
         notifications = [

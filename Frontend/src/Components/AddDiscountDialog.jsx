@@ -4,13 +4,14 @@ import { Button } from "../Components/ui/button";
 import { Input } from "../Components/ui/input";
 import { Label } from "../Components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../Components/ui/select";
-import { Alert, AlertDescription, AlertTitle } from "../Components/ui/alert";
-import { Wand2, Tag, CalendarClock, Hash, AlertCircle } from "lucide-react"; 
+import { Alert, AlertDescription } from "../Components/ui/alert";
+import { Tag, CalendarClock, Hash, AlertCircle } from "lucide-react"; 
 import api from "../api"; 
 
 export default function AddDiscountDialog({ open, onOpenChange, onSaved, products = [] }) {
-  const [code, setCode] = useState("");
   const [claimLimit, setClaimLimit] = useState("");
+  const [targetAudience, setTargetAudience] = useState("all_users");
+  const [minCompletedOrders, setMinCompletedOrders] = useState("");
   const [ruleName, setRuleName] = useState(""); 
   const [discountType, setDiscountType] = useState("percentage"); 
   const [discountValue, setDiscountValue] = useState("");
@@ -29,19 +30,16 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
     return now.toISOString().slice(0, 16);
   };
 
-  const generateRandomCode = () => {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    let result = "";
-    for (let i = 0; i < 8; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    setCode(result);
-  };
-
   const handleClaimLimitChange = (e) => {
     let val = e.target.value.replace(/[^0-9]/g, '');
     val = val.replace(/^0+/, ''); 
     setClaimLimit(val);
+  };
+
+  const handleMinCompletedOrdersChange = (e) => {
+    let val = e.target.value.replace(/[^0-9]/g, '');
+    val = val.replace(/^0+/, '');
+    setMinCompletedOrders(val);
   };
 
   const handleDiscountValueChange = (e) => {
@@ -117,7 +115,7 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
     setError(null);
 
     // 🔴 1. Basic validation for text inputs
-    if(!code || !ruleName) { setError("Please fill in all required fields (Code, Promotion Name, and Date)."); return; }
+    if(!ruleName) { setError("Please fill in all required fields (Promotion Name and Date)."); return; }
     if(discountType !== 'free_item' && !discountValue) { setError("Please enter a discount value."); return; }
     if(discountType === 'free_item' && !selectedFreeProduct) { setError("Please select the free item for this coupon."); return; }
     if(discountType === 'percentage' && maxDiscountAmount && parseFloat(maxDiscountAmount) <= 0) { setError("Maximum discount cap must be greater than zero."); return; }
@@ -125,6 +123,11 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
     // 🔴 2. Strict validation for claim and usage limit
     if(!claimLimit || parseInt(claimLimit) <= 0) {
       setError("Please specify a valid Claim & Usage Limit. It cannot be left blank or zero.");
+      return;
+    }
+
+    if (targetAudience === "frequent_customers" && (!minCompletedOrders || parseInt(minCompletedOrders, 10) <= 0)) {
+      setError("Please set a valid minimum completed order count for frequent-customer targeting.");
       return;
     }
 
@@ -163,27 +166,30 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
 
       // Ensure parseInt is safely applied, we already verified it's present above
       const parsedLimit = parseInt(claimLimit, 10);
+      const parsedMinOrders = parseInt(minCompletedOrders || "0", 10) || 0;
 
       await api.post("/firstapp/coupons/", {
-        code: code.toUpperCase(),
         criteria_id: newCriteriaId,
         status: "Active",
         usage_limit: parsedLimit,
-        claim_limit: parsedLimit
+        claim_limit: parsedLimit,
+        target_audience: targetAudience,
+        min_completed_orders: targetAudience === "frequent_customers" ? parsedMinOrders : 0,
       });
 
       onSaved(); 
       onOpenChange(false);
       
       // Reset State
-      setCode(""); setClaimLimit(""); setRuleName("");
+      setClaimLimit(""); setRuleName("");
       setMinSpend(""); setSelectedFreeProduct(""); setTargetProductId("all");
+      setTargetAudience("all_users"); setMinCompletedOrders("");
       setMaxDiscountAmount("");
       setValidTo(""); setError(null);
 
     } catch (err) {
       console.error(err);
-      setError("Error creating coupon. Promo Code already exist.");
+      setError("Error creating coupon. Please verify all required fields and try again.");
     } finally {
       setLoading(false);
     }
@@ -195,7 +201,7 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
       <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto z-50">
         <DialogHeader>
           <DialogTitle>Create Coupon</DialogTitle>
-          <DialogDescription>Define code, discount rules, and usage limits.</DialogDescription>
+          <DialogDescription>Define audience, discount rules, and usage limits.</DialogDescription>
         </DialogHeader>
 
         {error && (
@@ -215,29 +221,51 @@ export default function AddDiscountDialog({ open, onOpenChange, onSaved, product
                    </div>
                    <div className="grid gap-4">
                       <div className="space-y-1">
-                          <Label>Code <span className="text-red-500">*</span></Label>
-                          <div className="flex gap-2">
-                              <Input placeholder="CODE123" maxLength={8} value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className="uppercase font-mono tracking-widest"/>
-                              <Button variant="outline" size="icon" onClick={generateRandomCode}><Wand2 className="h-4 w-4" /></Button>
-                          </div>
+                        <Label>Visible To <span className="text-red-500">*</span></Label>
+                        <Select value={targetAudience} onValueChange={setTargetAudience}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all_users">All Users</SelectItem>
+                            <SelectItem value="frequent_customers">Frequent Customers</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-[10px] text-gray-500 pt-1">
+                          Frequent customers are users with enough completed POS orders.
+                        </p>
                       </div>
+
+                      {targetAudience === "frequent_customers" && (
+                        <div className="space-y-1">
+                          <Label>Minimum Completed Orders <span className="text-red-500">*</span></Label>
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="e.g. 5"
+                            value={minCompletedOrders}
+                            onChange={handleMinCompletedOrdersChange}
+                            maxLength={6}
+                          />
+                        </div>
+                      )}
                       
                       <div className="grid gap-2">
                         <div className="space-y-1">
-                            <Label className="flex items-center gap-1">
-                                Total Claim & Usage Limit <span className="text-red-500">*</span> <Hash size={12}/>
-                            </Label>
-                            <Input 
-                              type="text" 
-                              inputMode="numeric"
-                              placeholder="e.g. 100" 
-                              value={claimLimit} 
-                              onChange={handleClaimLimitChange}
-                              maxLength={10} 
-                            />
-                            <p className="text-[10px] text-gray-500 pt-1">Limits how many total users can claim and use this code.</p>
+                          <Label className="flex items-center gap-1">
+                            Total Claim & Usage Limit <span className="text-red-500">*</span> <Hash size={12}/>
+                          </Label>
+                          <Input 
+                            type="text" 
+                            inputMode="numeric"
+                            placeholder="e.g. 100" 
+                            value={claimLimit} 
+                            onChange={handleClaimLimitChange}
+                            maxLength={10} 
+                          />
+                          <p className="text-[10px] text-gray-500 pt-1">Limits how many total users can claim and use this coupon.</p>
                         </div>
-                    </div>
+                      </div>
                    </div>
                 </div>  
 

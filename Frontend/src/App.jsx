@@ -25,6 +25,7 @@ import CMS from "./Pages/admin-pages/CMS";
 import Pos from "./Pages/POS/Pos";
 import PromoManagement from "./Pages/admin-pages/PromoManagement";
 import Transaction from "./Pages/admin-pages/Transaction";
+import AdminLogs from "./Pages/admin-pages/AdminLogs";
 
 
 
@@ -61,6 +62,7 @@ function App() {
 					<Route path="/admin/cms" element={<CMS />} />
 					<Route path="/admin/promo-management" element={<PromoManagement />} />
 					<Route path="/admin/pos" element={<Pos />} />
+					<Route path="/admin/logs" element={<AdminLogs />} />
 				</Route>
 
 				<Route path="/gcash/success" element={<GCashSuccess />} />

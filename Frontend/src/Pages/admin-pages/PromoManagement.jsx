@@ -331,7 +331,7 @@ const PromoManagement = () => {
                 return (
                   <TableRow key={coupon.id}>
                     <TableCell className="font-mono font-bold text-blue-600 tracking-wider">
-                        {coupon.code}
+                      {coupon.code || "Generated on claim"}
                     </TableCell>
                     
                     <TableCell className="font-medium text-gray-700">

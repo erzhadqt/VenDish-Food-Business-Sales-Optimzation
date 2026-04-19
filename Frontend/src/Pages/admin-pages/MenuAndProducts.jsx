@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import Searchbar from "../../Components/Searchbar";
 import api from "../../api";
-import { EditIcon, PlusSquareIcon, ListIcon, Settings, LockKeyhole, QrCodeIcon, PhilippinePeso, LayoutGrid, X, ArchiveIcon, LucideForkKnifeCrossed, CookingPotIcon, ReceiptText } from "lucide-react";
+import { EditIcon, PlusSquareIcon, ListIcon, Settings, LockKeyhole, QrCodeIcon, PhilippinePeso, LayoutGrid, X, ArchiveIcon, LucideForkKnifeCrossed, CookingPotIcon, ReceiptText, PanelTopOpen } from "lucide-react";
 
 import EditProductDialog from "../../Components/EditProductDialog";
 import SuccessAlert from "../../Components/SuccessAlert";
@@ -15,6 +15,7 @@ import ManageTinNumberDialog from "../../Components/ManageTinNumberDialog";
 import ManageServingsDialog from "../../Components/ManageServingsDialog";
 import ManageArchivedProductsDialog from "../../Components/ManageArchivedProductsDialog";
 import ManageProductsDialog from "../../Components/ManageProductsDialog";
+import OutDrawerBalanceModal from "../../Components/OutDrawerBalanceModal";
 import { Skeleton } from "../../Components/ui/skeleton";
 
 const UNCATEGORIZED_FILTER_VALUE = "__uncategorized__";
@@ -36,6 +37,7 @@ function ProductList() {
   const [manageProductsOpen, setManageProductsOpen] = useState(false);
   const [archiveModalOpen, setArchiveModalOpen] = useState(false);
   const [showControlCenter, setShowControlCenter] = useState(false);
+  const [outDrawerModalOpen, setOutDrawerModalOpen] = useState(false);
 
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -343,6 +345,11 @@ function ProductList() {
         onSaved={handleUpdatedProduct}
       />
 
+      <OutDrawerBalanceModal
+        open={outDrawerModalOpen}
+        onOpenChange={setOutDrawerModalOpen}
+      />
+
       <div
         className={`fixed inset-0 z-40 transition-opacity duration-300 ${
           showControlCenter ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
@@ -383,12 +390,12 @@ function ProductList() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <button
                     onClick={() => {
-                      setGcashInfoModalOpen(true);
+                      setOutDrawerModalOpen(true);
                       setShowControlCenter(false);
                     }}
                     className="flex gap-2 items-center justify-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
                   >
-                    <QrCodeIcon size={18}/> GCash Infos
+                    <PanelTopOpen size={18}/> Out Drawer Balance
                   </button>
 
                   <button
@@ -409,6 +416,16 @@ function ProductList() {
                     className="sm:col-span-2 flex gap-2 items-center justify-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
                   >
                     <LockKeyhole size={18}/> Change Void Pin
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setGcashInfoModalOpen(true);
+                      setShowControlCenter(false);
+                    }}
+                    className="sm:col-span-2 flex gap-2 items-center justify-center bg-gray-900 hover:bg-gray-950 text-white px-3 py-2.5 rounded-lg font-medium transition-colors duration-200 shadow-sm"
+                  >
+                    <QrCodeIcon size={18}/> GCash Infos
                   </button>
 
                   <button

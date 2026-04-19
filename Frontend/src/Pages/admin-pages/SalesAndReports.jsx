@@ -10,11 +10,13 @@ import {
   ShoppingBag, Receipt, ScrollText,
   TicketPlusIcon,
   TicketPercentIcon,
+  CalculatorIcon,
+  Wallet
 } from "lucide-react";
 import { 
   format, startOfMonth, endOfMonth, parseISO, 
   startOfWeek, endOfWeek, startOfYear, endOfYear, startOfDay, endOfDay,
-  eachDayOfInterval, eachMonthOfInterval, subYears 
+  eachDayOfInterval, eachMonthOfInterval, eachYearOfInterval
 } from "date-fns";
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
@@ -22,6 +24,7 @@ import { saveAs } from 'file-saver';
 import api from '../../api'; 
 import { Skeleton } from '../../Components/ui/skeleton';
 import { applyQueryParam, usePersistedQueryState } from '../../utils/usePersistedQueryState';
+import ProfitCalculatorModal from '../../Components/ProfitCalculatorModal';
 
 const periods = ["Custom Range", "Daily", "Weekly", "Monthly", "Yearly"];
 const chartTypes = ["Bar", "Line", "Area"];
@@ -70,8 +73,52 @@ const centsToMoney = (value) => {
   return parsed / 100;
 };
 
-const getRangeForPeriod = (selectedPeriod, selectedRange) => {
-  const refDate = selectedRange?.[0] || new Date();
+const parseReportBucketDate = (value, period) => {
+  if (!value) return null;
+  const strVal = String(value).trim();
+
+  // If it's a pre-aggregated bucket, strip time to avoid local/UTC shifts 
+  // ensuring the bucket date perfectly anchors to the local day
+  if (["Daily", "Monthly", "Yearly", "Weekly"].includes(period)) {
+    const dateMatch = strVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (dateMatch) {
+      return new Date(Number(dateMatch[1]), Number(dateMatch[2]) - 1, Number(dateMatch[3]));
+    }
+    const monthMatch = strVal.match(/^(\d{4})-(\d{2})$/);
+    if (monthMatch) {
+      return new Date(Number(monthMatch[1]), Number(monthMatch[2]) - 1, 1);
+    }
+    const yearMatch = strVal.match(/^(\d{4})$/);
+    if (yearMatch) {
+      return new Date(Number(yearMatch[1]), 0, 1);
+    }
+  }
+
+  const parsedIso = parseISO(strVal);
+  if (!Number.isNaN(parsedIso.getTime())) return parsedIso;
+
+  const fallback = new Date(value);
+  return Number.isNaN(fallback.getTime()) ? null : fallback;
+};
+
+const isDateWithinRange = (value, rangeStart, rangeEnd) => {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) return false;
+  if (rangeStart instanceof Date && !Number.isNaN(rangeStart.getTime()) && value < rangeStart) return false;
+  if (rangeEnd instanceof Date && !Number.isNaN(rangeEnd.getTime()) && value > rangeEnd) return false;
+  return true;
+};
+
+const getCurrentDecadeRange = (referenceDate = new Date()) => {
+  const year = referenceDate.getFullYear();
+  const decadeStartYear = Math.floor(year / 10) * 10;
+  return {
+    start: new Date(decadeStartYear, 0, 1, 0, 0, 0, 0),
+    end: new Date(decadeStartYear + 9, 11, 31, 23, 59, 59, 999),
+  };
+};
+
+const getSummaryRangeForPeriod = (selectedPeriod, selectedRange) => {
+  const now = new Date();
 
   if (selectedPeriod === "Custom Range") {
     return {
@@ -81,19 +128,66 @@ const getRangeForPeriod = (selectedPeriod, selectedRange) => {
   }
 
   if (selectedPeriod === "Daily") {
-    return { start: startOfMonth(refDate), end: endOfMonth(refDate) };
+    return { start: startOfDay(now), end: endOfDay(now) };
   }
 
   if (selectedPeriod === "Weekly") {
-    return { start: startOfWeek(refDate), end: endOfWeek(refDate) };
+    return { start: startOfWeek(now), end: endOfWeek(now) };
   }
 
   if (selectedPeriod === "Monthly") {
-    return { start: startOfYear(refDate), end: endOfYear(refDate) };
+    return { start: startOfMonth(now), end: endOfMonth(now) };
   }
 
   if (selectedPeriod === "Yearly") {
-    return { start: startOfYear(subYears(refDate, 4)), end: endOfYear(refDate) };
+    return { start: startOfYear(now), end: endOfYear(now) };
+  }
+
+  return { start: null, end: null };
+};
+
+const getChartWindowForPeriod = (selectedPeriod) => {
+  const now = new Date();
+
+  if (selectedPeriod === "Daily") {
+    return { start: startOfMonth(now), end: endOfMonth(now) };
+  }
+
+  if (selectedPeriod === "Monthly") {
+    return { start: startOfYear(now), end: endOfYear(now) };
+  }
+
+  if (selectedPeriod === "Yearly") {
+    return getCurrentDecadeRange(now);
+  }
+
+  return { start: null, end: null };
+};
+
+const getRangeForPeriod = (selectedPeriod, selectedRange) => {
+  const now = new Date();
+
+  if (selectedPeriod === "Custom Range") {
+    return {
+      start: selectedRange?.[0] || null,
+      end: selectedRange?.[1] || null,
+    };
+  }
+
+  if (selectedPeriod === "Daily") {
+    return { start: startOfMonth(now), end: endOfMonth(now) };
+  }
+
+  if (selectedPeriod === "Weekly") {
+    return { start: startOfWeek(now), end: endOfWeek(now) };
+  }
+
+  if (selectedPeriod === "Monthly") {
+    return { start: startOfYear(now), end: endOfYear(now) };
+  }
+
+  if (selectedPeriod === "Yearly") {
+    return getCurrentDecadeRange(now);
   }
 
   return { start: null, end: null };
@@ -102,8 +196,8 @@ const getRangeForPeriod = (selectedPeriod, selectedRange) => {
 const formatBucketLabel = (bucketValue, selectedPeriod, compact = false) => {
   if (!bucketValue) return "N/A";
 
-  const parsed = parseISO(String(bucketValue));
-  if (Number.isNaN(parsed.getTime())) return String(bucketValue);
+  const parsed = parseReportBucketDate(bucketValue, selectedPeriod);
+  if (!parsed || Number.isNaN(parsed.getTime())) return String(bucketValue);
 
   if (selectedPeriod === "Weekly") {
     const weekEnd = endOfWeek(parsed);
@@ -123,10 +217,8 @@ const formatBucketLabel = (bucketValue, selectedPeriod, compact = false) => {
   return format(parsed, compact ? "MMM d" : "MMM d, yyyy");
 };
 
-// UPDATED SKELETON LAYOUT
 const TimelineLoadingSkeleton = ({ isAdmin = false }) => (
   <>
-    {/* Top Row: Primary Financials */}
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
       {Array.from({ length: 4 }).map((_, index) => (
         <div key={`stat-${index}`} className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
@@ -140,7 +232,6 @@ const TimelineLoadingSkeleton = ({ isAdmin = false }) => (
       ))}
     </div>
 
-    {/* Bottom Row: Insights */}
     <div className={`grid grid-cols-1 sm:grid-cols-2 ${isAdmin ? 'lg:grid-cols-4' : 'lg:grid-cols-2'} gap-4 mb-6`}>
       {Array.from({ length: isAdmin ? 3 : 2 }).map((_, index) => (
         <div key={`insight-${index}`} className={`bg-white rounded-xl shadow-sm border border-gray-100 p-5 ${isAdmin && index === 2 ? 'sm:col-span-2' : ''}`}>
@@ -154,7 +245,6 @@ const TimelineLoadingSkeleton = ({ isAdmin = false }) => (
       ))}
     </div>
 
-    {/* Chart Skeleton */}
     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
       <div className="flex justify-between items-center mb-6">
         <Skeleton className="h-6 w-52" />
@@ -197,7 +287,6 @@ const StaffLoadingSkeleton = () => (
 export default function SalesAndReports() {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // --- STATE ---
   const [reports, setReports] = useState([]); 
   const [chartReports, setChartReports] = useState([]);
   const [staffReports, setStaffReports] = useState([]); 
@@ -212,7 +301,10 @@ export default function SalesAndReports() {
     parse: (rawValue, fallback) => rawValue || fallback,
   });
 
-  const [showNetRevenue, setShowNetRevenue] = useState(false);
+  const [showNetRevenue] = useState(false);
+  const [isProfitModalOpen, setIsProfitModalOpen] = useState(false);
+  const [profitLogNotice, setProfitLogNotice] = useState('');
+  const [drawerLogNotice, setDrawerLogNotice] = useState('');
 
   const [viewMode, setViewMode] = usePersistedQueryState({
     searchParams,
@@ -341,22 +433,23 @@ export default function SalesAndReports() {
       if (selectedPeriod === "Weekly") {
         const chartParams = new URLSearchParams(params.toString());
         chartParams.set("period", "daily");
-        const weeklyChartRes = await api.get(`/firstapp/sales/?${chartParams.toString()}`);
-        nextChartReports = Array.isArray(weeklyChartRes.data) ? weeklyChartRes.data : [];
+        const chartRes = await api.get(`/firstapp/sales/?${chartParams.toString()}`);
+        nextChartReports = Array.isArray(chartRes.data) ? chartRes.data : [];
       }
 
       setChartReports(nextChartReports);
 
       if (isAdmin) {
+          const { start: staffStart, end: staffEnd } = getSummaryRangeForPeriod(selectedPeriod, selectedRange);
           const staffParams = new URLSearchParams();
           if (cashierFilter !== "ALL") {
             staffParams.set("cashier", cashierFilter);
           }
-          if (start instanceof Date && !Number.isNaN(start.getTime())) {
-            staffParams.set("start", start.toISOString());
+          if (staffStart instanceof Date && !Number.isNaN(staffStart.getTime())) {
+            staffParams.set("start", staffStart.toISOString());
           }
-          if (end instanceof Date && !Number.isNaN(end.getTime())) {
-            staffParams.set("end", end.toISOString());
+          if (staffEnd instanceof Date && !Number.isNaN(staffEnd.getTime())) {
+            staffParams.set("end", staffEnd.toISOString());
           }
 
           const staffEndpoint = staffParams.toString()
@@ -421,24 +514,71 @@ export default function SalesAndReports() {
     }
   };
 
+  useEffect(() => {
+    if (!profitLogNotice) return undefined;
+
+    const timeoutId = window.setTimeout(() => {
+      setProfitLogNotice('');
+    }, 2800);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [profitLogNotice]);
+
+  useEffect(() => {
+    if (!drawerLogNotice) return undefined;
+
+    const timeoutId = window.setTimeout(() => {
+      setDrawerLogNotice('');
+    }, 2800);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [drawerLogNotice]);
+
   const filteredReports = useMemo(() => reports, [reports]);
+
+  const summaryReports = useMemo(() => {
+    if (!["Daily", "Monthly", "Yearly"].includes(period)) {
+      return filteredReports;
+    }
+
+    const { start, end } = getSummaryRangeForPeriod(period, dateRange);
+    return filteredReports.filter((report) => {
+      const parsed = parseReportBucketDate(report?.report_date, period);
+      return isDateWithinRange(parsed, start, end);
+    });
+  }, [filteredReports, period, dateRange]);
+
+  const tableReports = useMemo(() => {
+    if (!["Daily", "Monthly", "Yearly"].includes(period)) {
+      return filteredReports.filter((report) => Number.parseFloat(report?.total_revenue || 0) > 0);
+    }
+
+    const { start, end } = getChartWindowForPeriod(period);
+    return filteredReports.filter((report) => {
+      const parsed = parseReportBucketDate(report?.report_date, period);
+      if (!isDateWithinRange(parsed, start, end)) {
+        return false;
+      }
+      return Number.parseFloat(report?.total_revenue || 0) > 0;
+    });
+  }, [filteredReports, period]);
 
   const chartData = useMemo(() => {
     const getVal = (val) => parseFloat(val || 0);
 
     if (period === "Daily") {
-      const { start, end } = getRangeForPeriod("Daily", dateRange);
+      const { start, end } = getChartWindowForPeriod("Daily");
       if (!(start instanceof Date) || !(end instanceof Date)) return [];
 
       const byDay = new Map();
       chartReports.forEach((report) => {
         if (!report?.report_date) return;
-        const parsed = parseISO(String(report.report_date));
-        if (Number.isNaN(parsed.getTime())) return;
-
+        const parsed = parseReportBucketDate(report.report_date, period);
+        if (!parsed) return;
         const key = format(parsed, "yyyy-MM-dd");
         const current = byDay.get(key) || { revenue: 0, orders: 0 };
         byDay.set(key, {
+          ...report,
           revenue: current.revenue + getVal(report.total_revenue),
           orders: current.orders + Number(report.total_orders || 0),
         });
@@ -446,11 +586,69 @@ export default function SalesAndReports() {
 
       return eachDayOfInterval({ start, end }).map((day) => {
         const key = format(day, "yyyy-MM-dd");
-        const found = byDay.get(key);
+        const report = byDay.get(key);
         return {
           label: format(day, "MMM d"),
-          revenue: found ? found.revenue : 0,
-          orders: found ? found.orders : 0,
+          revenue: report ? report.revenue : 0,
+          orders: report ? report.orders : 0,
+        };
+      });
+    }
+
+    if (period === "Monthly") {
+      const { start, end } = getChartWindowForPeriod("Monthly");
+      if (!(start instanceof Date) || !(end instanceof Date)) return [];
+
+      const byMonth = new Map();
+      chartReports.forEach((report) => {
+        if (!report?.report_date) return;
+        const parsed = parseReportBucketDate(report.report_date, period);
+        if (!parsed) return;
+        const key = format(parsed, "yyyy-MM");
+        const current = byMonth.get(key) || { revenue: 0, orders: 0 };
+        byMonth.set(key, {
+          ...report,
+          revenue: current.revenue + getVal(report.total_revenue),
+          orders: current.orders + Number(report.total_orders || 0),
+        });
+      });
+
+      return eachMonthOfInterval({ start, end }).map((month) => {
+        const key = format(month, "yyyy-MM");
+        const report = byMonth.get(key);
+        return {
+          label: format(month, "MMM yyyy"),
+          revenue: report ? report.revenue : 0,
+          orders: report ? report.orders : 0,
+        };
+      });
+    }
+
+    if (period === "Yearly") {
+      const { start, end } = getChartWindowForPeriod("Yearly");
+      if (!(start instanceof Date) || !(end instanceof Date)) return [];
+
+      const byYear = new Map();
+      chartReports.forEach((report) => {
+        if (!report?.report_date) return;
+        const parsed = parseReportBucketDate(report.report_date, period);
+        if (!parsed) return;
+        const key = format(parsed, "yyyy");
+        const current = byYear.get(key) || { revenue: 0, orders: 0 };
+        byYear.set(key, {
+          ...report,
+          revenue: current.revenue + getVal(report.total_revenue),
+          orders: current.orders + Number(report.total_orders || 0),
+        });
+      });
+
+      return eachYearOfInterval({ start, end }).map((year) => {
+        const key = format(year, "yyyy");
+        const report = byYear.get(key);
+        return {
+          label: format(year, "yyyy"),
+          revenue: report ? report.revenue : 0,
+          orders: report ? report.orders : 0,
         };
       });
     }
@@ -462,8 +660,8 @@ export default function SalesAndReports() {
       const byDay = new Map();
       chartReports.forEach((report) => {
         if (!report?.report_date) return;
-        const parsed = parseISO(String(report.report_date));
-        if (Number.isNaN(parsed.getTime())) return;
+        const parsed = parseReportBucketDate(report.report_date, period);
+        if (!parsed || Number.isNaN(parsed.getTime())) return;
 
         const key = format(parsed, "yyyy-MM-dd");
         const current = byDay.get(key) || { revenue: 0, orders: 0 };
@@ -484,44 +682,19 @@ export default function SalesAndReports() {
       });
     }
 
-    if (period === "Monthly") {
-      const { start, end } = getRangeForPeriod("Monthly", dateRange);
-      if (!(start instanceof Date) || !(end instanceof Date)) return [];
-
-      const byMonth = new Map();
-      chartReports.forEach((report) => {
-        if (!report?.report_date) return;
-        const parsed = parseISO(String(report.report_date));
-        if (Number.isNaN(parsed.getTime())) return;
-
-        const key = format(parsed, "yyyy-MM");
-        const current = byMonth.get(key) || { revenue: 0, orders: 0 };
-        byMonth.set(key, {
-          revenue: current.revenue + getVal(report.total_revenue),
-          orders: current.orders + Number(report.total_orders || 0),
-        });
-      });
-
-      return eachMonthOfInterval({ start, end }).map((month) => {
-        const key = format(month, "yyyy-MM");
-        const found = byMonth.get(key);
-        return {
-          label: format(month, "MMM"),
-          revenue: found ? found.revenue : 0,
-          orders: found ? found.orders : 0,
-        };
-      });
-    }
-
-    return [...chartReports]
-      .sort((a, b) => {
-        const aTime = Date.parse(a.report_date || "");
-        const bTime = Date.parse(b.report_date || "");
+    const sortByReportDate = (data) => {
+      return [...data].sort((a, b) => {
+        const aTime = Date.parse(a?.report_date || "");
+        const bTime = Date.parse(b?.report_date || "");
         if (!Number.isNaN(aTime) && !Number.isNaN(bTime)) {
           return aTime - bTime;
         }
-        return String(a.report_date || "").localeCompare(String(b.report_date || ""));
-      })
+        return String(a?.report_date || "").localeCompare(String(b?.report_date || ""));
+      });
+    };
+
+    return sortByReportDate(chartReports)
+      .filter(report => getVal(report.total_revenue) > 0)
       .map((report) => ({
         label: formatBucketLabel(report.report_date, period, true),
         revenue: getVal(report.total_revenue),
@@ -531,27 +704,44 @@ export default function SalesAndReports() {
 
   const stats = useMemo(() => {
     const totalRev = centsToMoney(
-      filteredReports.reduce((acc, curr) => acc + moneyToCents(curr.total_revenue), 0)
+      summaryReports.reduce((acc, curr) => acc + moneyToCents(curr.total_revenue), 0)
     );
-    const totalOrders = filteredReports.reduce((acc, curr) => acc + (curr.total_orders || 0), 0);
+    const totalOrders = summaryReports.reduce((acc, curr) => acc + (curr.total_orders || 0), 0);
     const totalVat = centsToMoney(
-      filteredReports.reduce((acc, curr) => acc + moneyToCents(curr.total_vat), 0)
+      summaryReports.reduce((acc, curr) => acc + moneyToCents(curr.total_vat), 0)
     );
     const totalDiscount = centsToMoney(
-      filteredReports.reduce((acc, curr) => acc + moneyToCents(curr.total_discount), 0)
+      summaryReports.reduce((acc, curr) => acc + moneyToCents(curr.total_discount), 0)
     );
     
     const productTotals = {};
-    filteredReports.forEach(r => {
-      const dailySales = r?.daily_product_sales;
-      if (!dailySales || typeof dailySales !== "object") return;
+    summaryReports.forEach((r) => {
+      const qtyMap = r?.daily_product_sales;
+      const revenueMap = r?.daily_product_sales_revenue;
+      const orderMap = r?.daily_product_order_counts;
 
-      Object.entries(dailySales).forEach(([productName, qty]) => {
+      const productNames = new Set([
+        ...Object.keys(qtyMap && typeof qtyMap === "object" ? qtyMap : {}),
+        ...Object.keys(revenueMap && typeof revenueMap === "object" ? revenueMap : {}),
+        ...Object.keys(orderMap && typeof orderMap === "object" ? orderMap : {}),
+      ]);
+
+      productNames.forEach((productName) => {
         const safeName = String(productName || "").trim();
-        const parsedQty = Number(qty || 0);
-        if (!safeName || !Number.isFinite(parsedQty) || parsedQty <= 0) return;
+        if (!safeName) return;
 
-        productTotals[safeName] = (productTotals[safeName] || 0) + parsedQty;
+        const quantity = Number(qtyMap?.[productName] || 0);
+        const revenue = Number(revenueMap?.[productName] || 0);
+        const orders = Number(orderMap?.[productName] || 0);
+
+        const current = productTotals[safeName] || { qty: 0, revenue: 0, orders: 0 };
+        if (Number.isFinite(quantity) && quantity > 0) current.qty += quantity;
+        if (Number.isFinite(revenue) && revenue > 0) current.revenue += revenue;
+        if (Number.isFinite(orders) && orders > 0) current.orders += orders;
+
+        if (current.qty > 0 || current.revenue > 0 || current.orders > 0) {
+          productTotals[safeName] = current;
+        }
       });
     });
 
@@ -559,16 +749,36 @@ export default function SalesAndReports() {
     let leastSellerName = "N/A";
     const productTotalEntries = Object.entries(productTotals);
     if (productTotalEntries.length > 0) {
-      const sortedByQty = [...productTotalEntries].sort((a, b) => {
-        if (a[1] !== b[1]) return a[1] - b[1];
+      const rankedByBestSellerPolicy = [...productTotalEntries].sort((a, b) => {
+        const revenueDiff = Number(b[1]?.revenue || 0) - Number(a[1]?.revenue || 0);
+        if (revenueDiff !== 0) return revenueDiff;
+
+        const orderDiff = Number(b[1]?.orders || 0) - Number(a[1]?.orders || 0);
+        if (orderDiff !== 0) return orderDiff;
+
+        const qtyDiff = Number(b[1]?.qty || 0) - Number(a[1]?.qty || 0);
+        if (qtyDiff !== 0) return qtyDiff;
+
         return a[0].localeCompare(b[0]);
       });
-      leastSellerName = sortedByQty[0][0];
-      topSellerName = sortedByQty[sortedByQty.length - 1][0];
+
+      topSellerName = rankedByBestSellerPolicy[0][0];
+
+      const rankedLeastSeller = [...productTotalEntries].sort((a, b) => {
+        const qtyDiff = Number(a[1]?.qty || 0) - Number(b[1]?.qty || 0);
+        if (qtyDiff !== 0) return qtyDiff;
+
+        const revenueDiff = Number(a[1]?.revenue || 0) - Number(b[1]?.revenue || 0);
+        if (revenueDiff !== 0) return revenueDiff;
+
+        return a[0].localeCompare(b[0]);
+      });
+
+      leastSellerName = rankedLeastSeller[0][0];
     } else {
       const topSellers = {};
       const leastSellers = {};
-      filteredReports.forEach((r) => {
+      summaryReports.forEach((r) => {
         if (r.top_selling_product && r.top_selling_product !== "N/A") {
           topSellers[r.top_selling_product] = (topSellers[r.top_selling_product] || 0) + 1;
         }
@@ -581,7 +791,18 @@ export default function SalesAndReports() {
     }
 
     return { totalRev, totalOrders, totalVat, totalDiscount, topSellerName, leastSellerName };
-  }, [filteredReports]);
+  }, [summaryReports]);
+
+  const revenueCardStats = useMemo(() => {
+    const totalRevenue = centsToMoney(
+      summaryReports.reduce((acc, curr) => acc + moneyToCents(curr.total_revenue), 0)
+    );
+    const totalVat = centsToMoney(
+      summaryReports.reduce((acc, curr) => acc + moneyToCents(curr.total_vat), 0)
+    );
+
+    return { totalRevenue, totalVat };
+  }, [summaryReports]);
 
   const topCashier = useMemo(() => {
     if (!isAdmin || !Array.isArray(staffReports) || staffReports.length === 0) {
@@ -610,7 +831,7 @@ export default function SalesAndReports() {
     setSortConfig({ key, direction });
   };
 
-  const sortedTableData = [...filteredReports].sort((a, b) => {
+  const sortedTableData = [...tableReports].sort((a, b) => {
     if (!sortConfig.key) return 0;
     
     let aValue = a[sortConfig.key];
@@ -748,7 +969,7 @@ export default function SalesAndReports() {
 
       filename = `staff-performance-${format(new Date(), 'yyyy-MM-dd')}`;
     } else {
-      const totalVoidedOrders = filteredReports.reduce((sum, row) => sum + Number(row.voided_orders || 0), 0);
+      const totalVoidedOrders = summaryReports.reduce((sum, row) => sum + Number(row.voided_orders || 0), 0);
       const averageOrderValue = stats.totalOrders > 0 ? stats.totalRev / stats.totalOrders : 0;
       
       const summaryRows = [
@@ -845,6 +1066,11 @@ export default function SalesAndReports() {
     return `₱${value}`;
   };
 
+  const handleProfitSaved = useCallback((savedLog) => {
+    const label = savedLog?.period_label || period;
+    setProfitLogNotice(`Profit log saved for ${label}.`);
+  }, [period]);
+
   return (
     <div className="p-4 md:p-6 min-h-screen">
       
@@ -895,6 +1121,14 @@ export default function SalesAndReports() {
                 </div>
             )}
 
+            <button
+              onClick={() => setIsProfitModalOpen(true)}
+              disabled={viewMode !== 'timeline' || loading}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm transition-all disabled:opacity-50"
+            >
+              <CalculatorIcon size={18} /> Get Profit
+            </button>
+
            <button 
                 onClick={refreshToday} 
                 disabled={loading}
@@ -903,12 +1137,25 @@ export default function SalesAndReports() {
                 <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
                 {loading ? "Syncing..." : "Sync"}
             </button>
+
             <button onClick={exportToExcel} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 shadow-sm transition-all text-green-700 hover:text-green-800 hover:border-green-600">
                 <Download size={18} />
                 Export Excel
             </button>
         </div>
       </div>
+
+      {profitLogNotice && (
+        <div className="mb-6 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 font-medium">
+          {profitLogNotice}
+        </div>
+      )}
+
+      {drawerLogNotice && (
+        <div className="mb-6 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-700 font-medium">
+          {drawerLogNotice}
+        </div>
+      )}
 
       {/* ========================== VIEW MODE: TIMELINE ========================== */}
       {viewMode === 'timeline' && (
@@ -986,8 +1233,6 @@ export default function SalesAndReports() {
               <TimelineLoadingSkeleton isAdmin={isAdmin} />
             ) : (
               <>
-              {/* ======================= REFACTORED WIDGETS ROW 1 (Primary Financials) ======================= */}
-              {/* ======================= REFACTORED WIDGETS ROW 1 (Primary Financials) ======================= */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                 
                 {/* Revenue Card */}
@@ -996,22 +1241,9 @@ export default function SalesAndReports() {
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="text-gray-500 font-medium text-sm">Total Revenue</h3>
-                        {/* Toggle Button for Net vs Gross */}
-                        {/* <button
-                          onClick={() => setShowNetRevenue(!showNetRevenue)}
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded transition-colors ${
-                            showNetRevenue 
-                              ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' 
-                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                          }`}
-                          title={showNetRevenue ? "Click to show Gross (Includes VAT)" : "Click to show Net (Excludes VAT)"}
-                        >
-                          {showNetRevenue ? 'NO VAT' : 'With VAT'}
-                        </button> */}
                       </div>
-                      
                       <p className="text-gray-900 font-bold text-2xl lg:text-3xl tracking-tight mt-1">
-                        ₱ {(showNetRevenue ? stats.totalRev - stats.totalVat : stats.totalRev).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                        ₱ {(showNetRevenue ? revenueCardStats.totalRevenue - revenueCardStats.totalVat : revenueCardStats.totalRevenue).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                       </p>
                     </div>
                     <div className="p-2.5 bg-blue-50 text-blue-600 rounded-lg shrink-0">
@@ -1019,11 +1251,23 @@ export default function SalesAndReports() {
                     </div>
                   </div>
                   <p className="text-xs text-gray-400 mt-2 font-medium">
-                    {filterCashier === 'ALL' 
-                      ? (showNetRevenue ? 'Raw revenue without VAT' : 'Overall revenue collected') 
-                      : `Revenue by ${filterCashier}`}
+                    {filterCashier === 'ALL'
+                      ? period === 'Daily'
+                        ? (showNetRevenue ? 'Today revenue without VAT' : 'Today revenue collected')
+                        : period === 'Monthly'
+                          ? (showNetRevenue ? 'This month revenue without VAT' : 'This month revenue collected')
+                          : period === 'Yearly'
+                            ? (showNetRevenue ? 'This year revenue without VAT' : 'This year revenue collected')
+                            : (showNetRevenue ? 'Raw revenue without VAT' : 'Overall revenue collected')
+                      : period === 'Daily'
+                        ? `Today revenue by ${filterCashier}`
+                        : period === 'Monthly'
+                          ? `This month revenue by ${filterCashier}`
+                          : period === 'Yearly'
+                            ? `This year revenue by ${filterCashier}`
+                            : `Revenue by ${filterCashier}`}
                   </p>
-                  <p className="text-xs text-gray-400 mt-2 font-medium">Rev without VAT: <span className="text-black ">₱ {(stats.totalRev - stats.totalVat).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span></p>
+                  <p className="text-xs text-gray-400 mt-2 font-medium">Rev without VAT: <span className="text-black ">₱ {(revenueCardStats.totalRevenue - revenueCardStats.totalVat).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span></p>
                 </div>
 
                 {/* Orders Card */}
@@ -1077,7 +1321,7 @@ export default function SalesAndReports() {
                 </div>
               </div>
 
-              {/* ======================= REFACTORED WIDGETS ROW 2 (Insights) ======================= */}
+              {/* Insights Widgets */}
               <div className={`grid grid-cols-1 sm:grid-cols-2 ${isAdmin ? 'lg:grid-cols-4' : 'lg:grid-cols-2'} gap-4 mb-6`}>
                 
                 {/* Top Seller Card */}
@@ -1116,10 +1360,9 @@ export default function SalesAndReports() {
                   </p>
                 </div>
 
-                {/* Top Cashier Hero Card (Admin Only - Spans 2 columns on large screens) */}
+                {/* Top Cashier Hero Card (Admin Only) */}
                 {isAdmin && (
-                  <div className="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-xl shadow-sm border border-indigo-500 p-5 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 relative overflow-hidden sm:col-span-2 text-white group">
-                    {/* Decorative Background Icon with slight scale effect on hover */}
+                  <div className="bg-linear-to-br from-indigo-600 to-blue-700 rounded-xl shadow-sm border border-indigo-500 p-5 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 relative overflow-hidden sm:col-span-2 text-white group">
                     <div className="absolute -right-6 -top-6 opacity-10 pointer-events-none transition-transform duration-500 group-hover:scale-110">
                       <Users size={120} />
                     </div>
@@ -1136,7 +1379,6 @@ export default function SalesAndReports() {
                       </div>
                     </div>
                     
-                    {/* Stats Footer inside Hero Card */}
                     <div className="flex items-center gap-6 mt-4 relative z-10">
                       <div>
                         <p className="text-indigo-200 text-xs uppercase tracking-wider mb-1">Generated Revenue</p>
@@ -1329,6 +1571,14 @@ export default function SalesAndReports() {
         </div>
         )
       )}
+
+      <ProfitCalculatorModal
+        open={isProfitModalOpen}
+        onOpenChange={setIsProfitModalOpen}
+        period={period}
+        totalRevenue={stats.totalRev}
+        onSaved={handleProfitSaved}
+      />
 
     </div>
   );

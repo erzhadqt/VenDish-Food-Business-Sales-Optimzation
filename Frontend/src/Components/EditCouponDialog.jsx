@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { AlertCircle } from "lucide-react";
 import api from "../api";
 import { requestWithMethodFallback } from "../utils/requestWithMethodFallback";
@@ -13,7 +14,12 @@ export default function EditCouponDialog({ open, onOpenChange, coupon, onSaved, 
   const [archiving, setArchiving] = useState(false);
   const [error, setError] = useState("");
   // Merged claim_limit and usage_limit into a single 'limit' property
-  const [formData, setFormData] = useState({ valid_to: "", limit: "" });
+  const [formData, setFormData] = useState({
+    valid_to: "",
+    limit: "",
+    target_audience: "all_users",
+    min_completed_orders: "",
+  });
   const isProcessing = loading || archiving;
 
   // Helper to get current local time in YYYY-MM-DDThh:mm format
@@ -37,7 +43,9 @@ export default function EditCouponDialog({ open, onOpenChange, coupon, onSaved, 
       setFormData({
         valid_to: formattedDate,
         // Fallback to whichever limit is available, since they are now synced
-        limit: coupon.usage_limit || coupon.claim_limit || ""
+        limit: coupon.usage_limit || coupon.claim_limit || "",
+        target_audience: coupon.target_audience || "all_users",
+        min_completed_orders: coupon.min_completed_orders ? String(coupon.min_completed_orders) : "",
       });
       setError(""); // Reset error when coupon changes
     }
@@ -66,6 +74,14 @@ export default function EditCouponDialog({ open, onOpenChange, coupon, onSaved, 
       return;
     }
 
+    if (
+      formData.target_audience === "frequent_customers"
+      && (!formData.min_completed_orders || parseInt(formData.min_completed_orders, 10) <= 0)
+    ) {
+      setError("Please set a valid minimum completed order count for frequent-customer targeting.");
+      return;
+    }
+
     setLoading(true);
 
     const parsedLimit = parseInt(formData.limit, 10);
@@ -75,6 +91,10 @@ export default function EditCouponDialog({ open, onOpenChange, coupon, onSaved, 
       // Pass the single limit to both backend fields to keep them in sync
       claim_limit: parsedLimit,
       usage_limit: parsedLimit,
+      target_audience: formData.target_audience,
+      min_completed_orders: formData.target_audience === "frequent_customers"
+        ? parseInt(formData.min_completed_orders, 10)
+        : 0,
     };
 
     try {
@@ -111,7 +131,7 @@ export default function EditCouponDialog({ open, onOpenChange, coupon, onSaved, 
         },
       });
 
-      if (onArchived) onArchived(coupon.code);
+      if (onArchived) onArchived(coupon.code || coupon.criteria_details?.name || `#${coupon.id}`);
       handleOpenChange(false);
     } catch (err) {
       console.error("Failed to archive coupon:", err);
@@ -126,6 +146,12 @@ export default function EditCouponDialog({ open, onOpenChange, coupon, onSaved, 
     let val = e.target.value.replace(/[^0-9]/g, '');
     val = val.replace(/^0+/, ''); // Remove leading zeros
     setFormData({ ...formData, limit: val });
+  };
+
+  const handleMinCompletedOrdersChange = (e) => {
+    let val = e.target.value.replace(/[^0-9]/g, '');
+    val = val.replace(/^0+/, '');
+    setFormData({ ...formData, min_completed_orders: val });
   };
 
   const isSoldOut = coupon?.usage_limit !== null && coupon?.times_used >= coupon?.usage_limit;
@@ -176,8 +202,44 @@ export default function EditCouponDialog({ open, onOpenChange, coupon, onSaved, 
               maxLength={10}
               className={`text-base h-12 ${error.includes("Limit") ? "border-red-500 focus-visible:ring-red-500" : ""}`}
             />
-            <p className="text-sm text-gray-500">Limits how many total users can claim and use this code.</p>
+            <p className="text-sm text-gray-500">Limits how many total users can claim and use this coupon.</p>
           </div>
+
+          <div className="grid gap-3">
+            <Label className="text-base flex items-center gap-1">
+              Visible To <span className="text-red-500">*</span>
+            </Label>
+            <Select
+              value={formData.target_audience}
+              onValueChange={(value) => setFormData((prev) => ({ ...prev, target_audience: value }))}
+            >
+              <SelectTrigger className="h-12">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all_users">All Users</SelectItem>
+                <SelectItem value="frequent_customers">Frequent Customers</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {formData.target_audience === "frequent_customers" && (
+            <div className="grid gap-3">
+              <Label htmlFor="min_completed_orders" className="text-base flex items-center gap-1">
+                Minimum Completed Orders <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="min_completed_orders"
+                type="text"
+                inputMode="numeric"
+                value={formData.min_completed_orders}
+                onChange={handleMinCompletedOrdersChange}
+                placeholder="e.g. 5"
+                maxLength={6}
+                className="text-base h-12"
+              />
+            </div>
+          )}
 
           <DialogFooter className="mt-4 gap-3 sm:gap-0">
             <DialogClose asChild>
