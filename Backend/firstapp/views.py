@@ -1239,7 +1239,13 @@ class ProductViewSet(viewsets.ModelViewSet):
         return str(value).strip().lower() in {'1', 'true', 'yes', 'on'}
 
     def get_queryset(self):
-        queryset = Product.objects.all().order_by("-id")
+        completed_sales_subquery = ReceiptItem.objects.filter(
+            product_id=OuterRef('pk'),
+            receipt__status=Receipt.Status.COMPLETED,
+        )
+        queryset = Product.objects.annotate(
+            has_completed_sales=Exists(completed_sales_subquery)
+        ).order_by("-id")
         user = self.request.user
 
         include_archived = self._is_truthy(self.request.query_params.get('include_archived'))
@@ -1464,6 +1470,7 @@ class ProductViewSet(viewsets.ModelViewSet):
             archived_at=timezone.now(),
             stock_quantity=0,
             is_available=False,
+            is_pos_best_seller=False,
         )
 
         return Response(
@@ -2784,7 +2791,7 @@ class DrawerBalanceLogViewSet(viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'head', 'options']
 
     def get_queryset(self):
-        return DrawerBalanceLog.objects.select_related('created_by').all().order_by('-created_at')
+        return DrawerBalanceLog.objects.select_related('created_by', 'cashier').all().order_by('-created_at')
 
     def perform_create(self, serializer):
         # Keep out-drawer logging and drawer reset in one transaction to avoid partial updates.

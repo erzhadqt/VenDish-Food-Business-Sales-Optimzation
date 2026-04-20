@@ -43,6 +43,7 @@ const DRAWER_VALID_SORT_KEYS = new Set([
   'opening_balance',
   'today_sales_total',
   'projected_total',
+  'cashier_name',
   'created_by_name',
 ]);
 
@@ -347,6 +348,11 @@ const AdminLogs = () => {
         right = String(b?.created_by_name || '').toLowerCase();
       }
 
+      if (drawerSortKey === 'cashier_name') {
+        left = String(a?.cashier_name || '').toLowerCase();
+        right = String(b?.cashier_name || '').toLowerCase();
+      }
+
       if (left < right) return drawerSortDirection === 'asc' ? -1 : 1;
       if (left > right) return drawerSortDirection === 'asc' ? 1 : -1;
       return 0;
@@ -503,18 +509,19 @@ const AdminLogs = () => {
 
           {activeTab === 'drawer' && drawerLoading && (
             <div className="p-4 md:p-6 space-y-4">
-              <div className="grid grid-cols-6 gap-4">
-                {Array.from({ length: 6 }).map((_, index) => (
+              <div className="grid grid-cols-7 gap-4">
+                {Array.from({ length: 7 }).map((_, index) => (
                   <Skeleton key={`drawer-head-${index}`} className="h-5 w-full" />
                 ))}
               </div>
 
               {Array.from({ length: rowsPerPage }).map((_, index) => (
-                <div key={`drawer-row-${index}`} className="grid grid-cols-6 gap-4 items-center">
+                <div key={`drawer-row-${index}`} className="grid grid-cols-7 gap-4 items-center">
                   <Skeleton className="h-4 w-4/5" />
                   <Skeleton className="h-4 w-2/3" />
                   <Skeleton className="h-4 w-2/3" />
                   <Skeleton className="h-4 w-2/3" />
+                  <Skeleton className="h-4 w-3/4" />
                   <Skeleton className="h-4 w-3/4" />
                   <Skeleton className="h-4 w-full" />
                 </div>
@@ -695,7 +702,7 @@ const AdminLogs = () => {
           {activeTab === 'drawer' && !drawerLoading && !drawerError && sortedDrawerLogs.length > 0 && (
             <>
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm text-gray-600 min-w-245">
+                <table className="w-full text-left text-sm text-gray-600 min-w-275">
                   <thead className="bg-gray-100 text-gray-900 uppercase font-semibold">
                     <tr>
                       <th
@@ -721,6 +728,12 @@ const AdminLogs = () => {
                         className="px-4 md:px-6 py-4 cursor-pointer"
                       >
                         Projected Total {sortArrow('projected_total', drawerSortKey, drawerSortDirection)}
+                      </th>
+                      <th
+                        onClick={() => handleDrawerSort('cashier_name')}
+                        className="px-4 md:px-6 py-4 cursor-pointer"
+                      >
+                        Cashier {sortArrow('cashier_name', drawerSortKey, drawerSortDirection)}
                       </th>
                       <th
                         onClick={() => handleDrawerSort('created_by_name')}
@@ -750,6 +763,9 @@ const AdminLogs = () => {
                           </td>
                           <td className={`px-4 md:px-6 py-4 font-bold whitespace-nowrap ${projectedTotal >= 0 ? 'text-indigo-700' : 'text-red-600'}`}>
                             {formatCurrency(entry.projected_total)}
+                          </td>
+                          <td className="px-4 md:px-6 py-4 text-gray-700 whitespace-nowrap">
+                            {entry.cashier_name || 'Unknown'}
                           </td>
                           <td className="px-4 md:px-6 py-4 text-gray-700 whitespace-nowrap">
                             {entry.created_by_name || 'Unknown'}

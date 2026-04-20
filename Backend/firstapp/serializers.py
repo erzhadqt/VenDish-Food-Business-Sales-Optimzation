@@ -188,6 +188,7 @@ class OTPSerializer(serializers.ModelSerializer):
 
 class ProductSerializer(serializers.ModelSerializer):
     image = serializers.ImageField(required=False)
+    has_completed_sales = serializers.SerializerMethodField(read_only=True)
 
     category = serializers.SlugRelatedField(
         queryset=Category.objects.all(),
@@ -200,6 +201,20 @@ class ProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = '__all__'
         extra_kwargs = {'date_added': {'read_only': True}}
+
+    def get_has_completed_sales(self, obj):
+        annotated_value = getattr(obj, 'has_completed_sales', None)
+        if annotated_value is not None:
+            return bool(annotated_value)
+
+        product_id = getattr(obj, 'id', None)
+        if not product_id:
+            return False
+
+        return ReceiptItem.objects.filter(
+            product_id=product_id,
+            receipt__status=Receipt.Status.COMPLETED,
+        ).exists()
 
     def validate(self, attrs):
         instance = getattr(self, 'instance', None)
@@ -217,8 +232,34 @@ class ProductSerializer(serializers.ModelSerializer):
         else:
             is_archived = False
 
+        requested_best_seller = attrs.get('is_pos_best_seller', None)
+
         attrs['track_stock'] = True
         attrs['is_available'] = (stock_quantity > 0) and (not is_archived)
+
+        if is_archived:
+            # Archived products should never stay pinned as POS best sellers.
+            attrs['is_pos_best_seller'] = False
+            return attrs
+
+        if requested_best_seller is True:
+            has_completed_sales = False
+
+            if instance is not None:
+                annotated_value = getattr(instance, 'has_completed_sales', None)
+                if annotated_value is not None:
+                    has_completed_sales = bool(annotated_value)
+                else:
+                    has_completed_sales = ReceiptItem.objects.filter(
+                        product_id=instance.id,
+                        receipt__status=Receipt.Status.COMPLETED,
+                    ).exists()
+
+            if not has_completed_sales:
+                raise serializers.ValidationError({
+                    'is_pos_best_seller': 'Only products with completed sales can be marked as POS best seller.'
+                })
+
         return attrs
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -716,12 +757,19 @@ class ProfitLogSerializer(serializers.ModelSerializer):
 
 
 class DrawerBalanceLogSerializer(serializers.ModelSerializer):
+    cashier = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.filter(is_staff=True, is_superuser=False, is_active=True),
+        required=True,
+    )
+    cashier_name = serializers.SerializerMethodField(read_only=True)
     created_by_name = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = DrawerBalanceLog
         fields = [
             'id',
+            'cashier',
+            'cashier_name',
             'created_by',
             'created_by_name',
             'opening_balance',
@@ -730,7 +778,16 @@ class DrawerBalanceLogSerializer(serializers.ModelSerializer):
             'notes',
             'created_at',
         ]
-        read_only_fields = ['id', 'created_by', 'created_by_name', 'projected_total', 'created_at']
+        read_only_fields = ['id', 'cashier_name', 'created_by', 'created_by_name', 'projected_total', 'created_at']
+
+    def get_cashier_name(self, obj):
+        if not obj.cashier:
+            return 'Deleted user'
+
+        first_name = (obj.cashier.first_name or '').strip()
+        last_name = (obj.cashier.last_name or '').strip()
+        full_name = f"{first_name} {last_name}".strip()
+        return full_name or obj.cashier.username
 
     def get_created_by_name(self, obj):
         if not obj.created_by:
@@ -742,8 +799,15 @@ class DrawerBalanceLogSerializer(serializers.ModelSerializer):
         return full_name or obj.created_by.username
 
     def validate(self, attrs):
+        cashier = attrs.get('cashier')
         opening_balance = attrs.get('opening_balance', Decimal('0'))
         today_sales_total = attrs.get('today_sales_total', Decimal('0'))
+
+        if not cashier:
+            raise serializers.ValidationError({'cashier': 'Cashier is required.'})
+
+        if not cashier.is_staff or cashier.is_superuser:
+            raise serializers.ValidationError({'cashier': 'Please select a valid cashier account.'})
 
         if opening_balance < 0:
             raise serializers.ValidationError({'opening_balance': 'Opening balance cannot be negative.'})

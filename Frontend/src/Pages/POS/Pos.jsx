@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Tag, Trash2, ShoppingBag, User, X, Search } from "lucide-react"; 
 import { FaExclamationCircle } from "react-icons/fa"; 
 import { useLocation, useSearchParams } from "react-router-dom";
@@ -13,7 +13,6 @@ import { SelectDiscount } from "../../Components/SelectDiscount";
 import AlertModal from "../../Components/AlertModal";
 import { Skeleton } from "../../Components/ui/skeleton";
 import { applyQueryParam, usePersistedQueryState } from "../../utils/usePersistedQueryState";
-import { format } from "date-fns";
 
 const POS_STORAGE_KEYS = {
   cart: "pos_cartItems",
@@ -31,15 +30,11 @@ const POS_QUERY_KEYS = {
   sort: "posSort",
 };
 
-const BEST_SELLER_LIMIT = 4;
-const BEST_SELLER_PERIOD = "daily";
-const BEST_SELLER_DAY_REFRESH_INTERVAL_MS = 60 * 1000;
 const DEFAULT_LOW_SERVING_THRESHOLD = 10;
 const PH_VAT_RATE = 0.12;
 const PH_VAT_INCLUSIVE_DIVISOR = 1 + PH_VAT_RATE;
 const BEST_SELLER_EXCLUDED_CATEGORY_KEYS = new Set(["addon", "addons", "other", "others"]);
 
-const normalizeProductName = (value) => String(value || "").trim().toLowerCase();
 const normalizeCategoryKey = (value) => String(value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
 const getProductCategoryLabel = (product) => {
   if (typeof product?.category === "string") return product.category;
@@ -48,6 +43,24 @@ const getProductCategoryLabel = (product) => {
 };
 const isBestSellerEligibleProduct = (product) =>
   !BEST_SELLER_EXCLUDED_CATEGORY_KEYS.has(normalizeCategoryKey(getProductCategoryLabel(product)));
+
+const resolveConfiguredBestSellerIds = (productsSnapshot = []) => {
+  if (!Array.isArray(productsSnapshot) || productsSnapshot.length === 0) {
+    return [];
+  }
+
+  const seen = new Set();
+  return productsSnapshot
+    .filter((product) => Boolean(product?.is_pos_best_seller))
+    .filter((product) => Boolean(product?.has_completed_sales))
+    .filter((product) => isBestSellerEligibleProduct(product))
+    .map((product) => Number(product?.id))
+    .filter((productId) => {
+      if (!Number.isFinite(productId) || seen.has(productId)) return false;
+      seen.add(productId);
+      return true;
+    });
+};
 
 const computePhilippinesVatFromVatInclusiveTotal = (vatInclusiveTotal) => {
   const safeTotal = Number(vatInclusiveTotal || 0);
@@ -65,112 +78,9 @@ const applyOptionalMaxDiscountCap = (discountAmount, maxDiscountAmount) => {
   return Math.min(safeDiscount, safeCap);
 };
 
-const getTodaySalesRange = () => {
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-
-  const todayEnd = new Date();
-  todayEnd.setHours(23, 59, 59, 999);
-
-  return {
-    todayStartStr: format(todayStart, "yyyy-MM-dd'T'HH:mm:ssXXX"),
-    todayEndStr: format(todayEnd, "yyyy-MM-dd'T'HH:mm:ssXXX"),
-  };
-};
-
-const toDateOnlyKey = (value) => {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "";
-  return format(parsed, "yyyy-MM-dd");
-};
-
-const resolveBestSellerIdsFromSalesReport = (salesRows, products, targetDateKey = toDateOnlyKey(new Date())) => {
-  if (!Array.isArray(salesRows) || salesRows.length === 0 || !Array.isArray(products) || products.length === 0) {
-    return [];
-  }
-
-  const productIdByName = new Map();
-  products.forEach((product) => {
-    if (!isBestSellerEligibleProduct(product)) return;
-
-    const normalizedName = normalizeProductName(product?.product_name);
-    const productId = Number(product?.id);
-    if (normalizedName && Number.isFinite(productId) && !productIdByName.has(normalizedName)) {
-      productIdByName.set(normalizedName, productId);
-    }
-  });
-
-  const scopedSalesRows = salesRows.filter((row) => {
-    if (!targetDateKey) return true;
-    const rowDateKey = toDateOnlyKey(row?.report_date);
-    return rowDateKey === targetDateKey;
-  });
-
-  if (scopedSalesRows.length === 0) {
-    return [];
-  }
-
-  const aggregatedSalesByName = {};
-  scopedSalesRows.forEach((row) => {
-    const dailyProductSales = row?.daily_product_sales;
-    const dailyProductRevenue = row?.daily_product_sales_revenue;
-    const dailyProductOrderCounts = row?.daily_product_order_counts;
-
-    const keys = new Set([
-      ...Object.keys(dailyProductSales && typeof dailyProductSales === "object" ? dailyProductSales : {}),
-      ...Object.keys(dailyProductRevenue && typeof dailyProductRevenue === "object" ? dailyProductRevenue : {}),
-      ...Object.keys(dailyProductOrderCounts && typeof dailyProductOrderCounts === "object" ? dailyProductOrderCounts : {}),
-    ]);
-
-    keys.forEach((productName) => {
-      const safeName = String(productName || "").trim();
-      const safeQuantity = Number(dailyProductSales?.[productName] || 0);
-      const safeRevenue = Number(dailyProductRevenue?.[productName] || 0);
-      const safeOrders = Number(dailyProductOrderCounts?.[productName] || 0);
-
-      if (!safeName) return;
-
-      const current = aggregatedSalesByName[safeName] || { revenue: 0, orders: 0, quantity: 0 };
-      if (Number.isFinite(safeRevenue) && safeRevenue > 0) current.revenue += safeRevenue;
-      if (Number.isFinite(safeOrders) && safeOrders > 0) current.orders += safeOrders;
-      if (Number.isFinite(safeQuantity) && safeQuantity > 0) current.quantity += safeQuantity;
-
-      if (current.revenue > 0 || current.orders > 0 || current.quantity > 0) {
-        aggregatedSalesByName[safeName] = current;
-      }
-    });
-  });
-
-  const seen = new Set();
-  const rankedIds = Object.entries(aggregatedSalesByName)
-    .sort((a, b) => {
-      const revenueDiff = Number(b[1]?.revenue || 0) - Number(a[1]?.revenue || 0);
-      if (revenueDiff !== 0) return revenueDiff;
-
-      const orderDiff = Number(b[1]?.orders || 0) - Number(a[1]?.orders || 0);
-      if (orderDiff !== 0) return orderDiff;
-
-      const qtyDiff = Number(b[1]?.quantity || 0) - Number(a[1]?.quantity || 0);
-      if (qtyDiff !== 0) return qtyDiff;
-
-      return String(a[0]).localeCompare(String(b[0]), undefined, { sensitivity: "base" });
-    })
-    .map(([productName]) => productIdByName.get(normalizeProductName(productName)))
-    .filter((productId) => {
-      if (!Number.isFinite(productId) || seen.has(productId)) return false;
-      seen.add(productId);
-      return true;
-    })
-    .slice(0, BEST_SELLER_LIMIT);
-
-  // Required POS order: 4th -> 1st (still pinned at the top).
-  return rankedIds.reverse();
-};
-
 const Pos = () => {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const bestSellerDayRef = useRef(toDateOnlyKey(new Date()));
 
   const [selectedCategory, setSelectedCategory] = usePersistedQueryState({
     searchParams,
@@ -211,7 +121,10 @@ const Pos = () => {
   const [cash, setCash] = useState("");
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState(["All"]);
-  const [bestSellerProductIds, setBestSellerProductIds] = useState([]);
+  const bestSellerProductIds = useMemo(
+    () => resolveConfiguredBestSellerIds(products),
+    [products]
+  );
 
   const [maxCoupons, setMaxCoupons] = useState(2);
   
@@ -282,49 +195,6 @@ const Pos = () => {
     });
   };
 
-  const fetchDailyBestSellerProductIds = useCallback(async (productsSnapshot = []) => {
-    const todayDateKey = toDateOnlyKey(new Date());
-
-    try {
-      const bestSellerResponse = await api.get(
-        `/firstapp/products/best-sellers/?period=${BEST_SELLER_PERIOD}&limit=${BEST_SELLER_LIMIT}`
-      );
-
-      const seen = new Set();
-      const bestSellerIds = (Array.isArray(bestSellerResponse.data) ? bestSellerResponse.data : [])
-        .map((item) => Number(item?.id))
-        .filter((productId) => {
-          if (!Number.isFinite(productId) || seen.has(productId)) return false;
-          seen.add(productId);
-          return true;
-        })
-        .slice(0, BEST_SELLER_LIMIT);
-
-      if (bestSellerIds.length > 0) {
-        // Required POS order: 4th -> 1st (still pinned at the top).
-        return bestSellerIds.reverse();
-      }
-    } catch (error) {
-      console.warn("Primary best-seller endpoint unavailable, falling back to sales aggregation:", error);
-    }
-
-    try {
-      const { todayStartStr, todayEndStr } = getTodaySalesRange();
-      const salesResponse = await api.get(
-        `/firstapp/sales/?period=${BEST_SELLER_PERIOD}&start=${encodeURIComponent(todayStartStr)}&end=${encodeURIComponent(todayEndStr)}`
-      );
-
-      return resolveBestSellerIdsFromSalesReport(
-        Array.isArray(salesResponse.data) ? salesResponse.data : [],
-        Array.isArray(productsSnapshot) ? productsSnapshot : [],
-        todayDateKey
-      );
-    } catch (error) {
-      console.error("Failed to fetch fallback daily best sellers:", error);
-      return [];
-    }
-  }, []);
-
   const refreshMenuInventory = useCallback(async () => {
     try {
       const [prodRes, catRes] = await Promise.all([
@@ -339,13 +209,10 @@ const Pos = () => {
         const catNames = catRes.data.map((c) => c.name).filter(Boolean);
         setCategories(["All", ...catNames]);
       }
-
-      const rankedBestSellerIds = await fetchDailyBestSellerProductIds(nextProducts);
-      setBestSellerProductIds(rankedBestSellerIds);
     } catch (error) {
       console.error("Failed to refresh POS inventory:", error);
     }
-  }, [fetchDailyBestSellerProductIds]);
+  }, []);
 
   const discountOptions = [
     { value: "senior", label: "Senior Citizen (20%)" },
@@ -402,9 +269,6 @@ const Pos = () => {
           const catNames = catRes.data.map(c => c.name).filter(Boolean);
           setCategories(["All", ...catNames]);
         }
-
-        const rankedBestSellerIds = await fetchDailyBestSellerProductIds(nextProducts);
-        setBestSellerProductIds(rankedBestSellerIds);
       } catch (error) {
         console.error("Failed to fetch data:", error);
       } finally {
@@ -412,21 +276,7 @@ const Pos = () => {
       }
     };
     fetchData();
-  }, [fetchDailyBestSellerProductIds]);
-
-  useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      const currentDayKey = toDateOnlyKey(new Date());
-      if (currentDayKey && currentDayKey !== bestSellerDayRef.current) {
-        bestSellerDayRef.current = currentDayKey;
-        refreshMenuInventory();
-      }
-    }, BEST_SELLER_DAY_REFRESH_INTERVAL_MS);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [refreshMenuInventory]);
+  }, []);
 
   useEffect(() => {
     const handleInventoryUpdate = () => {
@@ -941,7 +791,7 @@ const Pos = () => {
       await attachPaymentToReceipt(transactionId, updatedReceipt.receipt_id || updatedReceipt.id);
       localStorage.removeItem(POS_STORAGE_KEYS.gcashPending);
 
-      // Keep top daily best-seller ranking in sync after successful payment finalization.
+      // Keep configured POS best-seller pins in sync after successful payment finalization.
       await refreshMenuInventory();
       
       // Close the modal now that we are done -> triggers the Receipt modal to pop up!
@@ -1112,7 +962,7 @@ const Pos = () => {
         setReceiptDetails(response.data);
         setIsReceiptModalOpen(true);
 
-        // Keep top daily best-seller ranking in sync after each completed cash sale.
+        // Keep configured POS best-seller pins in sync after each completed cash sale.
         await refreshMenuInventory();
 
         // [FIX]: Optimistic UI Update - Immediately add the total to the local drawer state

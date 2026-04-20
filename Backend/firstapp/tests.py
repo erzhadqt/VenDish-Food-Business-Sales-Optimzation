@@ -360,6 +360,12 @@ class DrawerBalanceLogResetTests(APITestCase):
 			password='AdminPass123!',
 			is_staff=True,
 		)
+		self.cashier = user_model.objects.create_user(
+			username='drawer_reset_cashier',
+			email='drawer_reset_cashier@example.com',
+			password='CashierPass123!',
+			is_staff=True,
+		)
 		self.client.force_authenticate(user=self.admin)
 
 		StoreSettings.objects.update_or_create(
@@ -374,6 +380,7 @@ class DrawerBalanceLogResetTests(APITestCase):
 		response = self.client.post(
 			'/firstapp/drawer-balance-logs/',
 			{
+				'cashier': self.cashier.id,
 				'opening_balance': '1500.00',
 				'today_sales_total': '950.75',
 				'notes': 'End of day close',
@@ -388,6 +395,9 @@ class DrawerBalanceLogResetTests(APITestCase):
 		self.assertEqual(str(settings_obj.pos_cash_balance), '0.00')
 
 		created_log = DrawerBalanceLog.objects.get(id=response.data['id'])
+		self.assertEqual(created_log.cashier_id, self.cashier.id)
+		self.assertEqual(response.data.get('cashier'), self.cashier.id)
+		self.assertTrue(bool(response.data.get('cashier_name')))
 		self.assertEqual(str(created_log.opening_balance), '1500.00')
 		self.assertEqual(str(created_log.today_sales_total), '950.75')
 		self.assertEqual(str(created_log.projected_total), '2450.75')
@@ -512,6 +522,28 @@ class ProductArchiveTests(APITestCase):
 			stock_quantity=12,
 			is_available=True,
 		)
+
+	def _create_completed_receipt_item(self, *, product, quantity=1):
+		line_total = float(product.price) * int(quantity)
+		receipt = Receipt.objects.create(
+			subtotal=f'{line_total:.2f}',
+			vat='0.00',
+			total=f'{line_total:.2f}',
+			cash_given=f'{line_total:.2f}',
+			change='0.00',
+			status=Receipt.Status.COMPLETED,
+			cashier=self.admin,
+		)
+
+		ReceiptItem.objects.create(
+			receipt=receipt,
+			product=product,
+			product_name=product.product_name,
+			price=product.price,
+			quantity=quantity,
+		)
+
+		return receipt
 
 	def test_admin_can_archive_multiple_products(self):
 		self.client.force_authenticate(user=self.admin)
@@ -677,6 +709,70 @@ class ProductArchiveTests(APITestCase):
 		self.assertIn(self.product_uncategorized.id, returned_ids)
 		self.assertNotIn(self.product_a.id, returned_ids)
 		self.assertNotIn(self.product_b.id, returned_ids)
+
+	def test_product_list_exposes_completed_sales_eligibility(self):
+		self._create_completed_receipt_item(product=self.product_b, quantity=1)
+
+		response = self.client.get('/firstapp/products/')
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		rows_by_id = {row['id']: row for row in response.data}
+		self.assertFalse(rows_by_id[self.product_a.id].get('has_completed_sales'))
+		self.assertTrue(rows_by_id[self.product_b.id].get('has_completed_sales'))
+
+	def test_cannot_mark_pos_best_seller_without_completed_sales(self):
+		self.client.force_authenticate(user=self.admin)
+
+		response = self.client.patch(
+			f'/firstapp/products/{self.product_a.id}/',
+			{'is_pos_best_seller': True},
+			format='json',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		self.assertIn('is_pos_best_seller', response.data)
+
+		self.product_a.refresh_from_db()
+		self.assertFalse(self.product_a.is_pos_best_seller)
+
+	def test_admin_can_mark_product_as_pos_best_seller_after_completed_sale(self):
+		self._create_completed_receipt_item(product=self.product_a, quantity=2)
+		self.client.force_authenticate(user=self.admin)
+
+		response = self.client.patch(
+			f'/firstapp/products/{self.product_a.id}/',
+			{'is_pos_best_seller': True},
+			format='json',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertTrue(response.data.get('is_pos_best_seller'))
+		self.assertTrue(response.data.get('has_completed_sales'))
+
+		self.product_a.refresh_from_db()
+		self.assertTrue(self.product_a.is_pos_best_seller)
+
+	def test_archiving_product_clears_pos_best_seller_flag(self):
+		self._create_completed_receipt_item(product=self.product_a, quantity=1)
+		self.client.force_authenticate(user=self.admin)
+
+		set_response = self.client.patch(
+			f'/firstapp/products/{self.product_a.id}/',
+			{'is_pos_best_seller': True},
+			format='json',
+		)
+		self.assertEqual(set_response.status_code, status.HTTP_200_OK)
+
+		archive_response = self.client.post(
+			'/firstapp/products/archive/',
+			{'product_ids': [self.product_a.id]},
+			format='json',
+		)
+		self.assertEqual(archive_response.status_code, status.HTTP_200_OK)
+
+		self.product_a.refresh_from_db()
+		self.assertTrue(self.product_a.is_archived)
+		self.assertFalse(self.product_a.is_pos_best_seller)
 
 
 class CouponArchiveTests(APITestCase):

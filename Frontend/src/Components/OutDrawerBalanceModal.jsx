@@ -23,6 +23,13 @@ const toSafeNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const formatUserDisplayName = (user) => {
+  const firstName = String(user?.first_name || '').trim();
+  const lastName = String(user?.last_name || '').trim();
+  const fullName = `${firstName} ${lastName}`.trim();
+  return fullName || String(user?.username || 'Unknown Cashier');
+};
+
 const extractErrorMessage = (error) => {
   const detail = error?.response?.data;
 
@@ -57,6 +64,8 @@ export default function OutDrawerBalanceModal({ open, onOpenChange, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [openingBalance, setOpeningBalance] = useState(0);
   const [todaySalesTotal, setTodaySalesTotal] = useState(0);
+  const [cashierOptions, setCashierOptions] = useState([]);
+  const [selectedCashierId, setSelectedCashierId] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -78,11 +87,12 @@ export default function OutDrawerBalanceModal({ open, onOpenChange, onSaved }) {
       const endOfDay = new Date(now);
       endOfDay.setHours(23, 59, 59, 999);
 
-      const [settingsRes, salesRes] = await Promise.all([
+      const [settingsRes, salesRes, usersRes] = await Promise.all([
         api.get(`/settings/?t=${Date.now()}`),
         api.get(
           `/firstapp/sales/?period=daily&start=${encodeURIComponent(startOfDay.toISOString())}&end=${encodeURIComponent(endOfDay.toISOString())}`
         ),
+        api.get('/firstapp/users/'),
       ]);
 
       const initialBalance = toSafeNumber(settingsRes?.data?.pos_initial_balance);
@@ -93,10 +103,47 @@ export default function OutDrawerBalanceModal({ open, onOpenChange, onSaved }) {
         return sum + toSafeNumber(row?.total_revenue);
       }, 0);
       setTodaySalesTotal(totalSales);
+
+      const usersPayload = usersRes?.data;
+      const userRows = Array.isArray(usersPayload)
+        ? usersPayload
+        : Array.isArray(usersPayload?.results)
+          ? usersPayload.results
+          : [];
+
+      const nextCashierOptions = userRows
+        .filter((user) => user?.is_staff === true && user?.is_superuser !== true && user?.is_active !== false)
+        .map((user) => ({
+          id: Number(user?.id),
+          label: formatUserDisplayName(user),
+          username: String(user?.username || ''),
+        }))
+        .filter((user) => Number.isFinite(user.id) && user.id > 0)
+        .sort((a, b) => {
+          const labelDiff = a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
+          if (labelDiff !== 0) return labelDiff;
+          return a.username.localeCompare(b.username, undefined, { sensitivity: 'base' });
+        });
+
+      setCashierOptions(nextCashierOptions);
+      setSelectedCashierId((prev) => {
+        const prevId = Number(prev);
+        if (Number.isFinite(prevId) && nextCashierOptions.some((cashier) => cashier.id === prevId)) {
+          return String(prevId);
+        }
+
+        if (nextCashierOptions.length > 0) {
+          return String(nextCashierOptions[0].id);
+        }
+
+        return '';
+      });
     } catch (snapshotError) {
       setError(extractErrorMessage(snapshotError));
       setOpeningBalance(0);
       setTodaySalesTotal(0);
+      setCashierOptions([]);
+      setSelectedCashierId('');
     } finally {
       setLoadingSnapshot(false);
     }
@@ -110,6 +157,8 @@ export default function OutDrawerBalanceModal({ open, onOpenChange, onSaved }) {
       setSaving(false);
       setOpeningBalance(0);
       setTodaySalesTotal(0);
+      setCashierOptions([]);
+      setSelectedCashierId('');
       setNotes('');
       setError('');
       setSuccess('');
@@ -125,12 +174,19 @@ export default function OutDrawerBalanceModal({ open, onOpenChange, onSaved }) {
       return;
     }
 
+    const numericCashierId = Number(selectedCashierId);
+    if (!Number.isFinite(numericCashierId) || numericCashierId <= 0) {
+      setError('Please select a cashier account before saving.');
+      return;
+    }
+
     setSaving(true);
     setError('');
     setSuccess('');
 
     try {
       const payload = {
+        cashier: numericCashierId,
         opening_balance: Number(safeOpeningBalance.toFixed(2)),
         today_sales_total: Number(safeTodaySalesTotal.toFixed(2)),
         notes: notes.trim(),
@@ -181,6 +237,32 @@ export default function OutDrawerBalanceModal({ open, onOpenChange, onSaved }) {
               <p className="text-xs uppercase tracking-wide text-amber-700 font-semibold">Projected Drawer Total</p>
               <p className="text-sm font-semibold text-amber-900 mt-1">{formatCurrency(projectedTotal)}</p>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="out-drawer-cashier" className="text-sm font-medium text-gray-700">
+              Cashier
+            </Label>
+            <select
+              id="out-drawer-cashier"
+              value={selectedCashierId}
+              onChange={(event) => setSelectedCashierId(event.target.value)}
+              disabled={loadingSnapshot || saving || cashierOptions.length === 0}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {cashierOptions.length === 0 ? (
+                <option value="">No cashier accounts available</option>
+              ) : (
+                cashierOptions.map((cashier) => (
+                  <option key={cashier.id} value={String(cashier.id)}>
+                    {cashier.label}
+                  </option>
+                ))
+              )}
+            </select>
+            <p className="text-xs text-gray-500">
+              This out-drawer record will be tagged to the selected cashier account.
+            </p>
           </div>
 
           <div className="space-y-2">

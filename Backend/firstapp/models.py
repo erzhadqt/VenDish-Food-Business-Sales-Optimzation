@@ -92,6 +92,7 @@ class Product(models.Model):
     track_stock = models.BooleanField(default=False)
     stock_quantity = models.PositiveIntegerField(default=0)
     low_serving_threshold = models.PositiveIntegerField(default=10)
+    is_pos_best_seller = models.BooleanField(default=False)
     is_available = models.BooleanField(default=True)
     is_archived = models.BooleanField(default=False)
     archived_at = models.DateTimeField(null=True, blank=True)
@@ -329,6 +330,13 @@ class DrawerBalanceLog(models.Model):
         null=True,
         blank=True,
         related_name='drawer_balance_logs',
+    )
+    cashier = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='drawer_balance_logs_as_cashier',
     )
     opening_balance = models.DecimalField(max_digits=12, decimal_places=2)
     today_sales_total = models.DecimalField(max_digits=12, decimal_places=2)
