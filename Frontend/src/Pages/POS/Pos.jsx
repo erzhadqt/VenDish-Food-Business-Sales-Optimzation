@@ -1334,11 +1334,11 @@ const Pos = () => {
                   {loading ? "Processing..." : paymentMethod === "gcash" ? "PAY VIA GCASH" : "PAY & PRINT"}
                 </button>
 
-                <div className="flex flex-col pt-5">
+                {/* <div className="flex flex-col pt-5">
                     <div className="text-sm font-semibold text-gray-600 mt-1">
                         Drawer Balance: <span className="text-green-700">₱{parseFloat(posBalance || 0).toFixed(2)}</span>
                     </div>
-                </div>
+                </div> */}
 
              </div>
         </div>
