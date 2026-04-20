@@ -23,6 +23,18 @@ const toSafeNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const toArrayRows = (payload) => {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (Array.isArray(payload?.results)) {
+    return payload.results;
+  }
+
+  return [];
+};
+
 const formatUserDisplayName = (user) => {
   const firstName = String(user?.first_name || '').trim();
   const lastName = String(user?.last_name || '').trim();
@@ -87,29 +99,41 @@ export default function OutDrawerBalanceModal({ open, onOpenChange, onSaved }) {
       const endOfDay = new Date(now);
       endOfDay.setHours(23, 59, 59, 999);
 
-      const [settingsRes, salesRes, usersRes] = await Promise.all([
+      const [settingsRes, usersRes, drawerLogsRes] = await Promise.all([
         api.get(`/settings/?t=${Date.now()}`),
-        api.get(
-          `/firstapp/sales/?period=daily&start=${encodeURIComponent(startOfDay.toISOString())}&end=${encodeURIComponent(endOfDay.toISOString())}`
-        ),
         api.get('/firstapp/users/'),
+        api.get('/firstapp/drawer-balance-logs/?page_size=1'),
       ]);
 
       const initialBalance = toSafeNumber(settingsRes?.data?.pos_initial_balance);
       setOpeningBalance(initialBalance);
 
-      const salesRows = Array.isArray(salesRes?.data) ? salesRes.data : [];
+      const drawerLogs = toArrayRows(drawerLogsRes?.data);
+      let salesRangeStart = startOfDay;
+
+      if (drawerLogs.length > 0) {
+        const latestLogAt = new Date(drawerLogs[0]?.created_at);
+        const latestLogTimestamp = latestLogAt.getTime();
+        if (
+          Number.isFinite(latestLogTimestamp)
+          && latestLogAt > salesRangeStart
+          && latestLogAt < endOfDay
+        ) {
+          salesRangeStart = latestLogAt;
+        }
+      }
+
+      const salesRes = await api.get(
+        `/firstapp/sales/?period=daily&start=${encodeURIComponent(salesRangeStart.toISOString())}&end=${encodeURIComponent(endOfDay.toISOString())}`
+      );
+
+      const salesRows = toArrayRows(salesRes?.data);
       const totalSales = salesRows.reduce((sum, row) => {
         return sum + toSafeNumber(row?.total_revenue);
       }, 0);
       setTodaySalesTotal(totalSales);
 
-      const usersPayload = usersRes?.data;
-      const userRows = Array.isArray(usersPayload)
-        ? usersPayload
-        : Array.isArray(usersPayload?.results)
-          ? usersPayload.results
-          : [];
+      const userRows = toArrayRows(usersRes?.data);
 
       const nextCashierOptions = userRows
         .filter((user) => user?.is_staff === true && user?.is_superuser !== true && user?.is_active !== false)
@@ -198,6 +222,9 @@ export default function OutDrawerBalanceModal({ open, onOpenChange, onSaved }) {
         onSaved(response.data);
       }
 
+      // Keep UI consistent with backend reset while modal is still visible.
+      setOpeningBalance(0);
+      setTodaySalesTotal(0);
       setSuccess('Out drawer balance log saved successfully.');
       window.setTimeout(() => {
         onOpenChange(false);
@@ -217,7 +244,7 @@ export default function OutDrawerBalanceModal({ open, onOpenChange, onSaved }) {
             <Wallet size={18} className="text-blue-600" /> Out Drawer Balance
           </DialogTitle>
           <DialogDescription>
-            Review today&apos;s opening balance and total sales before saving an out-drawer record.
+            Review the current drawer session balance before saving an out-drawer record.
           </DialogDescription>
         </DialogHeader>
 
@@ -229,7 +256,7 @@ export default function OutDrawerBalanceModal({ open, onOpenChange, onSaved }) {
             </div>
 
             <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3">
-              <p className="text-xs uppercase tracking-wide text-emerald-700 font-semibold">Today Sales Total</p>
+              <p className="text-xs uppercase tracking-wide text-emerald-700 font-semibold">Session Sales Total</p>
               <p className="text-sm font-semibold text-emerald-900 mt-1">{formatCurrency(todaySalesTotal)}</p>
             </div>
 
